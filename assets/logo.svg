@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title">
+  <title id="title">Live View</title>
+  <rect width="512" height="512" rx="112" fill="#3544B1"/>
+  <!-- Live activity line, ending just short of the "now" dot. -->
+  <path d="M80 288 H152 L196 200 L252 352 L300 160 L340 288"
+        fill="none" stroke="#FFFFFF" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="410" cy="288" r="42" fill="#F5C1BC" opacity="0.35"/>
+  <circle cx="410" cy="288" r="26" fill="#F5C1BC"/>
+</svg>

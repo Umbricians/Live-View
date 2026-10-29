@@ -1,0 +1,126 @@
+# Builds the package on every push and pull request, and publishes it to NuGet when a version tag
+# (e.g. v1.2.0) is pushed. Publishing uses NuGet Trusted Publishing: GitHub's OIDC token is exchanged for a
+# short-lived API key, so no NuGet API key is stored in the repository.
+#
+# The NuGet trusted publishing policy must name this file (build.yml) and the "production" environment.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PROJECT: src/Umbricians.LiveView/Umbricians.LiveView.csproj
+  CLIENT_DIR: src/Umbricians.LiveView/Client
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ env.CLIENT_DIR }}/package-lock.json
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # A tag v1.2.3 publishes 1.2.3; any other build gets a CI pre-release version of the version in the project.
+      - name: Work out version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            base=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$PROJECT")
+            version="${base}-ci.${GITHUB_RUN_NUMBER}"
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$version' is not a valid package version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Version: $version"
+
+      # The backoffice shows this version for the package, so keep it in step with the NuGet version.
+      - name: Stamp version into umbraco-package.json
+        working-directory: ${{ env.CLIENT_DIR }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const path = "public/umbraco-package.json";
+            const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+            pkg.version = process.env.VERSION;
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+          '
+
+      - name: Build dashboard
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: |
+          npm ci
+          npm run build
+
+      # Builds the demo site too, so changes that break integration fail here.
+      - name: Build solution
+        run: dotnet build Umbricians.LiveView.slnx -c Release -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Pack
+        run: dotnet pack "$PROJECT" -c Release --no-build -p:Version=${{ steps.version.outputs.version }} -o artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget-package
+          path: artifacts/*.nupkg
+          if-no-files-found: error
+
+  publish:
+    # Only version tags publish; branches and pull requests stop after the build.
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    needs: build
+    runs-on: ubuntu-latest
+    # Must match the environment in the NuGet trusted publishing policy. Add required reviewers to this
+    # environment in GitHub to have releases approved before they go out.
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # lets the job request the OIDC token that NuGet trusts
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuget-package
+          path: artifacts
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # Exchanges the OIDC token for a NuGet API key that lasts one hour.
+      - name: NuGet login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push to NuGet
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate

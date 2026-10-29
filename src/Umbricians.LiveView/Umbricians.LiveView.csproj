@@ -15,6 +15,7 @@
     <Version>0.1.0</Version>
     <PackageTags>umbraco;umbraco-marketplace;dashboard;analytics;realtime</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
 
@@ -35,6 +36,14 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <!-- Rendered from assets/logo.svg; NuGet recommends 128x128. -->
+    <None Include="..\..\assets\logo-128.png" Pack="true" PackagePath="\icon.png" Visible="false" />
   </ItemGroup>
+
+  <!-- The dashboard bundle is built by npm and git-ignored, so never pack a package without it. -->
+  <Target Name="EnsureClientBundleBuilt" BeforeTargets="GenerateNuspec">
+    <Error Condition="!Exists('wwwroot\App_Plugins\UmbriciansLiveView\umbricians-live-view.js')"
+           Text="The Live View dashboard bundle is missing. Run 'npm ci' and 'npm run build' in src/Umbricians.LiveView/Client before packing." />
+  </Target>
 
 </Project>
