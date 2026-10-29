@@ -16,6 +16,11 @@
     <PackageTags>umbraco;umbraco-marketplace;dashboard;analytics;realtime</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
+    <PackageProjectUrl>https://github.com/Umbricians/Live-View</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Umbricians/Live-View</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!-- Runs before NuGet collects the package files, so the generated README below is included. -->
+    <BeforePack>$(BeforePack);GenerateNuGetReadme</BeforePack>
   </PropertyGroup>
 
 
@@ -35,10 +40,23 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     <!-- Rendered from assets/logo.svg; NuGet recommends 128x128. -->
     <None Include="..\..\assets\logo-128.png" Pack="true" PackagePath="\icon.png" Visible="false" />
   </ItemGroup>
+
+  <!--
+    The package README is generated from the repository README: nuget.org cannot resolve repository-relative image
+    paths, and the contributor sections do not belong on the package page. See build/nuget-readme.mjs.
+  -->
+  <Target Name="GenerateNuGetReadme">
+    <PropertyGroup>
+      <_NuGetReadme>$(IntermediateOutputPath)nuget\README.md</_NuGetReadme>
+    </PropertyGroup>
+    <Exec Command="node &quot;$(MSBuildThisFileDirectory)..\..\build\nuget-readme.mjs&quot; &quot;$(MSBuildThisFileDirectory)..\..\README.md&quot; &quot;$(_NuGetReadme)&quot; &quot;$(RepositoryUrl)&quot;" />
+    <ItemGroup>
+      <None Include="$(_NuGetReadme)" Pack="true" PackagePath="\README.md" />
+    </ItemGroup>
+  </Target>
 
   <!-- The dashboard bundle is built by npm and git-ignored, so never pack a package without it. -->
   <Target Name="EnsureClientBundleBuilt" BeforeTargets="GenerateNuspec">

@@ -49,6 +49,15 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
   connection is down, their next heartbeat picks the message up instead ("Delivery" column).
 - Messages are held in memory for 15 minutes, then discarded.
 
+## Installation
+
+```bash
+dotnet add package Umbricians.LiveView
+```
+
+Restart the site and open **Settings → Live View**. The dashboard is available to backoffice users with access to
+the Settings section; no configuration is needed to get started.
+
 ## How sessions are counted
 
 Middleware offers each request to the channels in order and counts it in every channel whose path prefixes it falls
@@ -173,7 +182,8 @@ builder.AddLiveViewMetric<McpServerSessionsMetric>();
 ```
 
 Providers are called on every poll and given 2 seconds to answer. A slow or failing provider shows as a gap in its
-line rather than breaking the dashboard. See `demo/.../LiveView/ThreadPoolQueueMetric.cs` for a working example.
+line rather than breaking the dashboard. See
+[ThreadPoolQueueMetric.cs](demo/Umbricians.LiveView.Demo/LiveView/ThreadPoolQueueMetric.cs) for a working example.
 
 ## API
 
