@@ -14,6 +14,8 @@ The chart refreshes every 2, 5, 10, 15 or 30 seconds (your choice is remembered 
 the server keeps an in-memory set of recently active sessions, and the browser keeps the last 120 readings while
 the page is open.
 
+![The Live View dashboard: session counts per channel and a live chart of members logging in and out](docs/images/live-view-dashboard.png)
+
 Below the chart, two tables list who is online right now. Both are paged on the server (25 per page), so only the
 page being viewed is ever looked up, however many people are online. Rows are ordered by when each person came
 online, newest first, so they stay put between refreshes.
@@ -27,6 +29,8 @@ across pages), or tick the header and choose **Select all N online** to include 
 (information, warning, urgent or good news) and add a message, for example to warn people before an upgrade or
 restart. It appears in their backoffice as a standard Umbraco notification that stays until dismissed, and is
 signed with the sender's name.
+
+![The Send message slide-out with a headline, type and message for the selected backoffice users](docs/images/live-view-send-message.png)
 
 - Every backoffice sends a small heartbeat once a minute, so idle editors are listed too.
 - **Open tabs** shows how many backoffice tabs or windows each user has open. It comes from Umbraco's realtime
