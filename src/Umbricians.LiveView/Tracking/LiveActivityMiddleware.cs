@@ -1,0 +1,201 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Security.Claims;
+using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
+using Umbraco.Extensions;
+using Umbricians.LiveView.Configuration;
+using Umbricians.LiveView.Presence;
+
+namespace Umbricians.LiveView.Tracking;
+
+/// <summary>
+/// Offers each request to the channels in order, counting it in every one whose paths it falls under up to the
+/// first exclusive channel. Sessions stay active for the length of the request, so long-lived streams (MCP over
+/// SSE, for one) count while they are open.
+/// </summary>
+internal sealed partial class LiveActivityMiddleware : IMiddleware
+{
+    private readonly ILiveActivityTracker _tracker;
+    private readonly BackofficePresence _backofficePresence;
+    private readonly MemberPresence _memberPresence;
+    private readonly IOptionsMonitor<LiveViewOptions> _options;
+
+    public LiveActivityMiddleware(
+        ILiveActivityTracker tracker,
+        BackofficePresence backofficePresence,
+        MemberPresence memberPresence,
+        IOptionsMonitor<LiveViewOptions> options)
+    {
+        _tracker = tracker;
+        _backofficePresence = backofficePresence;
+        _memberPresence = memberPresence;
+        _options = options;
+    }
+
+    public async Task InvokeAsync(HttpContext context, RequestDelegate next)
+    {
+        LiveViewOptions options = _options.CurrentValue;
+        List<(string Channel, string[] Sources)> matches = options.TrackingEnabled ? Match(context.Request, options) : [];
+        if (matches.Count == 0)
+        {
+            await next(context);
+            return;
+        }
+
+        // The signed-in user (or member) is only known once authentication has run further down the pipeline,
+        // so channels keyed on it are counted when the request completes. The rest are held open for its length.
+        var activities = new List<IDisposable>();
+        try
+        {
+            foreach ((string channel, string[] sources) in matches)
+            {
+                if (!IsKeyedOnUser(sources) && ResolveSessionKey(context.Request, sources) is { } sessionKey)
+                {
+                    activities.Add(_tracker.BeginActivity(channel, sessionKey));
+                }
+            }
+
+            await next(context);
+        }
+        finally
+        {
+            activities.ForEach(a => a.Dispose());
+        }
+
+        bool memberSignedOut = context.Items.ContainsKey(MemberLogoutHandler.SignedOutItemKey);
+        foreach ((string channel, string[] sources) in matches)
+        {
+            if (memberSignedOut && channel == Constants.Channels.Members)
+            {
+                continue;
+            }
+
+            if (IsKeyedOnUser(sources) && ResolveSessionKey(context.Request, sources) is { } userKey)
+            {
+                _tracker.Touch(channel, userKey);
+                RecordPresence(channel, context.User);
+            }
+        }
+    }
+
+    private void RecordPresence(string channel, ClaimsPrincipal user)
+    {
+        if (channel == Constants.Channels.Backoffice && user.Identity?.GetUserKey() is { } backofficeUser)
+        {
+            _backofficePresence.Record(backofficeUser);
+        }
+        else if (channel == Constants.Channels.Members && ResolveUserId(user) is { } member)
+        {
+            _memberPresence.Record(member);
+        }
+    }
+
+    private static bool IsKeyedOnUser(string[] sources) =>
+        sources.Contains(Constants.SessionKeySources.User, StringComparer.OrdinalIgnoreCase);
+
+    private static List<(string Channel, string[] Sources)> Match(HttpRequest request, LiveViewOptions options)
+    {
+        var matches = new List<(string, string[])>();
+
+        if (HttpMethods.IsOptions(request.Method) || HttpMethods.IsHead(request.Method))
+        {
+            return matches;
+        }
+
+        if (options.IgnoreBots && BotUserAgent().IsMatch(request.Headers.UserAgent.ToString()))
+        {
+            return matches;
+        }
+
+        string path = request.Path.Value ?? "/";
+        bool isStaticFile = IsStaticFile(path, options.StaticFileExtensions);
+        foreach ((string alias, LiveViewChannelOptions channelOptions) in options.Channels.OrderBy(c => c.Value.SortOrder ?? 0))
+        {
+            if (!channelOptions.Enabled
+                || !MatchesAny(path, channelOptions.PathPrefixes)
+                || MatchesAny(path, channelOptions.ExcludePathPrefixes))
+            {
+                continue;
+            }
+
+            if (!(channelOptions.IgnoreStaticFiles == true && isStaticFile))
+            {
+                matches.Add((alias, channelOptions.SessionKeys ?? [Constants.SessionKeySources.Client]));
+            }
+
+            if (channelOptions.Exclusive ?? true)
+            {
+                break;
+            }
+        }
+
+        return matches;
+    }
+
+    private static bool MatchesAny(string path, string[]? prefixes)
+    {
+        if (prefixes is null)
+        {
+            return false;
+        }
+
+        foreach (string prefix in prefixes)
+        {
+            string trimmed = prefix.TrimEnd('/');
+            if (trimmed.Length == 0)
+            {
+                return true;
+            }
+
+            if (path.StartsWith(trimmed, StringComparison.OrdinalIgnoreCase)
+                && (path.Length == trimmed.Length || path[trimmed.Length] == '/'))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsStaticFile(string path, string[] extensions)
+    {
+        string extension = Path.GetExtension(path);
+        return extension.Length > 0 && extensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string? ResolveSessionKey(HttpRequest request, string[] sources)
+    {
+        foreach (string source in sources)
+        {
+            string? value = source switch
+            {
+                Constants.SessionKeySources.User => ResolveUserId(request.HttpContext.User),
+                Constants.SessionKeySources.Client =>
+                    $"{request.HttpContext.Connection.RemoteIpAddress}|{request.Headers.UserAgent}",
+                Constants.SessionKeySources.Authorization => request.Headers.Authorization.ToString(),
+                _ when source.StartsWith(Constants.SessionKeySources.HeaderPrefix, StringComparison.OrdinalIgnoreCase) =>
+                    request.Headers[source[Constants.SessionKeySources.HeaderPrefix.Length..]].ToString(),
+                _ when source.StartsWith(Constants.SessionKeySources.CookiePrefix, StringComparison.OrdinalIgnoreCase) =>
+                    request.Cookies[source[Constants.SessionKeySources.CookiePrefix.Length..]],
+                _ => null,
+            };
+
+            if (!string.IsNullOrEmpty(value))
+            {
+                // Prefix with the source so identical values from different sources never collide.
+                return source + ":" + value;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ResolveUserId(ClaimsPrincipal user) =>
+        user.Identity?.IsAuthenticated == true
+            ? user.Identity.GetUserKey()?.ToString() ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            : null;
+
+    [GeneratedRegex(@"bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|pingdom|headless|lighthouse", RegexOptions.IgnoreCase)]
+    private static partial Regex BotUserAgent();
+}

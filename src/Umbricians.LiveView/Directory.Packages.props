@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Built against the latest Umbraco 17 minor; sites on 17.8+ (including 18) resolve their own newer versions. -->
+    <PackageVersion Include="Umbraco.Cms.Api.Common" Version="17.8.0" />
+    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="17.8.0" />
+    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="17.8.0" />
+  </ItemGroup>
+</Project>

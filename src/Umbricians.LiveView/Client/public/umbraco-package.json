@@ -1,0 +1,14 @@
+{
+  "id": "Umbricians.LiveView",
+  "name": "Umbricians.LiveView",
+  "version": "0.0.0",
+  "allowTelemetry": true,
+  "extensions": [
+    {
+      "name": "Umbricians Live View Bundle",
+      "alias": "Umbricians.LiveView.Bundle",
+      "type": "bundle",
+      "js": "/App_Plugins/UmbriciansLiveView/umbricians-live-view.js"
+    }
+  ]
+}

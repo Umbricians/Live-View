@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/demo/">
+    <Project Path="demo/Umbricians.LiveView.Demo/Umbricians.LiveView.Demo.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Umbricians.LiveView/Umbricians.LiveView.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,61 @@
+@model Umbricians.LiveView.Demo.DemoMembers.DemoMembersViewModel
+@{
+    Layout = null;
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Demo member login</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 520px; margin: 48px auto; padding: 0 16px; color: #1b264f; }
+        .card { border: 1px solid #e9e9eb; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+        .status { font-size: 1.1rem; }
+        .error { color: #d42054; }
+        select, button { font: inherit; padding: 6px 10px; }
+        button { background: #3544b1; color: #fff; border: 0; border-radius: 4px; cursor: pointer; }
+        .muted { color: #68676b; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <h1>Demo member login</h1>
+    <p class="muted">Test page for the Live View members line. Not part of the package.</p>
+
+    @if (Model.Error is not null)
+    {
+        <p class="error">@Model.Error</p>
+    }
+
+    <div class="card">
+        @if (Model.CurrentEmail is not null)
+        {
+            <p class="status">Logged in as <strong>@Model.CurrentName</strong> (@Model.CurrentEmail)</p>
+            <form method="post" action="/demo/members/logout">
+                @Html.AntiForgeryToken()
+                <button type="submit">Log out</button>
+            </form>
+        }
+        else
+        {
+            <p class="status">Not logged in.</p>
+            <form method="post" action="/demo/members/login">
+                @Html.AntiForgeryToken()
+                <label for="email">Log in as</label>
+                <select id="email" name="email">
+                    @foreach (var account in Model.Accounts)
+                    {
+                        <option value="@account.Email">@account.Name (@account.Email)</option>
+                    }
+                </select>
+                <button type="submit">Log in</button>
+            </form>
+        }
+    </div>
+
+    <p class="muted">
+        Each browser (or private window) holds one member session. To have several members online at once, log in
+        from different browsers or private windows.
+    </p>
+</body>
+</html>
