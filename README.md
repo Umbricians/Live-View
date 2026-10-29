@@ -32,6 +32,10 @@ signed with the sender's name.
 
 ![The Send message slide-out with a headline, type and message for the selected backoffice users](docs/images/live-view-send-message.png)
 
+The message arrives instantly in the recipient's backoffice, wherever they are:
+
+![The message shown as a warning notification in another editor's backoffice, signed by the sender](docs/images/live-view-notification.png)
+
 - Every backoffice sends a small heartbeat once a minute, so idle editors are listed too.
 - **Open tabs** shows how many backoffice tabs or windows each user has open. It comes from Umbraco's realtime
   (server events) connections, one per tab, so it drops as soon as a tab closes. If a user's realtime connection
