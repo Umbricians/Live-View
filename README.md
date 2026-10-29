@@ -246,31 +246,4 @@ dotnet pack src/Umbricians.LiveView -c Release
 
 Packing stops with an error if the dashboard bundle has not been built.
 
-### Releasing
-
-[`.github/workflows/build.yml`](.github/workflows/build.yml) builds and packs on every push and pull request.
-Pushing a version tag publishes to NuGet:
-
-```bash
-git tag v0.1.0
-```
-
-```bash
-git push origin v0.1.0
-```
-
-The tag sets the package version (`v1.2.3` publishes `1.2.3`, and `v1.3.0-beta.1` a pre-release). Only the plugin
-in `src/Umbricians.LiveView` is packed; the demo site is built as a check but never published. Once the package is
-on NuGet, the workflow creates a matching GitHub release with generated release notes and the `.nupkg` attached.
-
-Publishing uses [NuGet Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing), so no
-API key is stored anywhere. The workflow exchanges GitHub's OIDC token for a NuGet API key that lasts one hour.
-One-off setup in the GitHub repository:
-
-1. **Settings → Environments**: create an environment named `production`. Optionally add required reviewers so
-   each release waits for approval.
-2. In that environment, add a secret `NUGET_USER` holding the nuget.org **username** (profile name, not email) of
-   the account that owns the trusted publishing policy.
-
-The nuget.org policy must name owner `umbricians`, repository `live-view`, workflow `build.yml` and environment
-`production` (owner and repository are matched without regard to case).
+Release steps for maintainers are in [docs/RELEASING.md](docs/RELEASING.md).
