@@ -2,6 +2,9 @@
 
 # Umbricians Live View
 
+[![NuGet](https://img.shields.io/nuget/v/Umbricians.LiveView?label=NuGet)](https://www.nuget.org/packages/Umbricians.LiveView)
+[![Build](https://github.com/Umbricians/Live-View/actions/workflows/build.yml/badge.svg)](https://github.com/Umbricians/Live-View/actions/workflows/build.yml)
+
 A real-time **Live View** dashboard for the Umbraco **Settings** section (Umbraco 17.8+). It charts how many
 sessions are active right now:
 
@@ -243,7 +246,8 @@ git push origin v0.1.0
 ```
 
 The tag sets the package version (`v1.2.3` publishes `1.2.3`, and `v1.3.0-beta.1` a pre-release). Only the plugin
-in `src/Umbricians.LiveView` is packed; the demo site is built as a check but never published.
+in `src/Umbricians.LiveView` is packed; the demo site is built as a check but never published. Once the package is
+on NuGet, the workflow creates a matching GitHub release with generated release notes and the `.nupkg` attached.
 
 Publishing uses [NuGet Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing), so no
 API key is stored anywhere. The workflow exchanges GitHub's OIDC token for a NuGet API key that lasts one hour.
