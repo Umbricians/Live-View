@@ -205,6 +205,10 @@ All under `/umbraco/umbriciansliveview/api/v1/`.
 }
 ```
 
+## Licence
+
+[MIT](LICENSE). Copyright (c) 2026 FYIN LLC (trading as Umbricians).
+
 ## Development
 
 ```

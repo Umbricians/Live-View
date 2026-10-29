@@ -16,6 +16,8 @@
     <PackageTags>umbraco;umbraco-marketplace;dashboard;analytics;realtime</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Copyright>Copyright (c) 2026 FYIN LLC (trading as Umbricians)</Copyright>
     <PackageProjectUrl>https://github.com/Umbricians/Live-View</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Umbricians/Live-View</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
