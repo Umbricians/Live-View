@@ -27,15 +27,15 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: ${{ env.CLIENT_DIR }}/package-lock.json
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
@@ -84,7 +84,7 @@ jobs:
       - name: Pack
         run: dotnet pack "$PROJECT" -c Release --no-build -p:Version=${{ steps.version.outputs.version }} -o artifacts
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: nuget-package
           path: artifacts/*.nupkg
@@ -102,12 +102,12 @@ jobs:
       contents: read
       id-token: write # lets the job request the OIDC token that NuGet trusts
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: nuget-package
           path: artifacts
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
