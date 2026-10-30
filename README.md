@@ -51,6 +51,13 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
   connection is down, their next heartbeat picks the message up instead ("Delivery" column).
 - Messages are held in memory for 15 minutes, then discarded.
 
+## Documentation
+
+- **[Getting started](docs/getting-started.md)**: install, find the dashboard, configure what is counted, add your
+  own lines, and what to check before going live.
+- **[Messaging members](docs/member-messaging.md)**: let the dashboard message your website's members, with complete
+  banner, SignalR pop-up and email examples.
+
 ## Installation
 
 ```bash
@@ -189,10 +196,16 @@ line rather than breaking the dashboard. See
 
 ### 4. Messaging members
 
+> The [Messaging members guide](docs/member-messaging.md) walks through this step by step, with complete banner,
+> SignalR pop-up and email senders.
+
 How a message reaches website members is up to each site: SignalR, a banner on their next page view, email, push
 notifications. The dashboard collects the message and works out who it is for; you plug in the delivery by
-implementing `IMemberMessageSender`. Member messaging appears on the dashboard once at least one sender is
-registered, and the person sending picks which senders to use.
+implementing `IMemberMessageSender`.
+
+Member messaging is **off by default**: the package ships no senders, so until you register one the members table
+has no checkboxes and there is no **Message members…** button. Each sender you register appears as a delivery
+option, using its own `Name` and `Description`, and the person sending picks which ones to use.
 
 ```csharp
 public class EmailMemberMessageSender(IEmailSender email, IMemberService members) : IMemberMessageSender
