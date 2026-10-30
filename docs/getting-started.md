@@ -66,7 +66,7 @@ and keeps the last 120 readings while the page is open. Nothing is stored in the
 |---|---|---|
 | **Web sessions** | front-end visitors | a browser (IP address + User-Agent) seen in the last 5 minutes |
 | **Members online** | visitors logged in as members | a member seen in the last 5 minutes; removed as soon as they log out |
-| **Backoffice users** | editors with the backoffice open | a backoffice user, however many tabs they have open |
+| **Backoffice users** | editors with the backoffice open | a backoffice user with a backoffice tab open or seen in the last 5 minutes, however many tabs they have open |
 | **MCP sessions** | clients of an MCP endpoint hosted by the site (`/mcp`, `/umbraco/mcp`) | an `Mcp-Session-Id`, or the caller's token or IP address |
 | **API sessions** | callers of `/api` and the Delivery API | an `Api-Key` header, or the caller's token or IP address, seen in the last 60 seconds |
 
@@ -114,7 +114,8 @@ Each channel under `Channels` can set `Enabled`, `Name`, `Color`, `SortOrder`, `
 `ExcludePathPrefixes`, `SessionKeys` (`Header:<name>`, `Cookie:<name>`, `Authorization`, `User` or `Client`),
 `ActivityWindowSeconds`, `IgnoreStaticFiles` and `Exclusive`. The built-in channels (`web`, `members`, `backoffice`,
 `mcp`, `api`) keep their defaults for anything you leave out. `SessionKeys` and `Exclusive` don't apply to
-`members`, which always counts the signed-in member and also counts them as a web visitor. See
+`members`, which always counts the signed-in member and also counts them as a web visitor. `SessionKeys` doesn't
+apply to `backoffice`, which always counts the signed-in backoffice user. See
 [How sessions are counted](../README.md#how-sessions-are-counted) for the details.
 
 ## 5. Add your own lines
