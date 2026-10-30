@@ -72,8 +72,8 @@ export class UmbriciansSendMessageModalElement extends UmbModalBaseElement<
         <uui-box headline=${this.data?.allOnline ? "To everyone online" : `To ${plural(count, "user", "users")}`}>
           ${this.data?.allOnline
             ? html`<p class="muted">
-                All ${plural(count, "backoffice user", "backoffice users")} online when you send, including anyone who
-                has signed in since you opened this.
+                Everyone else with the backoffice open when you send (${plural(count, "user", "users")} right now),
+                including anyone who has signed in since you opened this.
               </p>`
             : nothing}
           <div class="recipients">

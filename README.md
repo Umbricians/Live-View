@@ -35,7 +35,7 @@ every member of the site, using whichever of the site's delivery methods you tic
 across pages), or click **Select all N online** to include every page, then click **Message users…** in the footer to open a slide-out where you write a headline, pick a type
 (information, warning, urgent or good news) and add a message, for example to warn people before an upgrade or
 restart. It appears in their backoffice as a standard Umbraco notification that stays until dismissed, and is
-signed with the sender's name.
+signed with the sender's name. You are marked **You** in the list and are never sent your own message.
 
 ![The Send message slide-out with a headline, type and message for the selected backoffice users](docs/images/live-view-send-message.png)
 

@@ -57,8 +57,8 @@ public class LiveViewApiController : ControllerBase
 
     /// <summary>One page of the backoffice users who are online, newest arrivals first.</summary>
     [HttpGet("backoffice-users")]
-    [ProducesResponseType<PagedViewModel<OnlineBackofficeUserResponseModel>>(StatusCodes.Status200OK)]
-    public async Task<PagedViewModel<OnlineBackofficeUserResponseModel>> BackofficeUsers(int skip = 0, int take = 25)
+    [ProducesResponseType<OnlineBackofficeUsersResponseModel>(StatusCodes.Status200OK)]
+    public async Task<OnlineBackofficeUsersResponseModel> BackofficeUsers(int skip = 0, int take = 25)
     {
         (int total, IReadOnlyList<OnlineBackofficeUser> page) = await _presence.PageAsync(
             Math.Max(skip, 0), Math.Clamp(take, 1, MaxPageSize));
@@ -77,7 +77,13 @@ public class LiveViewApiController : ControllerBase
             })
             .ToList();
 
-        return new PagedViewModel<OnlineBackofficeUserResponseModel> { Total = total, Items = items };
+        bool currentUserOnline = currentUserKey is { } key && _presence.AllOnline().Contains(key);
+        return new OnlineBackofficeUsersResponseModel
+        {
+            Total = total,
+            Items = items,
+            Recipients = currentUserOnline ? total - 1 : total,
+        };
     }
 
     /// <summary>One page of the members who are logged in on the website, newest arrivals first.</summary>
@@ -111,14 +117,17 @@ public class LiveViewApiController : ControllerBase
         string headline = request.Headline?.Trim() ?? string.Empty;
         string message = request.Message?.Trim() ?? string.Empty;
         // "All online" is resolved here rather than in the browser, which only ever holds one page of users.
-        Guid[] recipients = request.AllOnline
-            ? _presence.AllOnline().ToArray()
-            : request.UserKeys?.Distinct().ToArray() ?? [];
+        // The sender is never one of the recipients.
+        Guid? senderKey = _security.BackOfficeSecurity?.CurrentUser?.Key;
+        Guid[] recipients = (request.AllOnline ? _presence.AllOnline() : request.UserKeys ?? [])
+            .Where(k => k != senderKey)
+            .Distinct()
+            .ToArray();
         string color = request.Color is { } c && MessageColors.Contains(c) ? c : "default";
 
         if (headline.Length is 0 or > 200 || message.Length > 2000 || recipients.Length is 0 or > 1000)
         {
-            return BadRequest("A headline (up to 200 characters), a message (up to 2000) and at least one recipient are required.");
+            return BadRequest("A headline (up to 200 characters), a message (up to 2000) and at least one other user to send to are required.");
         }
 
         BackofficeMessage sent = await _messenger.SendAsync(
@@ -133,6 +142,12 @@ public class LiveViewSnapshotResponseModel
     public required DateTimeOffset Timestamp { get; init; }
 
     public required IReadOnlyList<LiveMetricReading> Metrics { get; init; }
+}
+
+public class OnlineBackofficeUsersResponseModel : PagedViewModel<OnlineBackofficeUserResponseModel>
+{
+    /// <summary>How many users a message to everyone online reaches: everyone online except the current user.</summary>
+    public required long Recipients { get; init; }
 }
 
 public class OnlineBackofficeUserResponseModel

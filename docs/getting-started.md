@@ -158,7 +158,8 @@ anything expensive. The [README](../README.md#extending) has examples of the oth
 ## 6. Message backoffice users and members
 
 **Backoffice users** can be messaged by anyone with the **Message backoffice users** permission: tick users (or
-click **Select all N online**), then **Message users…**. The message pops up in their backoffice as an Umbraco notification that stays until dismissed.
+click **Select all N online**), then **Message users…**. The message pops up in their backoffice as an Umbraco notification that stays until dismissed. You
+are marked **You** in the list and can't select yourself, and "everyone online" means everyone except you.
 
 **Members** can be messaged by anyone with the **Message members** permission, but only once you decide how
 messages should reach them: a banner, a live pop-up, email or something else. See
