@@ -51,6 +51,7 @@ internal sealed partial class LiveActivityMiddleware : IMiddleware
             foreach ((string channel, string[] sources) in matches)
             {
                 if (channel != Constants.Channels.Members
+                    && channel != Constants.Channels.Backoffice
                     && !IsKeyedOnUser(sources)
                     && ResolveSessionKey(context.Request, sources) is { } sessionKey)
                 {
@@ -67,18 +68,18 @@ internal sealed partial class LiveActivityMiddleware : IMiddleware
 
         foreach ((string channel, string[] sources) in matches)
         {
-            // Member presence keeps the members line itself, always keyed on the signed-in member.
+            // Member and backoffice presence keep their lines themselves, always keyed on the signed-in member or user.
             if (channel == Constants.Channels.Members)
             {
                 _memberPresence.Seen(context.User);
             }
+            else if (channel == Constants.Channels.Backoffice)
+            {
+                _backofficePresence.Seen(context.User);
+            }
             else if (IsKeyedOnUser(sources) && ResolveSessionKey(context.Request, sources) is { } userKey)
             {
                 _tracker.Touch(channel, userKey);
-                if (channel == Constants.Channels.Backoffice && context.User.Identity?.GetUserKey() is { } backofficeUser)
-                {
-                    _backofficePresence.Record(backofficeUser);
-                }
             }
         }
     }

@@ -43,7 +43,9 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
 
 ![The message shown as a warning notification in another editor's backoffice, signed by the sender](docs/images/live-view-notification.png)
 
-- Every backoffice sends a small heartbeat once a minute, so idle editors are listed too.
+- Every backoffice tab sends a small heartbeat once a minute, so idle editors are listed and counted too. A user
+  is online while they have a tab open, or for the backoffice channel's activity window after their last request.
+  The **Backoffice users** line on the chart counts the same users the table lists.
 - **Open tabs** shows how many backoffice tabs or windows each user has open. It comes from Umbraco's realtime
   (server events) connections, one per tab, so it drops as soon as a tab closes. If a user's realtime connection
   is down, the count falls back to heartbeats, and a closed tab then drops off within about two and a half minutes.
@@ -139,7 +141,8 @@ Built-in channels keep their defaults for any property you leave out. Session ke
 `Cookie:<name>`, `Authorization`, `User` (the authenticated backoffice user or member) and `Client`. Set
 `"Exclusive": false` on a channel whose requests should also count in later channels. The built-in `members`
 channel always counts the signed-in member and always lets members count as web visitors too, so `SessionKeys` and
-`Exclusive` don't apply to it; its other settings do.
+`Exclusive` don't apply to it; its other settings do. The built-in `backoffice` channel always counts the signed-in
+backoffice user, so `SessionKeys` doesn't apply to it.
 
 ## Extending
 

@@ -54,7 +54,7 @@ public class LiveViewClientApiController : ControllerBase
 
         if (IsValidTabId(tab))
         {
-            _presence.RecordTab(userKey, tab);
+            _presence.TabHeartbeat(userKey, tab);
         }
 
         return new HeartbeatResponseModel { PendingMessages = _messenger.GetUndelivered(userKey) };
@@ -67,7 +67,7 @@ public class LiveViewClientApiController : ControllerBase
     {
         if (_security.BackOfficeSecurity?.CurrentUser?.Key is { } userKey && IsValidTabId(tab))
         {
-            _presence.EndTab(userKey, tab);
+            _presence.TabClosed(userKey, tab);
         }
 
         return NoContent();

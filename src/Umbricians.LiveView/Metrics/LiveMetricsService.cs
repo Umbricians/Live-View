@@ -16,6 +16,7 @@ public sealed class LiveMetricsService
     private static readonly TimeSpan ProviderTimeout = TimeSpan.FromSeconds(2);
 
     private readonly ILiveActivityTracker _tracker;
+    private readonly BackofficePresence _backofficePresence;
     private readonly MemberPresence _memberPresence;
     private readonly IEnumerable<ILiveMetricProvider> _providers;
     private readonly IOptionsMonitor<LiveViewOptions> _options;
@@ -23,12 +24,14 @@ public sealed class LiveMetricsService
 
     public LiveMetricsService(
         ILiveActivityTracker tracker,
+        BackofficePresence backofficePresence,
         MemberPresence memberPresence,
         IEnumerable<ILiveMetricProvider> providers,
         IOptionsMonitor<LiveViewOptions> options,
         ILogger<LiveMetricsService> logger)
     {
         _tracker = tracker;
+        _backofficePresence = backofficePresence;
         _memberPresence = memberPresence;
         _providers = providers;
         _options = options;
@@ -51,10 +54,13 @@ public sealed class LiveMetricsService
             .ToList();
     }
 
-    // The members line comes from member presence, the same source as the members table.
-    private int CountActive(string channel) => channel == Constants.Channels.Members
-        ? _memberPresence.CountOnline()
-        : _tracker.CountActive(channel);
+    // The members and backoffice users lines come from their presence modules, the same sources as their tables.
+    private int CountActive(string channel) => channel switch
+    {
+        Constants.Channels.Members => _memberPresence.CountOnline(),
+        Constants.Channels.Backoffice => _backofficePresence.CountOnline(),
+        _ => _tracker.CountActive(channel),
+    };
 
     private async Task<LiveMetricReading> ReadAsync(ILiveMetricProvider provider, CancellationToken cancellationToken)
     {

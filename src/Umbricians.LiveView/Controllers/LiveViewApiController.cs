@@ -4,11 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Umbraco.Cms.Api.Common.Filters;
 using Umbraco.Cms.Api.Common.ViewModels.Pagination;
-using Umbraco.Cms.Core.Models;
-using Umbraco.Cms.Core.Models.Membership;
 using Umbraco.Cms.Core.Security;
-using Umbraco.Cms.Core.ServerEvents;
-using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Web.Common.Routing;
 using Umbricians.LiveView.Messaging;
@@ -35,8 +31,6 @@ public class LiveViewApiController : ControllerBase
     private readonly BackofficePresence _presence;
     private readonly MemberPresence _memberPresence;
     private readonly BackofficeMessenger _messenger;
-    private readonly IUserService _userService;
-    private readonly IUserConnectionManager _connections;
     private readonly IBackOfficeSecurityAccessor _security;
 
     public LiveViewApiController(
@@ -44,16 +38,12 @@ public class LiveViewApiController : ControllerBase
         BackofficePresence presence,
         MemberPresence memberPresence,
         BackofficeMessenger messenger,
-        IUserService userService,
-        IUserConnectionManager connections,
         IBackOfficeSecurityAccessor security)
     {
         _metrics = metrics;
         _presence = presence;
         _memberPresence = memberPresence;
         _messenger = messenger;
-        _userService = userService;
-        _connections = connections;
         _security = security;
     }
 
@@ -65,44 +55,29 @@ public class LiveViewApiController : ControllerBase
         Metrics = await _metrics.GetSnapshotAsync(cancellationToken),
     };
 
-    /// <summary>One page of the backoffice users who are online, most recently active first.</summary>
+    /// <summary>One page of the backoffice users who are online, newest arrivals first.</summary>
     [HttpGet("backoffice-users")]
     [ProducesResponseType<PagedViewModel<OnlineBackofficeUserResponseModel>>(StatusCodes.Status200OK)]
     public async Task<PagedViewModel<OnlineBackofficeUserResponseModel>> BackofficeUsers(int skip = 0, int take = 25)
     {
-        IReadOnlyList<OnlineBackofficeUser> online = _presence.GetOnline();
-        IReadOnlyList<OnlineBackofficeUser> page = online.Skip(Math.Max(skip, 0)).Take(Math.Clamp(take, 1, MaxPageSize)).ToList();
-        if (page.Count == 0)
-        {
-            return new PagedViewModel<OnlineBackofficeUserResponseModel> { Total = online.Count, Items = [] };
-        }
-
-        // Only the page being shown is looked up, however many users are online.
-        Dictionary<Guid, IUser> users = (await _userService.GetAsync(page.Select(o => o.UserKey)))
-            .ToDictionary(u => u.Key);
+        (int total, IReadOnlyList<OnlineBackofficeUser> page) = await _presence.PageAsync(
+            Math.Max(skip, 0), Math.Clamp(take, 1, MaxPageSize));
         Guid? currentUserKey = _security.BackOfficeSecurity?.CurrentUser?.Key;
 
         List<OnlineBackofficeUserResponseModel> items = page
-            .Where(o => users.ContainsKey(o.UserKey))
-            .Select(o =>
+            .Select(u => new OnlineBackofficeUserResponseModel
             {
-                // Every open backoffice tab holds one server-events connection, which closes the moment the tab
-                // does, so that is the exact tab count. Heartbeats only stand in when realtime is unavailable.
-                int connections = _connections.GetConnections(o.UserKey).Count;
-                return new OnlineBackofficeUserResponseModel
-                {
-                    Key = o.UserKey,
-                    Name = users[o.UserKey].Name ?? users[o.UserKey].Username,
-                    Email = users[o.UserKey].Email,
-                    LastSeen = o.LastSeen,
-                    OpenTabs = connections > 0 ? connections : o.OpenTabs,
-                    IsConnected = connections > 0,
-                    IsCurrentUser = o.UserKey == currentUserKey,
-                };
+                Key = u.Key,
+                Name = u.Name,
+                Email = u.Email,
+                LastSeen = u.LastSeen,
+                OpenTabs = u.OpenTabs,
+                IsConnected = u.IsConnected,
+                IsCurrentUser = u.Key == currentUserKey,
             })
             .ToList();
 
-        return new PagedViewModel<OnlineBackofficeUserResponseModel> { Total = online.Count, Items = items };
+        return new PagedViewModel<OnlineBackofficeUserResponseModel> { Total = total, Items = items };
     }
 
     /// <summary>One page of the members who are logged in on the website, newest arrivals first.</summary>
@@ -137,7 +112,7 @@ public class LiveViewApiController : ControllerBase
         string message = request.Message?.Trim() ?? string.Empty;
         // "All online" is resolved here rather than in the browser, which only ever holds one page of users.
         Guid[] recipients = request.AllOnline
-            ? _presence.GetOnline().Select(u => u.UserKey).ToArray()
+            ? _presence.AllOnline().ToArray()
             : request.UserKeys?.Distinct().ToArray() ?? [];
         string color = request.Color is { } c && MessageColors.Contains(c) ? c : "default";
 
@@ -170,7 +145,7 @@ public class OnlineBackofficeUserResponseModel
 
     public required DateTimeOffset LastSeen { get; init; }
 
-    /// <summary>Backoffice tabs the user has open, counted from each tab's heartbeat.</summary>
+    /// <summary>Backoffice tabs the user has open, counted from their realtime connections, or heartbeats without them.</summary>
     public required int OpenTabs { get; init; }
 
     /// <summary>Whether the user has a realtime connection, so a message reaches them straight away.</summary>
