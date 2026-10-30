@@ -116,9 +116,14 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
     this._allOnline = true;
   }
 
-  #clearSelection() {
+  /** Clears the selection, e.g. after a message has been sent. */
+  clearSelection() {
     this._allOnline = false;
     this._selected = new Map();
+  }
+
+  #clearSelection() {
+    this.clearSelection();
   }
 
   #renderSelectionBar() {
