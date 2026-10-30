@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Umbraco.Cms.Core.DependencyInjection;
 using Umbricians.LiveView.Configuration;
+using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Metrics;
 
 namespace Umbricians.LiveView.Extensions;
@@ -12,6 +13,17 @@ public static class LiveViewBuilderExtensions
         where TProvider : class, ILiveMetricProvider
     {
         builder.Services.AddSingleton<ILiveMetricProvider, TProvider>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Adds a way of delivering dashboard messages to website members, such as SignalR, a banner or email. Member
+    /// messaging appears on the dashboard once at least one sender is registered.
+    /// </summary>
+    public static IUmbracoBuilder AddMemberMessageSender<TSender>(this IUmbracoBuilder builder)
+        where TSender : class, IMemberMessageSender
+    {
+        builder.Services.AddSingleton<IMemberMessageSender, TSender>();
         return builder;
     }
 

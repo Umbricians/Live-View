@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Umbraco.Cms.Api.Common.Filters;
 using Umbraco.Cms.Api.Common.ViewModels.Pagination;
+using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.Membership;
 using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Core.ServerEvents;
@@ -33,7 +34,7 @@ public class LiveViewApiController : ControllerBase
     private readonly MemberPresence _memberPresence;
     private readonly BackofficeMessenger _messenger;
     private readonly IUserService _userService;
-    private readonly IMemberService _memberService;
+    private readonly MemberResolver _memberResolver;
     private readonly IUserConnectionManager _connections;
     private readonly IBackOfficeSecurityAccessor _security;
 
@@ -43,7 +44,7 @@ public class LiveViewApiController : ControllerBase
         MemberPresence memberPresence,
         BackofficeMessenger messenger,
         IUserService userService,
-        IMemberService memberService,
+        MemberResolver memberResolver,
         IUserConnectionManager connections,
         IBackOfficeSecurityAccessor security)
     {
@@ -52,7 +53,7 @@ public class LiveViewApiController : ControllerBase
         _memberPresence = memberPresence;
         _messenger = messenger;
         _userService = userService;
-        _memberService = memberService;
+        _memberResolver = memberResolver;
         _connections = connections;
         _security = security;
     }
@@ -113,18 +114,10 @@ public class LiveViewApiController : ControllerBase
         (int total, IReadOnlyList<OnlineMember> page) = _memberPresence.GetOnline(
             Math.Max(skip, 0), Math.Clamp(take, 1, MaxPageSize));
 
-        // Members are recorded by key where their claims carry one, otherwise by id; look each kind up in one batch.
-        var byKey = (await _memberService.GetByKeysAsync(
-                page.Select(m => Guid.TryParse(m.MemberId, out Guid key) ? key : Guid.Empty)
-                    .Where(key => key != Guid.Empty)
-                    .ToArray()))
-            .ToDictionary(m => m.Key.ToString());
-        int[] ids = page.Select(m => int.TryParse(m.MemberId, out int id) ? id : 0).Where(id => id > 0).ToArray();
-        var byId = (ids.Length > 0 ? _memberService.GetAllMembers(ids) : [])
-            .ToDictionary(m => m.Id.ToString());
+        IReadOnlyDictionary<string, IMember> members = await _memberResolver.ResolveAsync(page.Select(m => m.MemberId));
 
         List<OnlineMemberResponseModel> items = page
-            .Select(m => (Online: m, Member: byKey.GetValueOrDefault(m.MemberId) ?? byId.GetValueOrDefault(m.MemberId)))
+            .Select(m => (Online: m, Member: members.GetValueOrDefault(m.MemberId)))
             .Where(x => x.Member is not null)
             .Select(x => new OnlineMemberResponseModel
             {

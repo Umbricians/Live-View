@@ -15,8 +15,15 @@ import {
 import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
 import { umbOpenModal } from "@umbraco-cms/backoffice/modal";
 import { UMBRICIANS_SEND_MESSAGE_MODAL } from "../modals/send-message.modal-token.js";
-import { fetchSnapshot, type LiveMetricReading } from "../api/live-view.resource.js";
+import { UMBRICIANS_SEND_MEMBER_MESSAGE_MODAL } from "../modals/send-member-message.modal-token.js";
+import {
+  fetchMemberMessaging,
+  fetchSnapshot,
+  type LiveMetricReading,
+  type MemberMessaging,
+} from "../api/live-view.resource.js";
 import type { UmbriciansLiveViewUsersElement } from "./live-view-users.element.js";
+import type { UmbriciansLiveViewMembersElement } from "./live-view-members.element.js";
 import "./live-view-users.element.js";
 import "./live-view-members.element.js";
 import { plural } from "../utils/format.js";
@@ -40,9 +47,14 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
   @state() private _error?: string;
 
   @state() private _selectedCount = 0;
+  @state() private _selectedMembers = 0;
+
+  /** The site's member message senders; member messaging is offered only when there is at least one. */
+  @state() private _memberMessaging?: MemberMessaging;
 
   @query("canvas") private _canvas!: HTMLCanvasElement;
   @query("umbricians-live-view-users") private _users?: UmbriciansLiveViewUsersElement;
+  @query("umbricians-live-view-members") private _members?: UmbriciansLiveViewMembersElement;
 
   #chart?: Chart<"line", Array<number | null>, string>;
   #timer?: number;
@@ -57,6 +69,9 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
   override connectedCallback() {
     super.connectedCallback();
     this.#schedule(0);
+    fetchMemberMessaging()
+      .then((messaging) => (this._memberMessaging = messaging))
+      .catch(() => (this._memberMessaging = undefined));
   }
 
   override disconnectedCallback() {
@@ -182,6 +197,41 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
     this._selectedCount = this._users?.selection.count ?? 0;
   }
 
+  #onMembersChange() {
+    this._selectedMembers = this._members?.selection.count ?? 0;
+  }
+
+  async #openSendMemberMessage() {
+    const members = this._members;
+    const messaging = this._memberMessaging;
+    if (!members || !messaging?.senders.length) return;
+
+    try {
+      const result = await umbOpenModal(this, UMBRICIANS_SEND_MEMBER_MESSAGE_MODAL, {
+        data: {
+          selection: members.selection,
+          onlineCount: members.onlineCount,
+          totalMembers: messaging.totalMembers,
+          senders: messaging.senders,
+        },
+      });
+      const failed = result.results.filter((r) => r.error);
+      const summary = result.results
+        .map((r) =>
+          r.error
+            ? `${r.name}: ${r.error.toLowerCase()}`
+            : `${r.name}: ${r.delivered === null ? "sent" : plural(r.delivered, "member", "members")}${r.note ? ` (${r.note})` : ""}`,
+        )
+        .join(" · ");
+      this.#notifications?.peek(failed.length ? "warning" : "positive", {
+        data: { headline: failed.length ? "Message partly sent" : "Message sent to members", message: summary },
+      });
+      members.clearSelection();
+    } catch {
+      // Closed without sending.
+    }
+  }
+
   async #openSendMessage() {
     const selection = this._users?.selection;
     if (!selection || selection.count === 0) return;
@@ -200,6 +250,8 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
 
   override render() {
     const selected = this._selectedCount;
+    const selectedMembers = this._selectedMembers;
+    const canMessageMembers = (this._memberMessaging?.senders.length ?? 0) > 0;
 
     return html`
       <umb-body-layout header-transparent>
@@ -259,19 +311,35 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
 
           <umbricians-live-view-members
             .interval=${this._interval}
-            ?paused=${this._paused}></umbricians-live-view-members>
+            ?paused=${this._paused}
+            ?selectable=${canMessageMembers}
+            @change=${this.#onMembersChange}></umbricians-live-view-members>
         </div>
 
         <span slot="footer-info" class="muted footer-info">
-          ${selected === 0
-            ? "Select users to send them a message"
-            : `${plural(selected, "user", "users")} selected`}
+          ${selected === 0 && selectedMembers === 0
+            ? canMessageMembers
+              ? "Select users or members to message them"
+              : "Select users to send them a message"
+            : [
+                selected ? `${plural(selected, "user", "users")} selected` : "",
+                selectedMembers ? `${plural(selectedMembers, "member", "members")} selected` : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
         </span>
+        ${canMessageMembers
+          ? html`<uui-button
+              slot="actions"
+              look="secondary"
+              label="Message members…"
+              @click=${this.#openSendMemberMessage}></uui-button>`
+          : ""}
         <uui-button
           slot="actions"
           look="primary"
           color="positive"
-          label="Send message…"
+          label="Message users…"
           ?disabled=${selected === 0}
           @click=${this.#openSendMessage}></uui-button>
       </umb-body-layout>

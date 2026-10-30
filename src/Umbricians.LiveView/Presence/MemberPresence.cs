@@ -62,6 +62,13 @@ public sealed class MemberPresence
         return (online.Count, page);
     }
 
+    /// <summary>Everyone currently online, e.g. to address a message to all of them.</summary>
+    public IReadOnlyList<string> GetAllOnlineIds()
+    {
+        (int total, _) = GetOnline(0, 0);
+        return GetOnline(0, Math.Max(total, 1)).Page.Select(m => m.MemberId).ToList();
+    }
+
     private sealed record Seen(long First, long Last);
 
     private TimeSpan Window

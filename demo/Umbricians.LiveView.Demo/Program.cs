@@ -1,4 +1,6 @@
 
+using Umbricians.LiveView.Demo.DemoMembers;
+
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.CreateUmbracoBuilder()
@@ -23,6 +25,9 @@ app.UseUmbraco()
     {
         u.UseBackOfficeEndpoints();
         u.UseWebsiteEndpoints();
+
+        // Demo only: lets member pages receive Live View messages instantly.
+        u.EndpointRouteBuilder.MapHub<MemberMessagesHub>(MemberMessagesHub.Path);
     });
 
 await app.RunAsync();

@@ -8,6 +8,7 @@ using Umbraco.Cms.Core.Notifications;
 using Umbraco.Cms.Web.Common.ApplicationBuilder;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging;
+using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Metrics;
 using Umbricians.LiveView.Presence;
 using Umbricians.LiveView.Tracking;
@@ -29,6 +30,9 @@ public class LiveViewComposer : IComposer
         builder.Services.AddSingleton<MemberPresence>();
         builder.AddNotificationHandler<MemberLogoutSuccessNotification, MemberLogoutHandler>();
         builder.Services.AddSingleton<BackofficeMessenger>();
+        builder.Services.AddSingleton<MemberResolver>();
+        builder.Services.AddSingleton<MemberMessagingService>();
+        builder.Services.TryAddSingleton<IMemberMessageInbox, MemberMessageInbox>();
 
         builder.Services.Configure<UmbracoPipelineOptions>(options =>
             options.AddFilter(new UmbracoPipelineFilter("Umbricians.LiveView")

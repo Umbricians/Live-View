@@ -6,6 +6,7 @@ using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Notifications;
 using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Core.Services;
+using Umbricians.LiveView.Extensions;
 
 namespace Umbricians.LiveView.Demo.DemoMembers;
 
@@ -80,5 +81,10 @@ public class DemoMembersComposer : IComposer
     {
         builder.Services.Configure<DemoMembersOptions>(builder.Config.GetSection("LiveViewDemo:Members"));
         builder.AddNotificationAsyncHandler<UmbracoApplicationStartedNotification, DemoMemberSeeder>();
+
+        // Sample member message senders for the Live View dashboard; the hub is mapped in Program.cs.
+        builder.Services.AddSignalR();
+        builder.AddMemberMessageSender<SignalRMemberMessageSender>();
+        builder.AddMemberMessageSender<BannerMemberMessageSender>();
     }
 }

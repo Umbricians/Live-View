@@ -26,11 +26,13 @@ page being viewed is ever looked up, however many people are online. Rows are or
 online, newest first, so they stay put between refreshes.
 
 **Members online** lists logged-in members with their member type and when they were last active. A member drops
-off as soon as they log out, or once their activity window passes.
+off as soon as they log out, or once their activity window passes. If the site has
+[member message senders](#4-messaging-members), members can be selected and messaged too: tick some, or click
+**Select all N online**, then **Message members…**. The slide-out sends to the selected members, everyone online, or
+every member of the site, using whichever of the site's delivery methods you tick.
 
 **Backoffice users online** lists who has the backoffice open. Tick one or several of them (the selection is kept
-across pages), or tick the header and choose **Select all N online** to include every page, then click
-**Send message…** in the footer to open a slide-out where you write a headline, pick a type
+across pages), or click **Select all N online** to include every page, then click **Message users…** in the footer to open a slide-out where you write a headline, pick a type
 (information, warning, urgent or good news) and add a message, for example to warn people before an upgrade or
 restart. It appears in their backoffice as a standard Umbraco notification that stays until dismissed, and is
 signed with the sender's name.
@@ -185,13 +187,53 @@ Providers are called on every poll and given 2 seconds to answer. A slow or fail
 line rather than breaking the dashboard. See
 [ThreadPoolQueueMetric.cs](demo/Umbricians.LiveView.Demo/LiveView/ThreadPoolQueueMetric.cs) for a working example.
 
+### 4. Messaging members
+
+How a message reaches website members is up to each site: SignalR, a banner on their next page view, email, push
+notifications. The dashboard collects the message and works out who it is for; you plug in the delivery by
+implementing `IMemberMessageSender`. Member messaging appears on the dashboard once at least one sender is
+registered, and the person sending picks which senders to use.
+
+```csharp
+public class EmailMemberMessageSender(IEmailSender email, IMemberService members) : IMemberMessageSender
+{
+    public string Alias => "email";
+    public string Name => "Email";
+    public string? Description => "Sends the message to each member's email address.";
+    public bool ReachesOfflineMembers => true;
+
+    public async Task<MemberMessageResult> SendAsync(MemberMessage message, CancellationToken cancellationToken)
+    {
+        // message.MemberKeys lists the recipients, except for MemberMessageAudience.AllMembers,
+        // where it is empty and the sender reaches every member in its own way.
+        ...
+        return new MemberMessageResult(sent, "emailed");
+    }
+}
+
+// in a composer
+builder.AddMemberMessageSender<EmailMemberMessageSender>();
+```
+
+A `MemberMessage` has a headline, a plain-text body (encode it wherever you display it), a type (information,
+warning, urgent or good news), the audience, the sender's name and an expiry chosen on the dashboard. Each sender
+gets 30 seconds; its result, or failure, is reported back on the dashboard.
+
+For banner-style delivery, the package includes `IMemberMessageInbox`: a sender adds the message to it, and your
+own view component or endpoint reads `GetUnread(memberKey)` and calls `MarkRead` when a member dismisses it. Messages
+stay until they expire; nothing is persisted.
+
+The demo site has two working examples in
+[MemberMessageSenders.cs](demo/Umbricians.LiveView.Demo/DemoMembers/MemberMessageSenders.cs): a SignalR pop-up on
+pages members have open, and a banner shown on their next page view.
+
 ## API
 
 All under `/umbraco/umbriciansliveview/api/v1/`.
 
 | Endpoint | Who can call it |
 |---|---|
-| `GET snapshot`, `GET backoffice-users`, `GET members`, `POST messages` | backoffice users with access to the Settings section |
+| `GET snapshot`, `GET backoffice-users`, `GET members`, `POST messages`, `GET member-messaging`, `POST member-messages` | backoffice users with access to the Settings section |
 | `GET heartbeat`, `GET messages/{key}` | any backoffice user (recipients only for a message) |
 
 `GET snapshot` returns:

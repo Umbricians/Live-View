@@ -90,6 +90,39 @@ export const sendMessage = (body: {
   allOnline?: boolean;
 }) => request<{ key: string; recipients: number }>("POST", "messages", { body });
 
+export interface MemberMessageSender {
+  alias: string;
+  name: string;
+  description: string | null;
+  reachesOfflineMembers: boolean;
+}
+
+export interface MemberMessaging {
+  senders: Array<MemberMessageSender>;
+  totalMembers: number;
+}
+
+export type MemberAudience = "selected" | "allOnline" | "allMembers";
+
+export interface MemberMessageSendResult {
+  key: string;
+  recipients: number | null;
+  results: Array<{ alias: string; name: string; delivered: number | null; note: string | null; error: string | null }>;
+}
+
+/** The registered member message senders; an empty list means member messaging is unavailable. */
+export const fetchMemberMessaging = () => request<MemberMessaging>("GET", "member-messaging");
+
+export const sendMemberMessage = (body: {
+  headline: string;
+  message: string;
+  color: MessageColor;
+  audience: MemberAudience;
+  memberKeys?: Array<string>;
+  senders: Array<string>;
+  expiresInMinutes: number;
+}) => request<MemberMessageSendResult>("POST", "member-messages", { body });
+
 export const heartbeat = (tabId: string) =>
   request<{ pendingMessages: Array<string> }>("GET", `heartbeat?tab=${encodeURIComponent(tabId)}`);
 

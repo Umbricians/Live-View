@@ -140,7 +140,16 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
 
     return html`
       <uui-box headline="Backoffice users online">
-        <span slot="header-actions" class="muted">${this._total} online</span>
+        <div slot="header-actions" class="header-actions">
+          <span class="muted">${this._total} online</span>
+          ${this._total > 0
+            ? html`<uui-button
+                look="secondary"
+                compact
+                label=${this._allOnline ? "Clear selection" : `Select all ${this._total} online`}
+                @click=${this._allOnline ? this.#clearSelection : this.#selectAllOnline}></uui-button>`
+            : nothing}
+        </div>
 
         ${this._total === 0
           ? html`<p class="muted">Nobody has the backoffice open right now.</p>`
@@ -231,6 +240,12 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
 
     p.muted {
       margin: 0;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--uui-size-space-3);
     }
 
     .selection-bar {
