@@ -1,11 +1,16 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace Umbricians.LiveView.Configuration;
 
 /// <summary>
-/// Adds the built-in channels and fills any property a site left empty on them.
+/// Adds the channels declared in code and the built-in channels, and fills any property appsettings left empty on
+/// them. Appsettings values win, then channels declared in code, then the built-in defaults, whatever order
+/// composers run in.
 /// </summary>
-internal sealed class LiveViewOptionsDefaults : IPostConfigureOptions<LiveViewOptions>
+internal sealed class LiveViewOptionsDefaults(IEnumerable<LiveViewChannelRegistration> registrations)
+    : IPostConfigureOptions<LiveViewOptions>
 {
     private static readonly string[] WebExcludePathPrefixes =
     [
@@ -78,24 +83,40 @@ internal sealed class LiveViewOptionsDefaults : IPostConfigureOptions<LiveViewOp
             },
         };
 
+    /// <summary>Registers this post-configure, once however often it is called.</summary>
+    internal static void AddTo(IServiceCollection services) =>
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IPostConfigureOptions<LiveViewOptions>, LiveViewOptionsDefaults>());
+
     public void PostConfigure(string? name, LiveViewOptions options)
     {
+        foreach (LiveViewChannelRegistration registration in registrations)
+        {
+            Fill(options, registration.Alias, registration.Defaults);
+        }
+
         foreach ((string alias, LiveViewChannelOptions defaults) in BuiltInChannels)
         {
-            if (!options.Channels.TryGetValue(alias, out LiveViewChannelOptions? channel))
-            {
-                options.Channels[alias] = channel = new LiveViewChannelOptions();
-            }
-
-            channel.Name ??= defaults.Name;
-            channel.Color ??= defaults.Color;
-            channel.SortOrder ??= defaults.SortOrder;
-            channel.PathPrefixes ??= defaults.PathPrefixes;
-            channel.ExcludePathPrefixes ??= defaults.ExcludePathPrefixes;
-            channel.SessionKeys ??= defaults.SessionKeys;
-            channel.ActivityWindowSeconds ??= defaults.ActivityWindowSeconds;
-            channel.IgnoreStaticFiles ??= defaults.IgnoreStaticFiles;
-            channel.Exclusive ??= defaults.Exclusive;
+            Fill(options, alias, defaults);
         }
+    }
+
+    /// <summary>Adds the channel if it is missing, then copies in each value it still has empty.</summary>
+    private static void Fill(LiveViewOptions options, string alias, LiveViewChannelOptions defaults)
+    {
+        if (!options.Channels.TryGetValue(alias, out LiveViewChannelOptions? channel))
+        {
+            options.Channels[alias] = channel = new LiveViewChannelOptions();
+        }
+
+        channel.Name ??= defaults.Name;
+        channel.Color ??= defaults.Color;
+        channel.SortOrder ??= defaults.SortOrder;
+        channel.PathPrefixes ??= defaults.PathPrefixes;
+        channel.ExcludePathPrefixes ??= defaults.ExcludePathPrefixes;
+        channel.SessionKeys ??= defaults.SessionKeys;
+        channel.ActivityWindowSeconds ??= defaults.ActivityWindowSeconds;
+        channel.IgnoreStaticFiles ??= defaults.IgnoreStaticFiles;
+        channel.Exclusive ??= defaults.Exclusive;
     }
 }
