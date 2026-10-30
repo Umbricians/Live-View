@@ -34,6 +34,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
   @state() private _now = Date.now();
 
   #timer?: number;
+  #abort?: AbortController;
 
   get selection(): UserSelection {
     return this._allOnline
@@ -48,21 +49,26 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
   override disconnectedCallback() {
     super.disconnectedCallback();
     window.clearTimeout(this.#timer);
+    this.#abort?.abort();
   }
 
   override updated(changed: Map<string, unknown>) {
-    if ((changed.has("paused") && !this.paused) || changed.has("interval") || changed.has("_page")) this.#refresh();
+    if (changed.has("paused") || changed.has("interval") || changed.has("_page")) this.#refresh();
     if (changed.has("_selected") || changed.has("_allOnline") || (this._allOnline && changed.has("_total"))) {
       this.dispatchEvent(new UmbChangeEvent());
     }
   }
 
+  /** Each call supersedes the last: an older response is dropped and only one timer is ever pending. */
   async #refresh() {
     window.clearTimeout(this.#timer);
+    this.#abort?.abort();
     if (this.paused || !this.isConnected) return;
 
+    const abort = (this.#abort = new AbortController());
     try {
-      const result = await fetchOnlineUsers((this._page - 1) * PAGE_SIZE, PAGE_SIZE);
+      const result = await fetchOnlineUsers((this._page - 1) * PAGE_SIZE, PAGE_SIZE, abort.signal);
+      if (abort.signal.aborted) return;
       this._users = result.items;
       this._total = result.total;
       this._now = Date.now();
@@ -72,6 +78,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
       const pages = Math.max(1, Math.ceil(this._total / PAGE_SIZE));
       if (this._page > pages) this._page = pages;
     } catch {
+      if (abort.signal.aborted) return;
       // The chart shows connection errors; keep the last list.
     }
 
