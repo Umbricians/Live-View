@@ -27,7 +27,7 @@ public class SessionKeySourceTests
         var options = new StaticOptionsMonitor<LiveViewOptions>(_options);
         _middleware = new LiveActivityMiddleware(
             _tracker,
-            new BackofficePresence(options, clock),
+            new BackofficePresence(new EmptyBackofficeUserDirectory(), options, clock),
             new MemberPresence(new EmptyMemberDirectory(), options, clock),
             options);
     }
@@ -163,6 +163,12 @@ public class SessionKeySourceTests
 
         public Task<IReadOnlyList<MemberDetails>> GetAsync(IReadOnlyCollection<Guid> keys) =>
             Task.FromResult<IReadOnlyList<MemberDetails>>([]);
+    }
+
+    private sealed class EmptyBackofficeUserDirectory : IBackofficeUserDirectory
+    {
+        public Task<IReadOnlyList<BackofficeUserDetails>> GetAsync(IReadOnlyCollection<Guid> keys) =>
+            Task.FromResult<IReadOnlyList<BackofficeUserDetails>>([]);
     }
 
     private sealed class StaticOptionsMonitor<T>(T value) : IOptionsMonitor<T>
