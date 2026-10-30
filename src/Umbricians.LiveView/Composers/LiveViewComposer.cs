@@ -27,10 +27,14 @@ public class LiveViewComposer : IComposer
         builder.Services.AddSingleton<LiveActivityMiddleware>();
         builder.Services.AddSingleton<LiveMetricsService>();
         builder.Services.AddSingleton<BackofficePresence>();
-        builder.Services.AddSingleton<MemberPresence>();
+        builder.Services.AddSingleton<IMemberDirectory, UmbracoMemberDirectory>();
+        builder.Services.AddSingleton(sp => new MemberPresence(
+            sp.GetRequiredService<IMemberDirectory>(),
+            sp.GetRequiredService<IOptionsMonitor<LiveViewOptions>>(),
+            sp.GetRequiredService<TimeProvider>()));
         builder.AddNotificationHandler<MemberLogoutSuccessNotification, MemberLogoutHandler>();
+        builder.AddNotificationHandler<MemberDeletedNotification, MemberDeletedHandler>();
         builder.Services.AddSingleton<BackofficeMessenger>();
-        builder.Services.AddSingleton<MemberResolver>();
         builder.Services.AddSingleton<MemberMessagingService>();
         builder.Services.TryAddSingleton<IMemberMessageInbox, MemberMessageInbox>();
 

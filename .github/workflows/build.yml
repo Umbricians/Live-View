@@ -81,6 +81,9 @@ jobs:
       - name: Build solution
         run: dotnet build Umbricians.LiveView.slnx -c Release -p:Version=${{ steps.version.outputs.version }}
 
+      - name: Test
+        run: dotnet test Umbricians.LiveView.slnx -c Release --no-build
+
       - name: Pack
         run: dotnet pack "$PROJECT" -c Release --no-build -p:Version=${{ steps.version.outputs.version }} -o artifacts
 

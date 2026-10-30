@@ -36,7 +36,6 @@ public class LiveViewApiController : ControllerBase
     private readonly MemberPresence _memberPresence;
     private readonly BackofficeMessenger _messenger;
     private readonly IUserService _userService;
-    private readonly MemberResolver _memberResolver;
     private readonly IUserConnectionManager _connections;
     private readonly IBackOfficeSecurityAccessor _security;
 
@@ -46,7 +45,6 @@ public class LiveViewApiController : ControllerBase
         MemberPresence memberPresence,
         BackofficeMessenger messenger,
         IUserService userService,
-        MemberResolver memberResolver,
         IUserConnectionManager connections,
         IBackOfficeSecurityAccessor security)
     {
@@ -55,7 +53,6 @@ public class LiveViewApiController : ControllerBase
         _memberPresence = memberPresence;
         _messenger = messenger;
         _userService = userService;
-        _memberResolver = memberResolver;
         _connections = connections;
         _security = security;
     }
@@ -108,26 +105,22 @@ public class LiveViewApiController : ControllerBase
         return new PagedViewModel<OnlineBackofficeUserResponseModel> { Total = online.Count, Items = items };
     }
 
-    /// <summary>One page of the members who are logged in on the website, most recently active first.</summary>
+    /// <summary>One page of the members who are logged in on the website, newest arrivals first.</summary>
     [HttpGet("members")]
     [ProducesResponseType<PagedViewModel<OnlineMemberResponseModel>>(StatusCodes.Status200OK)]
     public async Task<PagedViewModel<OnlineMemberResponseModel>> Members(int skip = 0, int take = 25)
     {
-        (int total, IReadOnlyList<OnlineMember> page) = _memberPresence.GetOnline(
+        (int total, IReadOnlyList<OnlineMember> page) = await _memberPresence.PageAsync(
             Math.Max(skip, 0), Math.Clamp(take, 1, MaxPageSize));
 
-        IReadOnlyDictionary<string, IMember> members = await _memberResolver.ResolveAsync(page.Select(m => m.MemberId));
-
         List<OnlineMemberResponseModel> items = page
-            .Select(m => (Online: m, Member: members.GetValueOrDefault(m.MemberId)))
-            .Where(x => x.Member is not null)
-            .Select(x => new OnlineMemberResponseModel
+            .Select(m => new OnlineMemberResponseModel
             {
-                Key = x.Member!.Key,
-                Name = x.Member.Name ?? x.Member.Username,
-                Email = x.Member.Email,
-                MemberType = x.Member.ContentType.Name ?? x.Member.ContentTypeAlias,
-                LastSeen = x.Online.LastSeen,
+                Key = m.Key,
+                Name = m.Name,
+                Email = m.Email,
+                MemberType = m.MemberType,
+                LastSeen = m.LastSeen,
             })
             .ToList();
 

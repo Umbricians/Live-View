@@ -113,7 +113,8 @@ endpoint, keyed on a client id header.
 Each channel under `Channels` can set `Enabled`, `Name`, `Color`, `SortOrder`, `PathPrefixes`,
 `ExcludePathPrefixes`, `SessionKeys` (`Header:<name>`, `Cookie:<name>`, `Authorization`, `User` or `Client`),
 `ActivityWindowSeconds`, `IgnoreStaticFiles` and `Exclusive`. The built-in channels (`web`, `members`, `backoffice`,
-`mcp`, `api`) keep their defaults for anything you leave out. See
+`mcp`, `api`) keep their defaults for anything you leave out. `SessionKeys` and `Exclusive` don't apply to
+`members`, which always counts the signed-in member and also counts them as a web visitor. See
 [How sessions are counted](../README.md#how-sessions-are-counted) for the details.
 
 ## 5. Add your own lines

@@ -5,4 +5,7 @@
   <Folder Name="/src/">
     <Project Path="src/Umbricians.LiveView/Umbricians.LiveView.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Umbricians.LiveView.Tests/Umbricians.LiveView.Tests.csproj" />
+  </Folder>
 </Solution>

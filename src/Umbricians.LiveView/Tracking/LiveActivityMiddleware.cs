@@ -50,7 +50,9 @@ internal sealed partial class LiveActivityMiddleware : IMiddleware
         {
             foreach ((string channel, string[] sources) in matches)
             {
-                if (!IsKeyedOnUser(sources) && ResolveSessionKey(context.Request, sources) is { } sessionKey)
+                if (channel != Constants.Channels.Members
+                    && !IsKeyedOnUser(sources)
+                    && ResolveSessionKey(context.Request, sources) is { } sessionKey)
                 {
                     activities.Add(_tracker.BeginActivity(channel, sessionKey));
                 }
@@ -63,31 +65,21 @@ internal sealed partial class LiveActivityMiddleware : IMiddleware
             activities.ForEach(a => a.Dispose());
         }
 
-        bool memberSignedOut = context.Items.ContainsKey(MemberLogoutHandler.SignedOutItemKey);
         foreach ((string channel, string[] sources) in matches)
         {
-            if (memberSignedOut && channel == Constants.Channels.Members)
+            // Member presence keeps the members line itself, always keyed on the signed-in member.
+            if (channel == Constants.Channels.Members)
             {
-                continue;
+                _memberPresence.Seen(context.User);
             }
-
-            if (IsKeyedOnUser(sources) && ResolveSessionKey(context.Request, sources) is { } userKey)
+            else if (IsKeyedOnUser(sources) && ResolveSessionKey(context.Request, sources) is { } userKey)
             {
                 _tracker.Touch(channel, userKey);
-                RecordPresence(channel, context.User);
+                if (channel == Constants.Channels.Backoffice && context.User.Identity?.GetUserKey() is { } backofficeUser)
+                {
+                    _backofficePresence.Record(backofficeUser);
+                }
             }
-        }
-    }
-
-    private void RecordPresence(string channel, ClaimsPrincipal user)
-    {
-        if (channel == Constants.Channels.Backoffice && user.Identity?.GetUserKey() is { } backofficeUser)
-        {
-            _backofficePresence.Record(backofficeUser);
-        }
-        else if (channel == Constants.Channels.Members && ResolveUserId(user) is { } member)
-        {
-            _memberPresence.Record(member);
         }
     }
 

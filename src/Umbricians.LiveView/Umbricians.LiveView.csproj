@@ -27,6 +27,10 @@
 
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Umbricians.LiveView.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Umbraco.Cms.Api.Common" />
     <PackageReference Include="Umbraco.Cms.Api.Management" />
     <PackageReference Include="Umbraco.Cms.Web.Common" />

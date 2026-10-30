@@ -26,20 +26,17 @@ public sealed class MemberMessagingService
 
     private readonly IReadOnlyList<IMemberMessageSender> _senders;
     private readonly MemberPresence _presence;
-    private readonly MemberResolver _resolver;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<MemberMessagingService> _logger;
 
     public MemberMessagingService(
         IEnumerable<IMemberMessageSender> senders,
         MemberPresence presence,
-        MemberResolver resolver,
         TimeProvider timeProvider,
         ILogger<MemberMessagingService> logger)
     {
         _senders = senders.ToList();
         _presence = presence;
-        _resolver = resolver;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -56,8 +53,7 @@ public sealed class MemberMessagingService
         IReadOnlyList<Guid> memberKeys = request.Audience switch
         {
             MemberMessageAudience.Selected => request.SelectedMemberKeys.Distinct().ToList(),
-            MemberMessageAudience.AllOnline => (await _resolver.ResolveAsync(_presence.GetAllOnlineIds()))
-                .Values.Select(m => m.Key).Distinct().ToList(),
+            MemberMessageAudience.AllOnline => _presence.AllOnline(),
             _ => [],
         };
 

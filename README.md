@@ -137,8 +137,9 @@ Everything is optional. Override only what you need in `appsettings.json`:
 
 Built-in channels keep their defaults for any property you leave out. Session key sources are `Header:<name>`,
 `Cookie:<name>`, `Authorization`, `User` (the authenticated backoffice user or member) and `Client`. Set
-`"Exclusive": false` on a channel whose requests should also count in later channels, as the built-in `members`
-channel does.
+`"Exclusive": false` on a channel whose requests should also count in later channels. The built-in `members`
+channel always counts the signed-in member and always lets members count as web visitors too, so `SessionKeys` and
+`Exclusive` don't apply to it; its other settings do.
 
 ## Extending
 
@@ -284,6 +285,7 @@ All under `/umbraco/umbriciansliveview/api/v1/`.
 ```
 src/Umbricians.LiveView          the package (Razor class library + Client/ TypeScript)
 demo/Umbricians.LiveView.Demo    Umbraco 17.8 site on SQLite that references the package
+tests/Umbricians.LiveView.Tests  xUnit tests, run with `dotnet test`
 ```
 
 ```bash
