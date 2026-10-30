@@ -15,7 +15,8 @@ export interface UserSelection {
 /**
  * Lists backoffice users who currently have the backoffice open, one page at a time, with a selection the
  * dashboard uses to send them a message. The selection survives paging, and "Select all online" covers users on
- * pages that were never loaded. Fires a change event whenever the selection changes.
+ * pages that were never loaded. The current user is listed but never selectable, since nobody messages themselves.
+ * Fires a change event whenever the selection changes.
  */
 @customElement("umbricians-live-view-users")
 export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) {
@@ -28,16 +29,18 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
 
   @state() private _users: Array<OnlineBackofficeUser> = [];
   @state() private _total = 0;
+  @state() private _recipients = 0;
   @state() private _page = 1;
   @state() private _selected = new Map<string, string>();
   @state() private _allOnline = false;
   @state() private _now = Date.now();
 
   #timer?: number;
+  #abort?: AbortController;
 
   get selection(): UserSelection {
     return this._allOnline
-      ? { allOnline: true, count: this._total, users: [] }
+      ? { allOnline: true, count: this._recipients, users: [] }
       : {
           allOnline: false,
           count: this._selected.size,
@@ -48,38 +51,50 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
   override disconnectedCallback() {
     super.disconnectedCallback();
     window.clearTimeout(this.#timer);
+    this.#abort?.abort();
   }
 
   override updated(changed: Map<string, unknown>) {
-    if ((changed.has("paused") && !this.paused) || changed.has("interval") || changed.has("_page")) this.#refresh();
-    if (changed.has("_selected") || changed.has("_allOnline") || (this._allOnline && changed.has("_total"))) {
+    if (changed.has("paused") || changed.has("interval") || changed.has("_page")) this.#refresh();
+    if (changed.has("_selected") || changed.has("_allOnline") || (this._allOnline && changed.has("_recipients"))) {
       this.dispatchEvent(new UmbChangeEvent());
     }
   }
 
+  /** Each call supersedes the last: an older response is dropped and only one timer is ever pending. */
   async #refresh() {
     window.clearTimeout(this.#timer);
+    this.#abort?.abort();
     if (this.paused || !this.isConnected) return;
 
+    const abort = (this.#abort = new AbortController());
     try {
-      const result = await fetchOnlineUsers((this._page - 1) * PAGE_SIZE, PAGE_SIZE);
+      const result = await fetchOnlineUsers((this._page - 1) * PAGE_SIZE, PAGE_SIZE, abort.signal);
+      if (abort.signal.aborted) return;
       this._users = result.items;
       this._total = result.total;
+      this._recipients = result.recipients;
       this._now = Date.now();
-      if (this._total === 0) this._allOnline = false;
+      if (this._recipients === 0) this._allOnline = false;
 
       // Step back when the last page has emptied, e.g. after users went offline.
       const pages = Math.max(1, Math.ceil(this._total / PAGE_SIZE));
       if (this._page > pages) this._page = pages;
     } catch {
+      if (abort.signal.aborted) return;
       // The chart shows connection errors; keep the last list.
     }
 
     this.#timer = window.setTimeout(() => this.#refresh(), this.interval * 1000);
   }
 
-  #isSelected(key: string) {
-    return this._allOnline || this._selected.has(key);
+  /** Users on this page who can be messaged: everyone but the current user. */
+  get #selectableUsers() {
+    return this._users.filter((u) => !u.isCurrentUser);
+  }
+
+  #isSelected(user: OnlineBackofficeUser) {
+    return !user.isCurrentUser && (this._allOnline || this._selected.has(user.key));
   }
 
   #toggle(user: OnlineBackofficeUser, checked: boolean) {
@@ -93,7 +108,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
 
   #togglePage(checked: boolean) {
     const selected = new Map(this._selected);
-    for (const user of this._users) {
+    for (const user of this.#selectableUsers) {
       if (checked) selected.set(user.key, user.name);
       else selected.delete(user.key);
     }
@@ -102,34 +117,40 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
   }
 
   #pageSelection() {
-    return new Map(this._users.map((u) => [u.key, u.name]));
+    return new Map(this.#selectableUsers.map((u) => [u.key, u.name]));
   }
 
   #selectAllOnline() {
     this._allOnline = true;
   }
 
-  #clearSelection() {
+  /** Clears the selection, e.g. after a message has been sent. */
+  clearSelection() {
     this._allOnline = false;
     this._selected = new Map();
   }
 
+  #clearSelection() {
+    this.clearSelection();
+  }
+
   #renderSelectionBar() {
-    const pageSelected = this._users.length > 0 && this._users.every((u) => this.#isSelected(u.key));
+    const selectable = this.#selectableUsers;
+    const pageSelected = selectable.length > 0 && selectable.every((u) => this.#isSelected(u));
 
     if (this._allOnline) {
       return html`<div class="selection-bar">
-        All ${plural(this._total, "online user is", "online users are")} selected.
+        All ${plural(this._recipients, "online user is", "online users are")} selected.
         <uui-button look="placeholder" compact label="Clear selection" @click=${this.#clearSelection}></uui-button>
       </div>`;
     }
-    if (pageSelected && this._total > this._users.length) {
+    if (pageSelected && this._recipients > selectable.length) {
       return html`<div class="selection-bar">
-        All ${plural(this._users.length, "user", "users")} on this page selected.
+        All ${plural(selectable.length, "user", "users")} on this page selected.
         <uui-button
           look="placeholder"
           compact
-          label=${`Select all ${this._total} online`}
+          label=${`Select all ${this._recipients} online`}
           @click=${this.#selectAllOnline}></uui-button>
       </div>`;
     }
@@ -137,19 +158,20 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
   }
 
   override render() {
-    const pageSelected = this._users.length > 0 && this._users.every((u) => this.#isSelected(u.key));
-    const someOnPage = !pageSelected && this._users.some((u) => this.#isSelected(u.key));
+    const selectable = this.#selectableUsers;
+    const pageSelected = selectable.length > 0 && selectable.every((u) => this.#isSelected(u));
+    const someOnPage = !pageSelected && selectable.some((u) => this.#isSelected(u));
     const pages = Math.ceil(this._total / PAGE_SIZE);
 
     return html`
       <uui-box headline="Backoffice users online">
         <div slot="header-actions" class="header-actions">
           <span class="muted">${this._total} online</span>
-          ${this.selectable && this._total > 0
+          ${this.selectable && this._recipients > 0
             ? html`<uui-button
                 look="secondary"
                 compact
-                label=${this._allOnline ? "Clear selection" : `Select all ${this._total} online`}
+                label=${this._allOnline ? "Clear selection" : `Select all ${this._recipients} online`}
                 @click=${this._allOnline ? this.#clearSelection : this.#selectAllOnline}></uui-button>`
             : nothing}
         </div>
@@ -165,6 +187,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                     <!-- An empty slotted span replaces the visible label; the label attribute still names it. -->
                     <uui-checkbox
                       label="Select everyone on this page"
+                      ?disabled=${selectable.length === 0}
                       .checked=${pageSelected}
                       .indeterminate=${someOnPage}
                       @change=${(e: UUIBooleanInputEvent) => this.#togglePage(e.target.checked)}
@@ -186,12 +209,14 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                     <uui-table-row>
                       ${this.selectable
                         ? html`<uui-table-cell class="select">
-                            <uui-checkbox
-                              label="Select ${u.name}"
-                              .checked=${this.#isSelected(u.key)}
-                              @change=${(e: UUIBooleanInputEvent) => this.#toggle(u, e.target.checked)}
-                              ><span></span
-                            ></uui-checkbox>
+                            ${u.isCurrentUser
+                              ? nothing
+                              : html`<uui-checkbox
+                                  label="Select ${u.name}"
+                                  .checked=${this.#isSelected(u)}
+                                  @change=${(e: UUIBooleanInputEvent) => this.#toggle(u, e.target.checked)}
+                                  ><span></span
+                                ></uui-checkbox>`}
                           </uui-table-cell>`
                         : nothing}
                       <uui-table-cell>
@@ -199,7 +224,12 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                           <uui-avatar name=${u.name}></uui-avatar>
                           <div class="user-text">
                             <div class="user-name">
-                              ${u.name}${u.isCurrentUser ? html` <span class="muted">(you)</span>` : nothing}
+                              ${u.name}
+                              ${u.isCurrentUser
+                                ? html`<uui-tag look="secondary" title="This is you, so you are left out of messages"
+                                    >You</uui-tag
+                                  >`
+                                : nothing}
                             </div>
                             ${u.email ? html`<div class="muted user-email">${u.email}</div>` : nothing}
                           </div>
@@ -213,7 +243,9 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                       </uui-table-cell>
                       ${this.selectable
                         ? html`<uui-table-cell class="delivery">
-                        ${u.isConnected
+                        ${u.isCurrentUser
+                          ? nothing
+                          : u.isConnected
                           ? html`<uui-tag color="positive" look="secondary" title="Receives messages instantly"
                               >Instant</uui-tag
                             >`
@@ -307,6 +339,12 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
 
     .user-text {
       min-width: 0;
+    }
+
+    .user-name {
+      display: flex;
+      align-items: center;
+      gap: var(--uui-size-space-2);
     }
 
     .user-name,

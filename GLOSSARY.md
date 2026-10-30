@@ -2,6 +2,13 @@
 
 The words this codebase uses for its domain. Code, docs and reviews should use them as defined here.
 
+## Backoffice presence
+
+The module that knows which backoffice users are online. It is told when a user is **seen** (made a backoffice
+request) and when each of their backoffice tabs sends a **heartbeat** or closes, and it answers who is online: one
+page at a time, or all at once. It is the only source for both the backoffice users line on the chart and the
+backoffice users table, so the two always agree. Users are identified by their `Guid` key only.
+
 ## Channel
 
 One line on the Live View chart: a named, coloured count of active sessions (`web`, `mcp`, `api`, `backoffice`,
@@ -21,6 +28,12 @@ their key once, inside Member presence, and never leaves it.
 The module that knows which members are online. It is told when a member is **seen** (made a front-end request)
 and when they **sign out**, and it answers who is online: one page at a time, or all at once. It is the only source
 for both the members line on the chart and the members table, so the two always agree.
+
+## Online backoffice user
+
+A backoffice user with an open backoffice tab, or seen within the backoffice channel's activity window, whose account
+still exists and is not disabled. A tab is open while it keeps sending heartbeats. Online backoffice users are listed
+in **arrival** order, like online members.
 
 ## Online member
 

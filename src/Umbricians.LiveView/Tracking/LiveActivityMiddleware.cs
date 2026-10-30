@@ -51,6 +51,7 @@ internal sealed partial class LiveActivityMiddleware : IMiddleware
             foreach ((string channel, string[] sources) in matches)
             {
                 if (channel != Constants.Channels.Members
+                    && channel != Constants.Channels.Backoffice
                     && !IsKeyedOnUser(sources)
                     && ResolveSessionKey(context.Request, sources) is { } sessionKey)
                 {
@@ -67,18 +68,18 @@ internal sealed partial class LiveActivityMiddleware : IMiddleware
 
         foreach ((string channel, string[] sources) in matches)
         {
-            // Member presence keeps the members line itself, always keyed on the signed-in member.
+            // Member and backoffice presence keep their lines themselves, always keyed on the signed-in member or user.
             if (channel == Constants.Channels.Members)
             {
                 _memberPresence.Seen(context.User);
             }
+            else if (channel == Constants.Channels.Backoffice)
+            {
+                _backofficePresence.Seen(context.User);
+            }
             else if (IsKeyedOnUser(sources) && ResolveSessionKey(context.Request, sources) is { } userKey)
             {
                 _tracker.Touch(channel, userKey);
-                if (channel == Constants.Channels.Backoffice && context.User.Identity?.GetUserKey() is { } backofficeUser)
-                {
-                    _backofficePresence.Record(backofficeUser);
-                }
             }
         }
     }
@@ -160,27 +161,52 @@ internal sealed partial class LiveActivityMiddleware : IMiddleware
     {
         foreach (string source in sources)
         {
-            string? value = source switch
-            {
-                Constants.SessionKeySources.User => ResolveUserId(request.HttpContext.User),
-                Constants.SessionKeySources.Client =>
-                    $"{request.HttpContext.Connection.RemoteIpAddress}|{request.Headers.UserAgent}",
-                Constants.SessionKeySources.Authorization => request.Headers.Authorization.ToString(),
-                _ when source.StartsWith(Constants.SessionKeySources.HeaderPrefix, StringComparison.OrdinalIgnoreCase) =>
-                    request.Headers[source[Constants.SessionKeySources.HeaderPrefix.Length..]].ToString(),
-                _ when source.StartsWith(Constants.SessionKeySources.CookiePrefix, StringComparison.OrdinalIgnoreCase) =>
-                    request.Cookies[source[Constants.SessionKeySources.CookiePrefix.Length..]],
-                _ => null,
-            };
-
-            if (!string.IsNullOrEmpty(value))
+            (string Source, string? Value) resolved = ResolveSource(request, source);
+            if (!string.IsNullOrEmpty(resolved.Value))
             {
                 // Prefix with the source so identical values from different sources never collide.
-                return source + ":" + value;
+                return resolved.Source + ":" + resolved.Value;
             }
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Reads one session-key source, matched without regard to case. Returns the source in its canonical casing,
+    /// so the same session keys the same way however the source was written in configuration.
+    /// </summary>
+    private static (string Source, string? Value) ResolveSource(HttpRequest request, string source)
+    {
+        if (source.Equals(Constants.SessionKeySources.User, StringComparison.OrdinalIgnoreCase))
+        {
+            return (Constants.SessionKeySources.User, ResolveUserId(request.HttpContext.User));
+        }
+
+        if (source.Equals(Constants.SessionKeySources.Client, StringComparison.OrdinalIgnoreCase))
+        {
+            return (Constants.SessionKeySources.Client,
+                $"{request.HttpContext.Connection.RemoteIpAddress}|{request.Headers.UserAgent}");
+        }
+
+        if (source.Equals(Constants.SessionKeySources.Authorization, StringComparison.OrdinalIgnoreCase))
+        {
+            return (Constants.SessionKeySources.Authorization, request.Headers.Authorization.ToString());
+        }
+
+        if (source.StartsWith(Constants.SessionKeySources.HeaderPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            string name = source[Constants.SessionKeySources.HeaderPrefix.Length..];
+            return (Constants.SessionKeySources.HeaderPrefix + name, request.Headers[name].ToString());
+        }
+
+        if (source.StartsWith(Constants.SessionKeySources.CookiePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            string name = source[Constants.SessionKeySources.CookiePrefix.Length..];
+            return (Constants.SessionKeySources.CookiePrefix + name, request.Cookies[name]);
+        }
+
+        return (source, null);
     }
 
     private static string? ResolveUserId(ClaimsPrincipal user) =>

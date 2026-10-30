@@ -37,6 +37,11 @@ export interface PagedResult<T> {
   items: Array<T>;
 }
 
+export interface OnlineBackofficeUsers extends PagedResult<OnlineBackofficeUser> {
+  /** How many users a message to everyone online reaches: everyone online except the current user. */
+  recipients: number;
+}
+
 export type MessageColor = "default" | "positive" | "warning" | "danger";
 
 export interface BackofficeMessage {
@@ -76,7 +81,7 @@ async function request<T>(
 export const fetchSnapshot = (signal?: AbortSignal) => request<LiveViewSnapshot>("GET", "snapshot", { signal });
 
 export const fetchOnlineUsers = (skip: number, take: number, signal?: AbortSignal) =>
-  request<PagedResult<OnlineBackofficeUser>>("GET", `backoffice-users?skip=${skip}&take=${take}`, { signal });
+  request<OnlineBackofficeUsers>("GET", `backoffice-users?skip=${skip}&take=${take}`, { signal });
 
 export const fetchOnlineMembers = (skip: number, take: number, signal?: AbortSignal) =>
   request<PagedResult<OnlineMember>>("GET", `members?skip=${skip}&take=${take}`, { signal });
