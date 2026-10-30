@@ -248,8 +248,9 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
   }
 
   async #openSendMessage() {
-    const selection = this._users?.selection;
-    if (!selection || selection.count === 0) return;
+    const users = this._users;
+    const selection = users?.selection;
+    if (!users || !selection || selection.count === 0) return;
 
     try {
       const { sentTo } = await umbOpenModal(this, UMBRICIANS_SEND_MESSAGE_MODAL, {
@@ -258,6 +259,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
       this.#notifications?.peek("positive", {
         data: { headline: "Message sent", message: `Sent to ${sentTo} ${sentTo === 1 ? "user" : "users"}.` },
       });
+      users.clearSelection();
     } catch {
       // Closed without sending.
     }
