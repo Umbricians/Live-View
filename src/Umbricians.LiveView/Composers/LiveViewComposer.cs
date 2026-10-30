@@ -20,7 +20,7 @@ public class LiveViewComposer : IComposer
     public void Compose(IUmbracoBuilder builder)
     {
         builder.Services.AddOptions<LiveViewOptions>().Bind(builder.Config.GetSection(Constants.ConfigurationSection));
-        builder.Services.AddSingleton<IPostConfigureOptions<LiveViewOptions>, LiveViewOptionsDefaults>();
+        LiveViewOptionsDefaults.AddTo(builder.Services);
 
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<ILiveActivityTracker, LiveActivityTracker>();

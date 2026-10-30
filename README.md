@@ -179,6 +179,10 @@ public class ChatHub(ILiveActivityTracker tracker) : Hub
 
 `BeginActivity(channel, key)` returns an `IDisposable` that keeps the session active until it is disposed.
 
+`AddLiveViewChannel` with a built-in alias, such as `members`, restyles that channel. For each property, a value in
+`appsettings.json` wins, then a value set with `AddLiveViewChannel`, then the built-in default, whatever order
+composers run in.
+
 ### 3. A custom metric provider
 
 For any number the site can work out on demand, such as a count reported by an out-of-process MCP server,

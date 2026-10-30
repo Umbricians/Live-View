@@ -30,7 +30,8 @@ public static class LiveViewBuilderExtensions
     /// <summary>
     /// Declares a tracked channel. Give it <see cref="LiveViewChannelOptions.PathPrefixes"/> to have requests
     /// counted automatically, or leave them empty and feed it from code with
-    /// <see cref="Tracking.ILiveActivityTracker"/>. Values set in appsettings still take precedence.
+    /// <see cref="Tracking.ILiveActivityTracker"/>. Values set in appsettings still take precedence. Use the alias
+    /// of a built-in channel to restyle it: values set here take precedence over its built-in defaults.
     /// </summary>
     public static IUmbracoBuilder AddLiveViewChannel(
         this IUmbracoBuilder builder,
@@ -38,26 +39,11 @@ public static class LiveViewBuilderExtensions
         string name,
         Action<LiveViewChannelOptions>? configure = null)
     {
-        builder.Services.PostConfigure<LiveViewOptions>(options =>
-        {
-            if (!options.Channels.TryGetValue(alias, out LiveViewChannelOptions? channel))
-            {
-                options.Channels[alias] = channel = new LiveViewChannelOptions();
-            }
+        LiveViewChannelOptions defaults = new() { Name = name };
+        configure?.Invoke(defaults);
 
-            var defaults = new LiveViewChannelOptions { Name = name };
-            configure?.Invoke(defaults);
-
-            channel.Name ??= defaults.Name;
-            channel.Color ??= defaults.Color;
-            channel.SortOrder ??= defaults.SortOrder;
-            channel.PathPrefixes ??= defaults.PathPrefixes;
-            channel.ExcludePathPrefixes ??= defaults.ExcludePathPrefixes;
-            channel.SessionKeys ??= defaults.SessionKeys;
-            channel.ActivityWindowSeconds ??= defaults.ActivityWindowSeconds;
-            channel.IgnoreStaticFiles ??= defaults.IgnoreStaticFiles;
-            channel.Exclusive ??= defaults.Exclusive;
-        });
+        builder.Services.AddSingleton(new LiveViewChannelRegistration(alias, defaults));
+        LiveViewOptionsDefaults.AddTo(builder.Services);
 
         return builder;
     }
