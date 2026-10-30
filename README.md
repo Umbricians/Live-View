@@ -64,8 +64,21 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
 dotnet add package Umbricians.LiveView
 ```
 
-Restart the site and open **Settings → Live View**. The dashboard is available to backoffice users with access to
-the Settings section; no configuration is needed to get started.
+Restart the site and open **Settings → Live View**. No configuration is needed to get started.
+
+## Permissions
+
+Live View adds three permissions to Umbraco's user groups, under **Users → User groups → (a group) → Live View**:
+
+| Permission | What it allows |
+|---|---|
+| **View Live View** | See the Live View dashboard in Settings: live activity and who is online. |
+| **Message backoffice users** | Select backoffice users and send them a notification. |
+| **Message members** | Select website members and send them a message, once a developer has [set up a delivery method](docs/member-messaging.md). |
+
+The **Administrators** group gets all three automatically when the package is installed or upgraded; other groups
+get none until you switch them on. The dashboard also needs access to the Settings section. Every backoffice user can
+receive messages. See [Permissions](docs/getting-started.md#permissions) for details.
 
 ## How sessions are counted
 
@@ -246,7 +259,9 @@ All under `/umbraco/umbriciansliveview/api/v1/`.
 
 | Endpoint | Who can call it |
 |---|---|
-| `GET snapshot`, `GET backoffice-users`, `GET members`, `POST messages`, `GET member-messaging`, `POST member-messages` | backoffice users with access to the Settings section |
+| `GET snapshot`, `GET backoffice-users`, `GET members`, `GET member-messaging` | Settings section and **View Live View** |
+| `POST messages` | as above, plus **Message backoffice users** |
+| `POST member-messages` | as above, plus **Message members** |
 | `GET heartbeat`, `GET messages/{key}` | any backoffice user (recipients only for a message) |
 
 `GET snapshot` returns:

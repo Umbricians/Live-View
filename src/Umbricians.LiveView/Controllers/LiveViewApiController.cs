@@ -14,6 +14,7 @@ using Umbraco.Cms.Web.Common.Routing;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Metrics;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Security;
 
 namespace Umbricians.LiveView.Controllers;
 
@@ -22,6 +23,7 @@ namespace Umbricians.LiveView.Controllers;
 [ApiExplorerSettings(GroupName = "Live View")]
 [BackOfficeRoute("umbriciansliveview/api/v{version:apiVersion}")]
 [Authorize(Policy = AuthorizationPolicies.SectionAccessSettings)]
+[LiveViewPermission(Constants.Permissions.View)]
 [JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
 public class LiveViewApiController : ControllerBase
 {
@@ -133,6 +135,7 @@ public class LiveViewApiController : ControllerBase
     }
 
     [HttpPost("messages")]
+    [LiveViewPermission(Constants.Permissions.MessageUsers)]
     [ProducesResponseType<SendBackofficeMessageResponseModel>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendMessage(SendBackofficeMessageRequestModel request)

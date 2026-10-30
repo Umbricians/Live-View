@@ -23,6 +23,9 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
   @property({ type: Number }) interval = 5;
   @property({ type: Boolean }) paused = false;
 
+  /** Shows the selection checkboxes and delivery column; only for users allowed to message backoffice users. */
+  @property({ type: Boolean }) selectable = false;
+
   @state() private _users: Array<OnlineBackofficeUser> = [];
   @state() private _total = 0;
   @state() private _page = 1;
@@ -142,7 +145,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
       <uui-box headline="Backoffice users online">
         <div slot="header-actions" class="header-actions">
           <span class="muted">${this._total} online</span>
-          ${this._total > 0
+          ${this.selectable && this._total > 0
             ? html`<uui-button
                 look="secondary"
                 compact
@@ -154,10 +157,11 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
         ${this._total === 0
           ? html`<p class="muted">Nobody has the backoffice open right now.</p>`
           : html`
-              ${this.#renderSelectionBar()}
+              ${this.selectable ? this.#renderSelectionBar() : nothing}
               <uui-table aria-label="Backoffice users online">
                 <uui-table-head>
-                  <uui-table-head-cell class="select">
+                  ${this.selectable
+                    ? html`<uui-table-head-cell class="select">
                     <!-- An empty slotted span replaces the visible label; the label attribute still names it. -->
                     <uui-checkbox
                       label="Select everyone on this page"
@@ -166,25 +170,30 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                       @change=${(e: UUIBooleanInputEvent) => this.#togglePage(e.target.checked)}
                       ><span></span
                     ></uui-checkbox>
-                  </uui-table-head-cell>
+                  </uui-table-head-cell>`
+                    : nothing}
                   <uui-table-head-cell>Name</uui-table-head-cell>
                   <uui-table-head-cell class="tabs">Open tabs</uui-table-head-cell>
                   <uui-table-head-cell class="last-seen">Last active</uui-table-head-cell>
-                  <uui-table-head-cell class="delivery">Delivery</uui-table-head-cell>
+                  ${this.selectable
+                    ? html`<uui-table-head-cell class="delivery">Delivery</uui-table-head-cell>`
+                    : nothing}
                 </uui-table-head>
                 ${repeat(
                   this._users,
                   (u) => u.key,
                   (u) => html`
                     <uui-table-row>
-                      <uui-table-cell class="select">
-                        <uui-checkbox
-                          label="Select ${u.name}"
-                          .checked=${this.#isSelected(u.key)}
-                          @change=${(e: UUIBooleanInputEvent) => this.#toggle(u, e.target.checked)}
-                          ><span></span
-                        ></uui-checkbox>
-                      </uui-table-cell>
+                      ${this.selectable
+                        ? html`<uui-table-cell class="select">
+                            <uui-checkbox
+                              label="Select ${u.name}"
+                              .checked=${this.#isSelected(u.key)}
+                              @change=${(e: UUIBooleanInputEvent) => this.#toggle(u, e.target.checked)}
+                              ><span></span
+                            ></uui-checkbox>
+                          </uui-table-cell>`
+                        : nothing}
                       <uui-table-cell>
                         <div class="user">
                           <uui-avatar name=${u.name}></uui-avatar>
@@ -202,7 +211,8 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                       <uui-table-cell class="last-seen" title=${new Date(u.lastSeen).toLocaleString()}>
                         ${formatAgo(this._now - Date.parse(u.lastSeen))}
                       </uui-table-cell>
-                      <uui-table-cell class="delivery">
+                      ${this.selectable
+                        ? html`<uui-table-cell class="delivery">
                         ${u.isConnected
                           ? html`<uui-tag color="positive" look="secondary" title="Receives messages instantly"
                               >Instant</uui-tag
@@ -210,7 +220,8 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                           : html`<uui-tag look="secondary" title="Receives messages with its next heartbeat"
                               >Within 1 min</uui-tag
                             >`}
-                      </uui-table-cell>
+                      </uui-table-cell>`
+                        : nothing}
                     </uui-table-row>
                   `,
                 )}

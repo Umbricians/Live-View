@@ -5,6 +5,7 @@ This guide takes you from installing Umbricians Live View to a dashboard showing
 - [Requirements](#requirements)
 - [1. Install the package](#1-install-the-package)
 - [2. Open the dashboard](#2-open-the-dashboard)
+- [Permissions](#permissions)
 - [3. What you are looking at](#3-what-you-are-looking-at)
 - [4. Configure what is counted](#4-configure-what-is-counted)
 - [5. Add your own lines](#5-add-your-own-lines)
@@ -31,8 +32,30 @@ itself when the site starts.
 Restart the site, sign in to the backoffice and go to **Settings → Live View**. If there are more dashboards than fit,
 it is under the **…** menu at the end of the dashboard tabs.
 
-The dashboard, and the API behind it, are available to backoffice users whose user groups have access to the
-**Settings** section. Editors without it will not see the tab.
+To see it, a user needs access to the **Settings** section and the **View Live View** permission (see below). The
+**Administrators** group gets every Live View permission automatically when the package is installed.
+
+## Permissions
+
+Live View adds three permissions to Umbraco's user groups. Find them under **Users → User groups → (a group) →
+Live View**, below Umbraco's own permissions:
+
+| Permission | What it allows |
+|---|---|
+| **View Live View** | See the Live View dashboard in Settings: live activity and who is online. |
+| **Message backoffice users** | Select backoffice users and send them a notification. |
+| **Message members** | Select website members and send them a message, once a developer has [set up a delivery method](member-messaging.md). |
+
+- **Administrators get all three** when the package is first installed, or when a site upgrades to a version with
+  permissions, so the dashboard keeps working. This happens once; any changes you make afterwards are kept.
+- **Other groups get none** until you switch them on.
+- **Both messaging permissions need View Live View as well**, because the buttons are on the dashboard. The dashboard
+  also needs access to the Settings section, where it lives.
+- **Receiving messages needs no permission.** Every backoffice user can receive notifications sent from Live View.
+- **The server checks them too.** Without a permission, the matching API calls are refused (403), not just hidden.
+
+For example, to let a support team watch the site during a release and warn editors, give their group the Settings
+section, **View Live View** and **Message backoffice users**.
 
 ## 3. What you are looking at
 
@@ -132,11 +155,12 @@ anything expensive. The [README](../README.md#extending) has examples of the oth
 
 ## 6. Message backoffice users and members
 
-**Backoffice users** can be messaged straight away: tick users (or click **Select all N online**), then
-**Message users…**. The message pops up in their backoffice as an Umbraco notification that stays until dismissed.
+**Backoffice users** can be messaged by anyone with the **Message backoffice users** permission: tick users (or
+click **Select all N online**), then **Message users…**. The message pops up in their backoffice as an Umbraco notification that stays until dismissed.
 
-**Members** can be messaged too, but that is off until you decide how messages should reach them: a banner, a live
-pop-up, email or something else. See [Messaging members](member-messaging.md).
+**Members** can be messaged by anyone with the **Message members** permission, but only once you decide how
+messages should reach them: a banner, a live pop-up, email or something else. See
+[Messaging members](member-messaging.md).
 
 ## Before you go live
 
@@ -151,8 +175,12 @@ pop-up, email or something else. See [Messaging members](member-messaging.md).
 
 ## Troubleshooting
 
-**The Live View tab is missing.** Check the user's groups have access to the **Settings** section, and that the site
-was restarted after installing. Look under the **…** menu if the dashboard tabs are crowded.
+**The Live View tab is missing.** Check the user's groups have access to the **Settings** section and the
+**View Live View** permission, and that the site was restarted after installing. Look under the **…** menu if the
+dashboard tabs are crowded. Permission changes apply after the user reloads the backoffice.
+
+**There are no checkboxes or Message buttons.** The user's groups need **Message backoffice users** or
+**Message members**. Members can only be messaged once a developer has set up a delivery method.
 
 **A line stays at zero.** Requests must reach the site through the paths the channel watches. For members, the
 request must be a front-end page view by a logged-in member. MCP and API paths default to `/mcp`, `/umbraco/mcp`,

@@ -9,6 +9,7 @@ using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Web.Common.Routing;
 using Umbricians.LiveView.Messaging.Members;
+using Umbricians.LiveView.Security;
 
 namespace Umbricians.LiveView.Controllers;
 
@@ -20,6 +21,7 @@ namespace Umbricians.LiveView.Controllers;
 [ApiExplorerSettings(GroupName = "Live View")]
 [BackOfficeRoute("umbriciansliveview/api/v{version:apiVersion}")]
 [Authorize(Policy = AuthorizationPolicies.SectionAccessSettings)]
+[LiveViewPermission(Constants.Permissions.View)]
 [JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
 public class LiveViewMemberMessagesController : ControllerBase
 {
@@ -72,6 +74,7 @@ public class LiveViewMemberMessagesController : ControllerBase
     };
 
     [HttpPost("member-messages")]
+    [LiveViewPermission(Constants.Permissions.MessageMembers)]
     [ProducesResponseType<MemberMessageSendResult>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Send(SendMemberMessageRequestModel request, CancellationToken cancellationToken)

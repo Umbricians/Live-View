@@ -22,6 +22,10 @@ the dashboard offers them as delivery options.
 **Member messaging is off by default.** The package ships no senders, so until you register one the members table
 has no checkboxes and there is no **Message members…** button.
 
+Backoffice users also need the **Message members** permission (and **View Live View**) on one of their user groups.
+Administrators get it automatically; grant it to other groups under **Users → User groups → (a group) → Live View**.
+See [Permissions](getting-started.md#permissions).
+
 Once at least one sender is registered:
 
 1. On **Settings → Live View**, the backoffice user ticks members in the **Members online** table (or clicks
@@ -68,8 +72,8 @@ public class MemberMessagingComposer : IComposer
 }
 ```
 
-Restart the site and open **Settings → Live View**: the members table now has checkboxes, and **Message members…**
-offers "Write to the log".
+Restart the site and open **Settings → Live View** as an administrator: the members table now has checkboxes, and
+**Message members…** offers "Write to the log".
 
 `Name` and `Description` are what backoffice users see, so word them for them. Register as many senders as you
 like; each becomes a delivery option.

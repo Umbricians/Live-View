@@ -4,6 +4,24 @@ public static class Constants
 {
     public const string ConfigurationSection = "Umbricians:LiveView";
 
+    /// <summary>
+    /// User group permissions, granted in Users → User groups → Permissions → Live View. They are stored with the
+    /// group's other permissions; the backoffice registers matching <c>entityUserPermission</c> extensions.
+    /// </summary>
+    public static class Permissions
+    {
+        /// <summary>See the Live View dashboard: live activity and who is online.</summary>
+        public const string View = "Umbricians.LiveView.View";
+
+        /// <summary>Send notifications to backoffice users who are online.</summary>
+        public const string MessageUsers = "Umbricians.LiveView.MessageUsers";
+
+        /// <summary>Send messages to website members through the site's member message senders.</summary>
+        public const string MessageMembers = "Umbricians.LiveView.MessageMembers";
+
+        public static IReadOnlyList<string> All { get; } = [View, MessageUsers, MessageMembers];
+    }
+
     public static class Channels
     {
         public const string Web = "web";

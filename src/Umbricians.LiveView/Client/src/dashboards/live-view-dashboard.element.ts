@@ -13,6 +13,11 @@ import {
   type ChartDataset,
 } from "chart.js";
 import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
+import { UMB_CURRENT_USER_CONTEXT } from "@umbraco-cms/backoffice/current-user";
+import {
+  LIVE_VIEW_PERMISSION_MESSAGE_MEMBERS,
+  LIVE_VIEW_PERMISSION_MESSAGE_USERS,
+} from "../permissions/constants.js";
 import { umbOpenModal } from "@umbraco-cms/backoffice/modal";
 import { UMBRICIANS_SEND_MESSAGE_MODAL } from "../modals/send-message.modal-token.js";
 import { UMBRICIANS_SEND_MEMBER_MESSAGE_MODAL } from "../modals/send-member-message.modal-token.js";
@@ -47,6 +52,10 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
   @state() private _error?: string;
 
   @state() private _selectedCount = 0;
+
+  /** The current user's Live View messaging permissions, from their user groups. */
+  @state() private _canMessageUsers = false;
+  @state() private _canMessageMembers = false;
   @state() private _selectedMembers = 0;
 
   /** The site's member message senders; member messaging is offered only when there is at least one. */
@@ -64,6 +73,12 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
   constructor() {
     super();
     this.consumeContext(UMB_NOTIFICATION_CONTEXT, (context) => (this.#notifications = context));
+    this.consumeContext(UMB_CURRENT_USER_CONTEXT, (context) => {
+      this.observe(context?.fallbackPermissions, (permissions) => {
+        this._canMessageUsers = permissions?.includes(LIVE_VIEW_PERMISSION_MESSAGE_USERS) ?? false;
+        this._canMessageMembers = permissions?.includes(LIVE_VIEW_PERMISSION_MESSAGE_MEMBERS) ?? false;
+      });
+    });
   }
 
   override connectedCallback() {
@@ -251,7 +266,16 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
   override render() {
     const selected = this._selectedCount;
     const selectedMembers = this._selectedMembers;
-    const canMessageMembers = (this._memberMessaging?.senders.length ?? 0) > 0;
+    const canMessageUsers = this._canMessageUsers;
+    // Members can be messaged only with the permission and at least one delivery method set up by a developer.
+    const canMessageMembers = this._canMessageMembers && (this._memberMessaging?.senders.length ?? 0) > 0;
+    const hint = canMessageUsers && canMessageMembers
+      ? "Select users or members to message them"
+      : canMessageUsers
+        ? "Select users to send them a message"
+        : canMessageMembers
+          ? "Select members to send them a message"
+          : "";
 
     return html`
       <umb-body-layout header-transparent>
@@ -307,6 +331,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
           <umbricians-live-view-users
             .interval=${this._interval}
             ?paused=${this._paused}
+            ?selectable=${canMessageUsers}
             @change=${this.#onUsersChange}></umbricians-live-view-users>
 
           <umbricians-live-view-members
@@ -316,18 +341,18 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
             @change=${this.#onMembersChange}></umbricians-live-view-members>
         </div>
 
-        <span slot="footer-info" class="muted footer-info">
-          ${selected === 0 && selectedMembers === 0
-            ? canMessageMembers
-              ? "Select users or members to message them"
-              : "Select users to send them a message"
-            : [
-                selected ? `${plural(selected, "user", "users")} selected` : "",
-                selectedMembers ? `${plural(selectedMembers, "member", "members")} selected` : "",
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-        </span>
+        ${canMessageUsers || canMessageMembers
+          ? html`<span slot="footer-info" class="muted footer-info">
+              ${selected === 0 && selectedMembers === 0
+                ? hint
+                : [
+                    selected ? `${plural(selected, "user", "users")} selected` : "",
+                    selectedMembers ? `${plural(selectedMembers, "member", "members")} selected` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+            </span>`
+          : ""}
         ${canMessageMembers
           ? html`<uui-button
               slot="actions"
@@ -335,13 +360,15 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
               label="Message members…"
               @click=${this.#openSendMemberMessage}></uui-button>`
           : ""}
-        <uui-button
-          slot="actions"
-          look="primary"
-          color="positive"
-          label="Message users…"
-          ?disabled=${selected === 0}
-          @click=${this.#openSendMessage}></uui-button>
+        ${canMessageUsers
+          ? html`<uui-button
+              slot="actions"
+              look="primary"
+              color="positive"
+              label="Message users…"
+              ?disabled=${selected === 0}
+              @click=${this.#openSendMessage}></uui-button>`
+          : ""}
       </umb-body-layout>
     `;
   }
