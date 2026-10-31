@@ -109,7 +109,7 @@ public class LiveViewApiController : ControllerBase
     [HttpPost("messages")]
     [LiveViewPermission(Constants.Permissions.MessageUsers)]
     [ProducesResponseType<SendBackofficeMessageResponseModel>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendMessage(SendBackofficeMessageRequestModel request)
     {
         IUser? currentUser = _security.BackOfficeSecurity?.CurrentUser;
@@ -120,7 +120,7 @@ public class LiveViewApiController : ControllerBase
         return result switch
         {
             BackofficeSendResult.Sent sent => Ok(new SendBackofficeMessageResponseModel { Key = sent.Message.Key, Recipients = sent.Recipients }),
-            BackofficeSendResult.Rejected rejected => BadRequest(rejected.Reason),
+            BackofficeSendResult.Rejected rejected => MessageNotSent.Because(rejected.Reason),
             _ => throw new InvalidOperationException($"Unexpected send result {result.GetType().Name}."),
         };
     }

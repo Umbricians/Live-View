@@ -76,7 +76,7 @@ public class LiveViewMemberMessagesController : ControllerBase
     [HttpPost("member-messages")]
     [LiveViewPermission(Constants.Permissions.MessageMembers)]
     [ProducesResponseType<MemberMessageSendResult>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Send(SendMemberMessageRequestModel request, CancellationToken cancellationToken)
     {
         string headline = request.Headline?.Trim() ?? string.Empty;
@@ -86,22 +86,22 @@ public class LiveViewMemberMessagesController : ControllerBase
 
         if (headline.Length is 0 or > 200 || message.Length > 2000)
         {
-            return BadRequest("A headline (up to 200 characters) is required, and the message can be up to 2000 characters.");
+            return MessageNotSent.Because("A headline (up to 200 characters) is required, and the message can be up to 2000 characters.");
         }
 
         if (!Audiences.TryGetValue(request.Audience ?? string.Empty, out MemberMessageAudience audience))
         {
-            return BadRequest("Audience must be 'selected', 'allOnline' or 'allMembers'.");
+            return MessageNotSent.Because("Audience must be 'selected', 'allOnline' or 'allMembers'.");
         }
 
         if (audience == MemberMessageAudience.Selected && selected.Length is 0 or > MaxSelectedMembers)
         {
-            return BadRequest($"Select between 1 and {MaxSelectedMembers} members, or send to all online members instead.");
+            return MessageNotSent.Because($"Select between 1 and {MaxSelectedMembers} members, or send to all online members instead.");
         }
 
         if (senders.Length == 0)
         {
-            return BadRequest("Choose at least one delivery method.");
+            return MessageNotSent.Because("Choose at least one delivery method.");
         }
 
         int minutes = Math.Clamp(request.ExpiresInMinutes ?? 60, 1, 60 * 24 * 30);

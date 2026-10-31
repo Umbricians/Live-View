@@ -73,7 +73,9 @@ async function request<T>(
   });
 
   if (error !== undefined || !response?.ok) {
-    throw new Error(`Live View request failed (${response?.status ?? "no response"})`);
+    // A message that can't be sent says why in the ProblemDetails detail, which the dashboard shows as it is.
+    const detail = (error as { detail?: unknown } | undefined)?.detail;
+    throw new Error(typeof detail === "string" && detail ? detail : `Live View request failed (${response?.status ?? "no response"})`);
   }
   return data as T;
 }
