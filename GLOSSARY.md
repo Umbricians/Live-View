@@ -9,6 +9,13 @@ request) and when each of their backoffice tabs sends a **heartbeat** or closes,
 page at a time, or all at once. It is the only source for both the backoffice users line on the chart and the
 backoffice users table, so the two always agree. Users are identified by their `Guid` key only.
 
+## Backoffice messenger
+
+The module that sends a one-off message to backoffice users. It owns the send rules: the headline and message
+limits, the colours, who **everyone online** means at the moment of sending, and that the **sender** is never one of
+the recipients. It also says how many users a message to everyone online would reach, so the users table's count and
+the delivery always agree.
+
 ## Channel
 
 One line on the Live View chart: a named, coloured count of active sessions (`web`, `mcp`, `api`, `backoffice`,

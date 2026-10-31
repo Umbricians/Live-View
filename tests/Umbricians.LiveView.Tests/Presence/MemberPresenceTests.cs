@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Presence;
@@ -187,14 +186,5 @@ public class MemberPresenceTests
 
         public Task<IReadOnlyList<MemberDetails>> GetAsync(IReadOnlyCollection<Guid> keys) =>
             Task.FromResult<IReadOnlyList<MemberDetails>>(_members.Values.Where(m => keys.Contains(m.Key)).ToList());
-    }
-
-    private sealed class StaticOptionsMonitor<T>(T value) : IOptionsMonitor<T>
-    {
-        public T CurrentValue => value;
-
-        public T Get(string? name) => value;
-
-        public IDisposable? OnChange(Action<T, string?> listener) => null;
     }
 }
