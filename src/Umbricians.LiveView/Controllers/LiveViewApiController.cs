@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Umbraco.Cms.Api.Common.Filters;
 using Umbraco.Cms.Api.Common.ViewModels.Pagination;
+using Umbraco.Cms.Core.Models.Membership;
 using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Web.Common.Routing;
@@ -23,8 +24,6 @@ namespace Umbricians.LiveView.Controllers;
 [JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
 public class LiveViewApiController : ControllerBase
 {
-    private static readonly string[] MessageColors = ["default", "positive", "warning", "danger"];
-
     private const int MaxPageSize = 100;
 
     private readonly LiveMetricsService _metrics;
@@ -77,12 +76,11 @@ public class LiveViewApiController : ControllerBase
             })
             .ToList();
 
-        bool currentUserOnline = currentUserKey is { } key && _presence.AllOnline().Contains(key);
         return new OnlineBackofficeUsersResponseModel
         {
             Total = total,
             Items = items,
-            Recipients = currentUserOnline ? total - 1 : total,
+            Recipients = _messenger.CountAllOnlineRecipients(currentUserKey),
         };
     }
 
@@ -114,26 +112,17 @@ public class LiveViewApiController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendMessage(SendBackofficeMessageRequestModel request)
     {
-        string headline = request.Headline?.Trim() ?? string.Empty;
-        string message = request.Message?.Trim() ?? string.Empty;
-        // "All online" is resolved here rather than in the browser, which only ever holds one page of users.
-        // The sender is never one of the recipients.
-        Guid? senderKey = _security.BackOfficeSecurity?.CurrentUser?.Key;
-        Guid[] recipients = (request.AllOnline ? _presence.AllOnline() : request.UserKeys ?? [])
-            .Where(k => k != senderKey)
-            .Distinct()
-            .ToArray();
-        string color = request.Color is { } c && MessageColors.Contains(c) ? c : "default";
+        IUser? currentUser = _security.BackOfficeSecurity?.CurrentUser;
+        BackofficeSendResult result = await _messenger.SendAsync(
+            new BackofficeMessageRequest(request.Headline, request.Message, request.Color, request.UserKeys, request.AllOnline),
+            new BackofficeSender(currentUser?.Key, currentUser?.Name));
 
-        if (headline.Length is 0 or > 200 || message.Length > 2000 || recipients.Length is 0 or > 1000)
+        return result switch
         {
-            return BadRequest("A headline (up to 200 characters), a message (up to 2000) and at least one other user to send to are required.");
-        }
-
-        BackofficeMessage sent = await _messenger.SendAsync(
-            headline, message, color, _security.BackOfficeSecurity?.CurrentUser?.Name, recipients);
-
-        return Ok(new SendBackofficeMessageResponseModel { Key = sent.Key, Recipients = recipients.Length });
+            BackofficeSendResult.Sent sent => Ok(new SendBackofficeMessageResponseModel { Key = sent.Message.Key, Recipients = sent.Recipients }),
+            BackofficeSendResult.Rejected rejected => BadRequest(rejected.Reason),
+            _ => throw new InvalidOperationException($"Unexpected send result {result.GetType().Name}."),
+        };
     }
 }
 

@@ -1,7 +1,6 @@
 using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Presence;
@@ -169,14 +168,5 @@ public class SessionKeySourceTests
     {
         public Task<IReadOnlyList<BackofficeUserDetails>> GetAsync(IReadOnlyCollection<Guid> keys) =>
             Task.FromResult<IReadOnlyList<BackofficeUserDetails>>([]);
-    }
-
-    private sealed class StaticOptionsMonitor<T>(T value) : IOptionsMonitor<T>
-    {
-        public T CurrentValue => value;
-
-        public T Get(string? name) => value;
-
-        public IDisposable? OnChange(Action<T, string?> listener) => null;
     }
 }
