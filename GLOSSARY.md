@@ -2,6 +2,13 @@
 
 The words this codebase uses for its domain. Code, docs and reviews should use them as defined here.
 
+## Backoffice messenger
+
+The module that sends a one-off message to backoffice users. It owns the send rules: the **message content**, who
+**everyone online** means at the moment of sending (users in the backoffice; an MCP caller only on MCP can't see a
+backoffice message), and that the **sender** is never one of the recipients. It also says how many users a message to
+everyone online would reach, so the users table's count and the delivery always agree.
+
 ## Backoffice presence
 
 The module that knows which backoffice users are online. It is told when a user is **seen** (made a backoffice
@@ -9,13 +16,6 @@ request), when each of their backoffice tabs sends a **heartbeat** or closes, an
 it answers who is online: one page at a time, or all at once. It is the only source for both the backoffice
 users line on the chart and the backoffice users table, so the two always agree. Users are identified by their
 `Guid` key only.
-
-## Backoffice messenger
-
-The module that sends a one-off message to backoffice users. It owns the send rules: the headline and message
-limits, the colours, who **everyone online** means at the moment of sending (users in the backoffice; an MCP caller
-only on MCP can't see a backoffice message), and that the **sender** is never one of the recipients. It also says how many users a message to everyone online would reach, so the users table's count and
-the delivery always agree.
 
 ## Channel
 
@@ -46,12 +46,24 @@ A website visitor with a member account who has signed in on the front end. Not 
 The member's `Guid` key. The only way Member presence identifies a member. A member's numeric id is converted to
 their key once, inside Member presence, and never leaves it.
 
+## Member messaging
+
+The module that sends a message to members through the site's member message senders. It owns the send rules: the
+**message content**, the audience (selected members, **everyone online** at the moment of sending, or every member),
+which senders deliver it, and when it stops being shown.
+
 ## Member presence
 
 The module that knows which members are online. It is told when a member is **seen** (made a front-end request),
 when they **sign out**, and when they are an **MCP caller**, and it answers who is online: one page at a time, or
 all at once. It is the only source for both the members line on the chart and the members table, so the two
 always agree.
+
+## Message content
+
+What every message says, to backoffice users or members alike: a headline (required, up to 200 characters), a
+message (up to 2000) and its type (Information, Warning, Urgent or Good news). Text is trimmed before it is checked.
+Both messaging modules check it the same way, and both dialogs share the same fields for it.
 
 ## Online backoffice user
 

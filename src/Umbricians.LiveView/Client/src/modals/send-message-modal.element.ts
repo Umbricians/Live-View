@@ -1,20 +1,13 @@
 import { css, html, customElement, state, repeat, nothing } from "@umbraco-cms/backoffice/external/lit";
 import { UmbModalBaseElement } from "@umbraco-cms/backoffice/modal";
 import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
-import type { UUISelectEvent } from "@umbraco-cms/backoffice/external/uui";
-import { sendMessage, type MessageColor } from "../api/live-view.resource.js";
+import { sendMessage } from "../api/live-view.resource.js";
 import { plural } from "../utils/format.js";
+import { hasHeadline, newMessage, renderMessageFields, sendColor, trimmed } from "./message-fields.js";
 import type {
   UmbriciansSendMessageModalData,
   UmbriciansSendMessageModalValue,
 } from "./send-message.modal-token.js";
-
-const COLORS: Array<{ name: string; value: MessageColor }> = [
-  { name: "Information", value: "default" },
-  { name: "Warning", value: "warning" },
-  { name: "Urgent", value: "danger" },
-  { name: "Good news", value: "positive" },
-];
 
 /**
  * Sidebar dialog for writing a notification to the backoffice users picked on the Live View dashboard.
@@ -24,9 +17,7 @@ export class UmbriciansSendMessageModalElement extends UmbModalBaseElement<
   UmbriciansSendMessageModalData,
   UmbriciansSendMessageModalValue
 > {
-  @state() private _headline = "";
-  @state() private _message = "";
-  @state() private _color: MessageColor = "warning";
+  @state() private _text = newMessage();
   @state() private _sending = false;
 
   #notifications?: typeof UMB_NOTIFICATION_CONTEXT.TYPE;
@@ -42,14 +33,12 @@ export class UmbriciansSendMessageModalElement extends UmbModalBaseElement<
 
   async #send(event?: Event) {
     event?.preventDefault();
-    if (this._sending || !this._headline.trim() || (this.data?.count ?? 0) === 0) return;
+    if (this._sending || !hasHeadline(this._text) || (this.data?.count ?? 0) === 0) return;
 
     this._sending = true;
     try {
       const result = await sendMessage({
-        headline: this._headline.trim(),
-        message: this._message.trim(),
-        color: this._color,
+        ...trimmed(this._text),
         ...(this.data?.allOnline ? { allOnline: true } : { userKeys: this.#recipients.map((r) => r.key) }),
       });
       this.updateValue({ sentTo: result.recipients });
@@ -91,37 +80,10 @@ export class UmbriciansSendMessageModalElement extends UmbModalBaseElement<
               Shown in their backoffice as a notification that stays on screen until dismissed, signed with your name.
             </p>
 
-            <uui-form-layout-item>
-              <uui-label slot="label" for="headline" required>Headline</uui-label>
-              <uui-input
-                id="headline"
-                label="Headline"
-                placeholder="e.g. Upgrade in 10 minutes"
-                maxlength="200"
-                .value=${this._headline}
-                @input=${(e: InputEvent) => (this._headline = (e.target as HTMLInputElement).value)}></uui-input>
-            </uui-form-layout-item>
-
-            <uui-form-layout-item>
-              <uui-label slot="label" for="type">Type</uui-label>
-              <uui-select
-                id="type"
-                label="Type"
-                .options=${COLORS.map((c) => ({ ...c, selected: c.value === this._color }))}
-                @change=${(e: UUISelectEvent) => (this._color = e.target.value as MessageColor)}></uui-select>
-            </uui-form-layout-item>
-
-            <uui-form-layout-item>
-              <uui-label slot="label" for="message">Message</uui-label>
-              <uui-textarea
-                id="message"
-                label="Message"
-                placeholder="Please save your work and log out. The site will be unavailable for about 15 minutes."
-                maxlength="2000"
-                rows="6"
-                .value=${this._message}
-                @input=${(e: InputEvent) => (this._message = (e.target as HTMLTextAreaElement).value)}></uui-textarea>
-            </uui-form-layout-item>
+            ${renderMessageFields(this._text, (text) => (this._text = text), {
+              headline: "e.g. Upgrade in 10 minutes",
+              message: "Please save your work and log out. The site will be unavailable for about 15 minutes.",
+            }, 6)}
           </form>
         </uui-box>
 
@@ -130,10 +92,10 @@ export class UmbriciansSendMessageModalElement extends UmbModalBaseElement<
           <uui-button
             slot="actions"
             look="primary"
-            color=${this._color === "danger" ? "danger" : "positive"}
+            color=${sendColor(this._text)}
             label="Send"
             .state=${this._sending ? "waiting" : undefined}
-            ?disabled=${!this._headline.trim() || this._sending}
+            ?disabled=${!hasHeadline(this._text) || this._sending}
             @click=${this.#send}></uui-button>
         </umb-footer-layout>
       </umb-body-layout>
