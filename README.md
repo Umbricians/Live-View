@@ -299,7 +299,7 @@ public class EmailMemberMessageSender(IEmailSender email, IMemberService members
 }
 
 // in a composer
-builder.AddMemberMessageSender<EmailMemberMessageSender>();
+builder.AddLiveViewMemberMessageSender<EmailMemberMessageSender>();
 ```
 
 A `MemberMessage` has a headline, a plain-text body (encode it wherever you display it), a type (information,

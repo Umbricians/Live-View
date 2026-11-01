@@ -27,8 +27,8 @@ const LIFETIMES: Array<{ name: string; value: Lifetime }> = [
  * Sidebar dialog for messaging website members: who it goes to, how it is delivered (the site's registered
  * senders), the message itself and how long it stays relevant.
  */
-@customElement("umbricians-send-member-message-modal")
-export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement<
+@customElement("umbricians-live-view-send-member-message-modal")
+export class UmbriciansLiveViewSendMemberMessageModalElement extends UmbModalBaseElement<
   UmbriciansSendMemberMessageModalData,
   UmbriciansSendMemberMessageModalValue
 > {
@@ -328,10 +328,10 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
   `;
 }
 
-export default UmbriciansSendMemberMessageModalElement;
+export default UmbriciansLiveViewSendMemberMessageModalElement;
 
 declare global {
   interface HTMLElementTagNameMap {
-    "umbricians-send-member-message-modal": UmbriciansSendMemberMessageModalElement;
+    "umbricians-live-view-send-member-message-modal": UmbriciansLiveViewSendMemberMessageModalElement;
   }
 }

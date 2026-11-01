@@ -86,7 +86,7 @@ public class LogMemberMessageSender(ILogger<LogMemberMessageSender> logger) : IM
 
 public class MemberMessagingComposer : IComposer
 {
-    public void Compose(IUmbracoBuilder builder) => builder.AddMemberMessageSender<LogMemberMessageSender>();
+    public void Compose(IUmbracoBuilder builder) => builder.AddLiveViewMemberMessageSender<LogMemberMessageSender>();
 }
 ```
 
@@ -126,7 +126,7 @@ public class BannerMemberMessageSender(IMemberMessageInbox inbox) : IMemberMessa
 }
 ```
 
-Register it with `builder.AddMemberMessageSender<BannerMemberMessageSender>();`.
+Register it with `builder.AddLiveViewMemberMessageSender<BannerMemberMessageSender>();`.
 
 **The view component**, which reads the current member's unread messages:
 
@@ -270,7 +270,7 @@ public class SignalRMemberMessageSender(IHubContext<MemberMessagesHub> hub) : IM
 
 ```csharp
 builder.Services.AddSignalR();
-builder.AddMemberMessageSender<SignalRMemberMessageSender>();
+builder.AddLiveViewMemberMessageSender<SignalRMemberMessageSender>();
 ```
 
 **Map the hub** in `Program.cs`, inside `WithEndpoints`:
@@ -452,8 +452,8 @@ Anything that can reach a member can be a sender. Some ideas:
 | `ReachesOfflineMembers` | `true` if it can reach members who are not logged in (a banner, email). When it is `false`, the dashboard warns, for "Every member" messages, that it only reaches members online now. Defaults to `false`. |
 | `SendAsync` | Delivers the message. Has 30 seconds; an exception or timeout is reported on the dashboard and does not stop other senders. |
 
-Register senders with `builder.AddMemberMessageSender<T>()`. They are singletons, so inject scoped services through
-`IServiceScopeFactory`.
+Register senders with `builder.AddLiveViewMemberMessageSender<T>()`. They are singletons, so inject scoped services
+through `IServiceScopeFactory`.
 
 ### `MemberMessage`
 
