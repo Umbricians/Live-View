@@ -12,8 +12,8 @@ import type {
 /**
  * Sidebar dialog for writing a notification to the backoffice users picked on the Live View dashboard.
  */
-@customElement("umbricians-send-message-modal")
-export class UmbriciansSendMessageModalElement extends UmbModalBaseElement<
+@customElement("umbricians-live-view-send-message-modal")
+export class UmbriciansLiveViewSendMessageModalElement extends UmbModalBaseElement<
   UmbriciansSendMessageModalData,
   UmbriciansSendMessageModalValue
 > {
@@ -126,10 +126,10 @@ export class UmbriciansSendMessageModalElement extends UmbModalBaseElement<
   `;
 }
 
-export default UmbriciansSendMessageModalElement;
+export default UmbriciansLiveViewSendMessageModalElement;
 
 declare global {
   interface HTMLElementTagNameMap {
-    "umbricians-send-message-modal": UmbriciansSendMessageModalElement;
+    "umbricians-live-view-send-message-modal": UmbriciansLiveViewSendMessageModalElement;
   }
 }

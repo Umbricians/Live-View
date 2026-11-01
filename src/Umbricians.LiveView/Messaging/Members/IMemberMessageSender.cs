@@ -6,7 +6,7 @@ namespace Umbricians.LiveView.Messaging.Members;
 /// push notifications and so on).
 /// </summary>
 /// <remarks>
-/// Register with <c>builder.AddMemberMessageSender&lt;T&gt;()</c>. The dashboard only offers member messaging once at
+/// Register with <c>builder.AddLiveViewMemberMessageSender&lt;T&gt;()</c>. The dashboard only offers member messaging once at
 /// least one sender is registered, and lets the sender of a message choose which senders to use.
 /// </remarks>
 public interface IMemberMessageSender

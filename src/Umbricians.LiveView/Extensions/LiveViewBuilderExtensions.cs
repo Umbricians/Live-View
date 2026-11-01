@@ -20,7 +20,7 @@ public static class LiveViewBuilderExtensions
     /// Adds a way of delivering dashboard messages to website members, such as SignalR, a banner or email. Member
     /// messaging appears on the dashboard once at least one sender is registered.
     /// </summary>
-    public static IUmbracoBuilder AddMemberMessageSender<TSender>(this IUmbracoBuilder builder)
+    public static IUmbracoBuilder AddLiveViewMemberMessageSender<TSender>(this IUmbracoBuilder builder)
         where TSender : class, IMemberMessageSender
     {
         builder.Services.AddSingleton<IMemberMessageSender, TSender>();

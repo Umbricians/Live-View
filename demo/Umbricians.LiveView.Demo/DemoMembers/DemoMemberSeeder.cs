@@ -85,8 +85,8 @@ public class DemoMembersComposer : IComposer
 
         // Sample member message senders for the Live View dashboard; the hub is mapped in Program.cs.
         builder.Services.AddSignalR();
-        builder.AddMemberMessageSender<SignalRMemberMessageSender>();
-        builder.AddMemberMessageSender<BannerMemberMessageSender>();
+        builder.AddLiveViewMemberMessageSender<SignalRMemberMessageSender>();
+        builder.AddLiveViewMemberMessageSender<BannerMemberMessageSender>();
 
         // Replaces the package's property-based avatar provider for the dashboard's members table, unless
         // Umbricians:LiveView:MemberAvatarProperty is set to try that instead.
