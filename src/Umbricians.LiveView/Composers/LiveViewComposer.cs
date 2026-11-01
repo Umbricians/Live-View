@@ -25,6 +25,7 @@ public class LiveViewComposer : IComposer
 
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<ILiveActivityTracker, LiveActivityTracker>();
+        builder.Services.AddSingleton<RequestClassifier>();
         builder.Services.AddSingleton<LiveActivityMiddleware>();
         builder.Services.AddSingleton<LiveMetricsService>();
         builder.Services.AddSingleton<IBackofficeUserDirectory, UmbracoBackofficeUserDirectory>();

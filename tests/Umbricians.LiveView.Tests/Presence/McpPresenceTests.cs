@@ -35,7 +35,7 @@ public class McpPresenceTests
         _backoffice = new BackofficePresence(_users, options, _clock);
         _memberPresence = new MemberPresence(_members, options, _clock);
         _callers = new McpCallers(_backoffice, _memberPresence, _users, _members, _clock, NullLogger<McpCallers>.Instance);
-        _middleware = new LiveActivityMiddleware(new NoTracker(), _backoffice, _memberPresence, _callers, options);
+        _middleware = new LiveActivityMiddleware(new RequestClassifier(options), new NoTracker(), _backoffice, _memberPresence, _callers);
     }
 
     [Fact]
@@ -197,6 +197,22 @@ public class McpPresenceTests
         _clock.Advance(TimeSpan.FromSeconds(299));
         Assert.Equal([alice], _memberPresence.AllOnline());
         _clock.Advance(TimeSpan.FromSeconds(2));
+        Assert.Empty(_memberPresence.AllOnline());
+    }
+
+    [Fact]
+    public async Task A_stream_that_fails_lets_its_caller_go_once_the_window_has_passed()
+    {
+        Guid alice = _members.Add(1, "Alice");
+        var response = new StartableResponse();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CallMcp(SignedInWithKey(alice), response, async () =>
+        {
+            await response.StartAsync();
+            throw new InvalidOperationException("The stream broke.");
+        }));
+
+        _clock.Advance(TimeSpan.FromSeconds(301));
         Assert.Empty(_memberPresence.AllOnline());
     }
 
