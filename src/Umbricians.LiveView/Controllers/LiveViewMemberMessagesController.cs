@@ -25,7 +25,7 @@ namespace Umbricians.LiveView.Controllers;
 [Authorize(Policy = AuthorizationPolicies.SectionAccessSettings)]
 [LiveViewPermission(Constants.Permissions.View)]
 [JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
-public class LiveViewMemberMessagesController : ControllerBase
+internal class LiveViewMemberMessagesController : ControllerBase
 {
     private static readonly Dictionary<string, MemberMessageType> Types = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -134,7 +134,7 @@ public class LiveViewMemberMessagesController : ControllerBase
     }
 }
 
-public class MemberMessagingResponseModel
+internal class MemberMessagingResponseModel
 {
     public required IReadOnlyList<MemberMessageSenderResponseModel> Senders { get; init; }
 
@@ -144,7 +144,7 @@ public class MemberMessagingResponseModel
     public string? TimeZone { get; init; }
 }
 
-public class MemberMessageSenderResponseModel
+internal class MemberMessageSenderResponseModel
 {
     public required string Alias { get; init; }
 
@@ -155,7 +155,7 @@ public class MemberMessageSenderResponseModel
     public required bool ReachesOfflineMembers { get; init; }
 }
 
-public class SendMemberMessageRequestModel
+internal class SendMemberMessageRequestModel
 {
     public string? Headline { get; init; }
 

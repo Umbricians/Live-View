@@ -30,7 +30,7 @@ internal sealed record OnlineBackofficeUser(
 /// are included and each tab is counted once. Each user has one row however they are online (the backoffice, MCP,
 /// or both). Rows are listed in arrival order, newest first, so they don't jump between pages as editors keep working.
 /// </remarks>
-public sealed class BackofficePresence
+internal sealed class BackofficePresence
 {
     /// <summary>A tab that misses this many seconds of heartbeats (sent every 60s) is treated as closed.</summary>
     internal static readonly TimeSpan TabTimeout = TimeSpan.FromSeconds(150);

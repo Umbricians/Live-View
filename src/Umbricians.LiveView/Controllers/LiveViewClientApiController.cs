@@ -22,7 +22,7 @@ namespace Umbricians.LiveView.Controllers;
 [BackOfficeRoute("umbriciansliveview/api/v{version:apiVersion}")]
 [Authorize(Policy = AuthorizationPolicies.BackOfficeAccess)]
 [JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
-public class LiveViewClientApiController : ControllerBase
+internal class LiveViewClientApiController : ControllerBase
 {
     private readonly BackofficeMessenger _messenger;
     private readonly BackofficePresence _presence;
@@ -91,7 +91,7 @@ public class LiveViewClientApiController : ControllerBase
     }
 }
 
-public class HeartbeatResponseModel
+internal class HeartbeatResponseModel
 {
     public required IReadOnlyList<Guid> PendingMessages { get; init; }
 }

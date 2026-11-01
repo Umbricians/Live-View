@@ -5,7 +5,7 @@ using Umbricians.LiveView.Presence;
 
 namespace Umbricians.LiveView.Messaging;
 
-public sealed record BackofficeMessage(
+internal sealed record BackofficeMessage(
     Guid Key,
     string Headline,
     string Message,
@@ -46,7 +46,7 @@ internal abstract record BackofficeSendResult
 /// by key. Recipients whose realtime connection is down pick it up from their next heartbeat instead.
 /// Messages are discarded after <see cref="Lifetime"/>.
 /// </remarks>
-public sealed class BackofficeMessenger
+internal sealed class BackofficeMessenger
 {
     public const string EventSource = "Umbricians.LiveView";
     public const string EventType = "Message";
