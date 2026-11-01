@@ -8,6 +8,8 @@ export interface UmbriciansSendMemberMessageModalData {
   onlineCount: number;
   totalMembers: number;
   senders: Array<MemberMessageSender>;
+  /** The IANA time zone "midnight tonight" is worked out in, or null for the sender's own. */
+  timeZone: string | null;
 }
 
 export type UmbriciansSendMemberMessageModalValue = MemberMessageSendResult;

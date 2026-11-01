@@ -12,6 +12,7 @@ import {
   Tooltip,
   type ChartDataset,
 } from "chart.js";
+import { color } from "chart.js/helpers";
 import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
 import { UMB_CURRENT_USER_CONTEXT } from "@umbraco-cms/backoffice/current-user";
 import {
@@ -41,7 +42,7 @@ const MAX_POINTS = 120;
 const STORAGE_KEY = "umbricians.liveView.interval";
 const FALLBACK_COLORS = ["#3544b1", "#f79c37", "#2bc37c", "#d42054", "#8b5cf6", "#0ea5e9", "#a16207"];
 
-type LineDataset = ChartDataset<"line", Array<number | null>>;
+type LineDataset = ChartDataset<"line", Array<number | null>> & { alias?: string };
 
 @customElement("umbricians-live-view-dashboard")
 export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitElement) {
@@ -50,6 +51,8 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
   @state() private _metrics: Array<LiveMetricReading> = [];
   @state() private _lastUpdated?: Date;
   @state() private _error?: string;
+  /** Aliases of the lines switched off from their tile or legend entry, for this visit. */
+  @state() private _hidden = new Set<string>();
 
   @state() private _selectedCount = 0;
 
@@ -113,7 +116,33 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
           x: { ticks: { color: text, maxTicksLimit: 8, maxRotation: 0 }, grid: { color: grid } },
           y: { beginAtZero: true, ticks: { color: text, precision: 0 }, grid: { color: grid } },
         },
-        plugins: { legend: { position: "bottom", labels: { color: text, usePointStyle: true } } },
+        plugins: {
+          legend: {
+            position: "bottom",
+            // A legend click switches a line off like its tile does, and a switched-off entry fades like its tile
+            // instead of being struck through.
+            labels: {
+              color: text,
+              usePointStyle: true,
+              generateLabels: (chart) =>
+                Chart.defaults.plugins.legend.labels.generateLabels(chart).map((item) =>
+                  item.hidden
+                    ? {
+                        ...item,
+                        hidden: false,
+                        fontColor: faded(text),
+                        fillStyle: faded(item.fillStyle),
+                        strokeStyle: faded(item.strokeStyle),
+                      }
+                    : item,
+                ),
+            },
+            onClick: (_event, item) => {
+              const alias = (this.#chart?.data.datasets[item.datasetIndex!] as LineDataset | undefined)?.alias;
+              if (alias) this.#toggleLine(alias);
+            },
+          },
+        },
       },
     });
   }
@@ -150,7 +179,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
     if (!chart) return;
 
     const labels = chart.data.labels!;
-    const datasets = chart.data.datasets as Array<LineDataset & { alias?: string }>;
+    const datasets = chart.data.datasets as Array<LineDataset>;
 
     for (const metric of metrics) {
       if (datasets.some((d) => d.alias === metric.alias)) continue;
@@ -163,6 +192,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
         borderColor: color,
         backgroundColor: color,
         spanGaps: false,
+        hidden: this._hidden.has(metric.alias),
       });
     }
 
@@ -176,6 +206,20 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
       for (const dataset of datasets) dataset.data.splice(0, dataset.data.length - MAX_POINTS);
     }
 
+    chart.update("none");
+  }
+
+  /** Switches a line off or back on: the line leaves the chart, and its tile and legend entry fade. */
+  #toggleLine(alias: string) {
+    const hidden = new Set(this._hidden);
+    if (!hidden.delete(alias)) hidden.add(alias);
+    this._hidden = hidden;
+
+    const chart = this.#chart;
+    if (!chart) return;
+    for (const dataset of chart.data.datasets as Array<LineDataset>) {
+      dataset.hidden = dataset.alias !== undefined && hidden.has(dataset.alias);
+    }
     chart.update("none");
   }
 
@@ -228,6 +272,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
           onlineCount: members.onlineCount,
           totalMembers: messaging.totalMembers,
           senders: messaging.senders,
+          timeZone: messaging.timeZone,
         },
       });
       const failed = result.results.filter((r) => r.error);
@@ -314,12 +359,21 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
               ${repeat(
                 this._metrics,
                 (m) => m.alias,
-                (m, i) => html`
-                  <div class="tile" style="--tile-color: ${this.#colorFor(m, i)}" title=${m.error ?? ""}>
-                    <div class="tile-value">${m.value === null ? "–" : formatValue(m.value)}</div>
-                    <div class="tile-label">${m.name}</div>
-                  </div>
-                `,
+                (m, i) => {
+                  const shown = !this._hidden.has(m.alias);
+                  return html`
+                    <button
+                      type="button"
+                      class="tile"
+                      style="--tile-color: ${this.#colorFor(m, i)}"
+                      aria-pressed=${shown ? "true" : "false"}
+                      title=${[m.error, `${shown ? "Hide" : "Show"} ${m.name} on the chart`].filter(Boolean).join("\n")}
+                      @click=${() => this.#toggleLine(m.alias)}>
+                      <div class="tile-value">${m.value === null ? "–" : formatValue(m.value)}</div>
+                      <div class="tile-label">${m.name}</div>
+                    </button>
+                  `;
+                },
               )}
             </div>
 
@@ -445,10 +499,29 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
 
     .tile {
       min-width: 0;
+      border: none;
       border-left: 4px solid var(--tile-color);
       background: var(--uui-color-surface-alt);
       border-radius: var(--uui-border-radius);
       padding: var(--uui-size-space-3) var(--uui-size-space-4);
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: opacity 120ms ease;
+    }
+
+    .tile:hover {
+      background: var(--uui-color-surface-emphasis);
+    }
+
+    .tile:focus-visible {
+      outline: 2px solid var(--uui-color-focus);
+      outline-offset: 2px;
+    }
+
+    .tile[aria-pressed="false"] {
+      opacity: 0.4;
     }
 
     .tile-value {
@@ -490,6 +563,11 @@ function readStoredInterval() {
   } catch {
     return DEFAULT_INTERVAL;
   }
+}
+
+/** A legend colour at the same 40% opacity as a switched-off tile. */
+function faded<T>(value: T): T {
+  return typeof value === "string" ? (color(value).alpha(0.4).rgbString() as T) : value;
 }
 
 function formatValue(value: number) {

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Presence;
@@ -24,10 +25,15 @@ public class SessionKeySourceTests
     {
         var clock = new FakeTimeProvider();
         var options = new StaticOptionsMonitor<LiveViewOptions>(_options);
+        var users = new EmptyBackofficeUserDirectory();
+        var members = new EmptyMemberDirectory();
+        var backofficePresence = new BackofficePresence(users, options, clock);
+        var memberPresence = new MemberPresence(members, options, clock);
         _middleware = new LiveActivityMiddleware(
             _tracker,
-            new BackofficePresence(new EmptyBackofficeUserDirectory(), options, clock),
-            new MemberPresence(new EmptyMemberDirectory(), options, clock),
+            backofficePresence,
+            memberPresence,
+            new McpCallers(backofficePresence, memberPresence, users, members, clock, NullLogger<McpCallers>.Instance),
             options);
     }
 

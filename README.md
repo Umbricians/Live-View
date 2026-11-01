@@ -19,19 +19,23 @@ The chart refreshes every 2, 5, 10, 15 or 30 seconds (your choice is remembered 
 the server keeps an in-memory set of recently active sessions, and the browser keeps the last 120 readings while
 the page is open.
 
+Click a counter, or its legend entry, to take its line off the chart; both fade until you click either again.
+
 ![The Live View dashboard: session counts per channel and a live chart of members logging in and out](docs/images/live-view-dashboard.png)
 
 Below the chart, two tables list who is online right now. Both are paged on the server (25 per page), so only the
 page being viewed is ever looked up, however many people are online. Rows are ordered by when each person came
 online, newest first, so they stay put between refreshes.
 
-**Members online** lists logged-in members with their member type and when they were last active. A member drops
-off as soon as they log out, or once their activity window passes. If the site has
+**Members online** lists logged-in members with their picture, member type and when they were last active (see
+[member avatars](#5-member-avatars) for where the picture comes from). A member drops
+off as soon as they log out, or once their activity window passes. Members using an [MCP](#mcp-callers) endpoint are listed
+too; while anyone is on MCP, each row is tagged **Website**, **MCP** or both. If the site has
 [member message senders](#4-messaging-members), members can be selected and messaged too: tick some, or click
 **Select all N online**, then **Message members…**. The slide-out sends to the selected members, everyone online, or
 every member of the site, using whichever of the site's delivery methods you tick.
 
-**Backoffice users online** lists who has the backoffice open. Tick one or several of them (the selection is kept
+**Backoffice users online** lists who has the backoffice open, with the avatar each user set in Umbraco. Tick one or several of them (the selection is kept
 across pages), or click **Select all N online** to include every page, then click **Message users…** in the footer to open a slide-out where you write a headline, pick a type
 (information, warning, urgent or good news) and add a message, for example to warn people before an upgrade or
 restart. It appears in their backoffice as a standard Umbraco notification that stays until dismissed, and is
@@ -100,8 +104,34 @@ works out a session key and keeps the session active for the length of the reque
 Because the session stays active for as long as a request is open, long-lived MCP streams (SSE) count while they
 are connected. Crawlers are ignored by default.
 
-Backoffice users and members are counted once per person, however many tabs or devices they use. Only requests that
-pass authentication count, so a failed login or a forged token never shows up.
+Backoffice users and members are counted once per person, however many tabs or devices they use, and whether they
+are in the backoffice or on the website, on MCP, or both. Only requests that pass authentication count, so a failed
+login or a forged token never shows up.
+
+### MCP callers
+
+When a backoffice user or member signs in to an MCP endpoint the site hosts (under the `mcp` channel's paths), they
+are listed in the matching online table, still one row each. While anyone in a table is on MCP, every row in it is
+tagged with how that person is online (**Backoffice** or **Website**, **MCP**, or both), and hovering a tag shows when
+they were last seen that way; while nobody is, the tags are left out. Their key is looked up as a backoffice user
+first, then as a member; the answer is remembered for five minutes. They are shown as soon as the response starts, so
+a long-lived stream lists its caller, as active, while it is connected, and they stay listed for the `mcp` channel's
+activity window after their last request. Backoffice users only on MCP can't be messaged, since a backoffice message
+is shown in a backoffice tab.
+
+An MCP server that runs elsewhere, such as one calling the Management API as an API user, only knows its callers
+itself. Report them with `ILiveViewPresence`:
+
+```csharp
+public class McpToolHandler(ILiveViewPresence presence)
+{
+    public async Task HandleAsync(Guid callerKey, CancellationToken cancellationToken)
+    {
+        await presence.McpCallerSeenAsync(callerKey, cancellationToken); // a backoffice user's or member's key
+        // ...
+    }
+}
+```
 
 Web sessions are counted per visitor, not per tab: several tabs in the same browser share the IP address and
 User-Agent that identify the visitor, so they count once. Different browsers or devices count separately, while
@@ -121,6 +151,8 @@ Everything is optional. Override only what you need in `appsettings.json`:
       "ActivityWindowSeconds": 300,
       "IgnoreBots": true,
       "MaxSessionsPerChannel": 100000,
+      "MemberAvatarProperty": "avatar",
+      "MessageTimeZone": "America/Denver",
       "Channels": {
         "mcp": { "PathPrefixes": [ "/my-mcp" ] },
         "api": { "Enabled": false },
@@ -143,6 +175,12 @@ Built-in channels keep their defaults for any property you leave out. Session ke
 channel always counts the signed-in member and always lets members count as web visitors too, so `SessionKeys` and
 `Exclusive` don't apply to it; its other settings do. The built-in `backoffice` channel always counts the signed-in
 backoffice user, so `SessionKeys` doesn't apply to it.
+
+`MemberAvatarProperty` names the member property that holds each member's picture; see
+[member avatars](#5-member-avatars).
+
+`MessageTimeZone` is the time zone a member message sent until "midnight tonight" expires in, as an IANA id such as
+`America/Denver` (a Windows id works too). Without it, midnight is the sending backoffice user's own.
 
 ## Extending
 
@@ -250,7 +288,8 @@ builder.AddMemberMessageSender<EmailMemberMessageSender>();
 ```
 
 A `MemberMessage` has a headline, a plain-text body (encode it wherever you display it), a type (information,
-warning, urgent or good news), the audience, the sender's name and an expiry chosen on the dashboard. Each sender
+warning, urgent or good news), the audience, the sender's name and an expiry chosen on the dashboard: 15 minutes, an hour, midnight tonight
+(in the [`MessageTimeZone`](#configuration)), 24 hours, 7 days, or any number of hours and minutes up to 30 days. Each sender
 gets 30 seconds; its result, or failure, is reported back on the dashboard.
 
 For banner-style delivery, the package includes `IMemberMessageInbox`: a sender adds the message to it, and your
@@ -260,6 +299,51 @@ stay until they expire; nothing is persisted.
 The demo site has two working examples in
 [MemberMessageSenders.cs](demo/Umbricians.LiveView.Demo/DemoMembers/MemberMessageSenders.cs): a SignalR pop-up on
 pages members have open, and a banner shown on their next page view.
+
+### 5. Member avatars
+
+Backoffice users are shown with the avatar they set in Umbraco. Members have no picture of their own in Umbraco, so
+the members table shows their initials unless the site supplies one.
+
+**No code:** add an image property to the member type (a media picker, an image cropper or an upload field) and name
+it in `appsettings.json`:
+
+```json
+{ "Umbricians": { "LiveView": { "MemberAvatarProperty": "avatar" } } }
+```
+
+The picture is cropped to a small square, so the table never loads the full-size image.
+
+**From code:** for any other source, such as Gravatar or an external profile service, implement
+`IMemberAvatarProvider`. Yours replaces the built-in one, whichever composer runs first:
+
+```csharp
+public class GravatarAvatarProvider : IMemberAvatarProvider
+{
+    public Task<string?> GetAvatarUrlAsync(IMember member, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(member.Email))
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(member.Email.Trim().ToLowerInvariant()));
+        return Task.FromResult<string?>($"https://gravatar.com/avatar/{Convert.ToHexStringLower(hash)}?s=64&d=404");
+    }
+}
+
+public class AvatarComposer : IComposer
+{
+    public void Compose(IUmbracoBuilder builder) =>
+        builder.Services.AddSingleton<IMemberAvatarProvider, GravatarAvatarProvider>();
+}
+```
+
+Return `null` for no picture. The provider is asked for each member on the page being shown, every time the table
+refreshes, so keep it quick: it has two seconds, and a member whose provider fails or runs out of time is shown with
+their initials. The demo site's
+[DemoMemberAvatarProvider.cs](demo/Umbricians.LiveView.Demo/DemoMembers/DemoMemberAvatarProvider.cs) hands out a few
+bundled pictures.
 
 ## API
 
@@ -312,6 +396,10 @@ The demo, not the package, creates 30 test members on startup (`member01@example
 `member30@example.test`, settings under `LiveViewDemo:Members`) and has a bare login page at
 **`/demo/members`** for logging in and out as any of them. Each browser or private window holds one member session,
 so use several to have more than one member online.
+
+The demo also has a stand-in MCP endpoint (not a real MCP server) for trying the **MCP** rows: `POST /mcp/member` and
+`GET /mcp/member/stream?seconds=30` as a logged-in member, and `POST /mcp/backoffice` and
+`GET /mcp/backoffice/stream?seconds=30` with a backoffice access token.
 
 > The demo reads `appsettings.{environment}.json`. If your machine sets `DOTNET_ENVIRONMENT` (for example to
 > `Local`), that overrides the launch profile's `Development`, so the demo settings also live in

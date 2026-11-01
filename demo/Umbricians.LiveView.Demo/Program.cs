@@ -1,4 +1,5 @@
 
+using Umbricians.LiveView.Demo.DemoMcp;
 using Umbricians.LiveView.Demo.DemoMembers;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -28,6 +29,9 @@ app.UseUmbraco()
 
         // Demo only: lets member pages receive Live View messages instantly.
         u.EndpointRouteBuilder.MapHub<MemberMessagesHub>(MemberMessagesHub.Path);
+
+        // Demo only: a stand-in MCP endpoint, to try the dashboard's MCP rows.
+        u.EndpointRouteBuilder.MapDemoMcp();
     });
 
 await app.RunAsync();

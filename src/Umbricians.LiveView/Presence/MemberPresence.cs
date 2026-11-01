@@ -6,16 +6,26 @@ using Umbricians.LiveView.Configuration;
 
 namespace Umbricians.LiveView.Presence;
 
-internal sealed record OnlineMember(Guid Key, string Name, string? Email, string? MemberType, DateTimeOffset LastSeen);
+/// <param name="WebsiteLastSeen">When the member was last seen on the website, or null when they are not on it.</param>
+/// <param name="McpLastSeen">When the member last used MCP, or null when they are not on it.</param>
+internal sealed record OnlineMember(
+    Guid Key,
+    string Name,
+    string? Email,
+    string? MemberType,
+    string? AvatarUrl,
+    DateTimeOffset LastSeen,
+    DateTimeOffset? WebsiteLastSeen,
+    DateTimeOffset? McpLastSeen);
 
 /// <summary>
-/// Knows which members are online: those seen on the website within the members channel's activity window, who
-/// have not signed out since and whose account still exists. It is the only source for both the members line on the
-/// chart and the members table, so the two always agree.
+/// Knows which members are online: those seen on the website within the members channel's activity window who have
+/// not signed out since, and those using MCP, whose account still exists. It is the only source for both the members
+/// line on the chart and the members table, so the two always agree.
 /// </summary>
 /// <remarks>
-/// Members are always held by their key. Online members are listed in arrival order, newest first, so rows don't
-/// jump between pages as members keep browsing.
+/// Members are always held by their key, with one row each however they are online (the website, MCP, or both).
+/// Rows are listed in arrival order, newest first, so they don't jump between pages as members keep browsing.
 /// </remarks>
 public sealed class MemberPresence
 {
@@ -27,6 +37,7 @@ public sealed class MemberPresence
 
     private readonly ConcurrentDictionary<Guid, Visit> _members = new();
     private readonly ConcurrentDictionary<Guid, long> _signedOutUntil = new();
+    private readonly McpConnections _mcp;
     private readonly IMemberDirectory _directory;
     private readonly IOptionsMonitor<LiveViewOptions> _options;
     private readonly TimeProvider _timeProvider;
@@ -36,12 +47,13 @@ public sealed class MemberPresence
         _directory = directory;
         _options = options;
         _timeProvider = timeProvider;
+        _mcp = new McpConnections(options, timeProvider);
     }
 
     /// <summary>Records that the signed-in member made a front-end request. Anyone else is ignored.</summary>
     internal void Seen(ClaimsPrincipal user)
     {
-        if (ResolveKey(user) is not { } key)
+        if (PrincipalKey.Resolve(user, _directory.FindKey) is not { } key)
         {
             return;
         }
@@ -60,7 +72,16 @@ public sealed class MemberPresence
         _members.AddOrUpdate(key, static (_, n) => new Visit(n, n), static (_, seen, n) => seen with { Last = n }, now);
     }
 
-    /// <summary>Takes a member offline straight away, and keeps them off while their sign-out request completes.</summary>
+    /// <summary>Records a finished MCP request by the member.</summary>
+    internal void McpSeen(Guid memberKey) => _mcp.Seen(memberKey);
+
+    /// <summary>Records an open MCP request by the member, who stays online on MCP until it is disposed.</summary>
+    internal IDisposable McpOpened(Guid memberKey) => _mcp.Opened(memberKey);
+
+    /// <summary>
+    /// Takes a member off the website straight away, and keeps them off while their sign-out request completes. Their
+    /// MCP connection, signed in separately, is left alone.
+    /// </summary>
     internal void SignedOut(Guid memberKey)
     {
         _signedOutUntil[memberKey] = Now + SignedOutMarkerLifetime.Ticks;
@@ -68,12 +89,20 @@ public sealed class MemberPresence
     }
 
     /// <summary>Forgets a member whose account has gone.</summary>
-    internal void Forget(Guid memberKey) => _members.TryRemove(memberKey, out _);
+    internal void Forget(Guid memberKey)
+    {
+        _members.TryRemove(memberKey, out _);
+        _mcp.Forget(memberKey);
+    }
 
-    internal int CountOnline() => Snapshot().Count;
+    /// <summary>How many members are online, on the website, MCP or both.</summary>
+    internal int CountOnline() => People().Count;
 
     /// <summary>Every online member's key, read once, e.g. to address a message to all of them.</summary>
-    internal IReadOnlyList<Guid> AllOnline() => Snapshot().Select(m => m.Key).ToList();
+    internal IReadOnlyList<Guid> AllOnline() => People().Select(m => m.Key).ToList();
+
+    /// <summary>Whether any member online is using MCP, so the table shows how each one is online.</summary>
+    internal bool AnyOnMcp() => _mcp.Snapshot().Any();
 
     /// <summary>
     /// One page of online members, newest arrivals first, and how many are online in total. Members whose account
@@ -83,8 +112,8 @@ public sealed class MemberPresence
     {
         while (true)
         {
-            List<(Guid Key, Visit Visit)> online = Snapshot();
-            List<(Guid Key, Visit Visit)> page = online.Skip(skip).Take(take).ToList();
+            List<OnlinePerson> online = People();
+            List<OnlinePerson> page = online.Skip(skip).Take(take).ToList();
             Dictionary<Guid, MemberDetails> found = (await _directory.GetAsync(page.Select(m => m.Key).ToList()))
                 .ToDictionary(m => m.Key);
 
@@ -101,7 +130,14 @@ public sealed class MemberPresence
                 {
                     MemberDetails details = found[m.Key];
                     return new OnlineMember(
-                        m.Key, details.Name, details.Email, details.MemberType, new DateTimeOffset(m.Visit.Last, TimeSpan.Zero));
+                        m.Key,
+                        details.Name,
+                        details.Email,
+                        details.MemberType,
+                        details.AvatarUrl,
+                        At(m.Last),
+                        m.SiteLast is { } website ? At(website) : null,
+                        m.McpLast is { } mcp ? At(mcp) : null);
                 })
                 .ToList();
 
@@ -109,11 +145,14 @@ public sealed class MemberPresence
         }
     }
 
-    /// <summary>Online members in arrival order, newest first. Members past the window are dropped as it goes.</summary>
-    private List<(Guid Key, Visit Visit)> Snapshot()
+    /// <summary>Every online member, on the website, MCP or both, in arrival order.</summary>
+    private List<OnlinePerson> People() => OnlinePerson.Merge(WebsiteSnapshot(), _mcp.Snapshot());
+
+    /// <summary>Members online on the website. Members past the window are dropped as it goes.</summary>
+    private List<(Guid Key, long First, long Last)> WebsiteSnapshot()
     {
         long cutoff = Now - Window.Ticks;
-        var online = new List<(Guid Key, Visit Visit)>(_members.Count);
+        var online = new List<(Guid Key, long First, long Last)>(_members.Count);
         foreach ((Guid key, Visit seen) in _members)
         {
             if (seen.Last < cutoff)
@@ -122,7 +161,7 @@ public sealed class MemberPresence
             }
             else
             {
-                online.Add((key, seen));
+                online.Add((key, seen.First, seen.Last));
             }
         }
 
@@ -134,36 +173,12 @@ public sealed class MemberPresence
             }
         }
 
-        online.Sort(static (a, b) => b.Visit.First != a.Visit.First ? b.Visit.First.CompareTo(a.Visit.First) : a.Key.CompareTo(b.Key));
         return online;
     }
 
-    /// <summary>
-    /// Members carry their key in the "sub" claim when it is there; otherwise the name identifier holds their key
-    /// or their numeric id, which is turned into the key.
-    /// </summary>
-    private Guid? ResolveKey(ClaimsPrincipal user)
-    {
-        if (user.Identity?.IsAuthenticated != true)
-        {
-            return null;
-        }
-
-        if (user.Identity.GetUserKey() is { } key)
-        {
-            return key;
-        }
-
-        string? id = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (Guid.TryParse(id, out Guid parsed))
-        {
-            return parsed;
-        }
-
-        return int.TryParse(id, out int memberId) ? _directory.FindKey(memberId) : null;
-    }
-
     private long Now => _timeProvider.GetUtcNow().UtcTicks;
+
+    private static DateTimeOffset At(long ticks) => new(ticks, TimeSpan.Zero);
 
     private TimeSpan Window
     {

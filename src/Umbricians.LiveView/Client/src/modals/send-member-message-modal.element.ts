@@ -4,6 +4,7 @@ import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
 import type { UUIBooleanInputEvent, UUIRadioGroupEvent, UUISelectEvent } from "@umbraco-cms/backoffice/external/uui";
 import { sendMemberMessage, type MemberAudience, type MessageColor } from "../api/live-view.resource.js";
 import { plural } from "../utils/format.js";
+import { LONGEST_MINUTES, formatAt, formatDuration, nextMidnight, timeZoneLabel } from "../utils/expiry.js";
 import type {
   UmbriciansSendMemberMessageModalData,
   UmbriciansSendMemberMessageModalValue,
@@ -16,11 +17,16 @@ const COLORS: Array<{ name: string; value: MessageColor }> = [
   { name: "Good news", value: "positive" },
 ];
 
-const LIFETIMES: Array<{ name: string; minutes: number }> = [
-  { name: "15 minutes", minutes: 15 },
-  { name: "1 hour", minutes: 60 },
-  { name: "24 hours", minutes: 60 * 24 },
-  { name: "7 days", minutes: 60 * 24 * 7 },
+/** A number of minutes, midnight tonight in the site's time zone, or hours and minutes typed in. */
+type Lifetime = number | "midnight" | "custom";
+
+const LIFETIMES: Array<{ name: string; value: Lifetime }> = [
+  { name: "15 minutes", value: 15 },
+  { name: "1 hour", value: 60 },
+  { name: "Midnight tonight", value: "midnight" },
+  { name: "24 hours", value: 60 * 24 },
+  { name: "7 days", value: 60 * 24 * 7 },
+  { name: "Custom…", value: "custom" },
 ];
 
 /**
@@ -37,10 +43,14 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
   @state() private _headline = "";
   @state() private _message = "";
   @state() private _color: MessageColor = "warning";
-  @state() private _lifetime = 60;
+  @state() private _lifetime: Lifetime = 60;
+  @state() private _customHours = 1;
+  @state() private _customMinutes = 0;
+  @state() private _now = Date.now();
   @state() private _sending = false;
 
   #notifications?: typeof UMB_NOTIFICATION_CONTEXT.TYPE;
+  #clock?: number;
 
   constructor() {
     super();
@@ -53,6 +63,26 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
     const selection = this.data?.selection;
     this._audience = selection?.allOnline ? "allOnline" : selection && selection.count > 0 ? "selected" : "allOnline";
     this._senders = new Set(this.data?.senders.map((s) => s.alias));
+    // Keeps "in 5 h 12 min" true while the dialog stays open.
+    this.#clock = window.setInterval(() => (this._now = Date.now()), 30_000);
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    window.clearInterval(this.#clock);
+  }
+
+  get #timeZone() {
+    return this.data?.timeZone ?? undefined;
+  }
+
+  /** When the message stops being shown, counted from `now`; undefined while the custom time is out of range. */
+  #expiresAt(now: number): Date | undefined {
+    if (this._lifetime === "midnight") return nextMidnight(new Date(now), this.#timeZone);
+    const minutes = this._lifetime === "custom" ? this._customHours * 60 + this._customMinutes : this._lifetime;
+    return Number.isInteger(minutes) && minutes >= 1 && minutes <= LONGEST_MINUTES
+      ? new Date(now + minutes * 60_000)
+      : undefined;
   }
 
   #recipientCount(audience: MemberAudience) {
@@ -67,7 +97,8 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
       !this._sending &&
       this._headline.trim().length > 0 &&
       this._senders.size > 0 &&
-      (this._audience === "allMembers" || this.#recipientCount(this._audience) > 0)
+      (this._audience === "allMembers" || this.#recipientCount(this._audience) > 0) &&
+      this.#expiresAt(this._now) !== undefined
     );
   }
 
@@ -80,7 +111,9 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
 
   async #send(event?: Event) {
     event?.preventDefault();
-    if (!this.#canSend || !this.data) return;
+    // Counted from the moment of sending, not when the dialog was last redrawn.
+    const expiresAt = this.#expiresAt(Date.now());
+    if (!this.#canSend || !this.data || !expiresAt) return;
 
     this._sending = true;
     try {
@@ -91,7 +124,7 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
         audience: this._audience,
         memberKeys: this._audience === "selected" ? this.data.selection.members.map((m) => m.key) : undefined,
         senders: [...this._senders],
-        expiresInMinutes: this._lifetime,
+        expiresAt: expiresAt.toISOString(),
       });
       this.updateValue(result);
       this._submitModal();
@@ -102,6 +135,18 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
     } finally {
       this._sending = false;
     }
+  }
+
+  #renderExpiry() {
+    const expiresAt = this.#expiresAt(this._now);
+    if (!expiresAt) {
+      return html`<p class="expiry invalid">Enter between 1 minute and ${LONGEST_MINUTES / 60 / 24} days.</p>`;
+    }
+    const timeZone = this.#timeZone;
+    return html`<p class="expiry muted">
+      Stops being shown ${formatAt(expiresAt, timeZone)} ${timeZoneLabel(timeZone)}
+      (in ${formatDuration(expiresAt.getTime() - this._now)}).
+    </p>`;
   }
 
   #renderAudience(audience: MemberAudience, label: string, hint: string) {
@@ -210,8 +255,34 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
               <uui-select
                 id="lifetime"
                 label="Relevant for"
-                .options=${LIFETIMES.map((l) => ({ name: l.name, value: String(l.minutes), selected: l.minutes === this._lifetime }))}
-                @change=${(e: UUISelectEvent) => (this._lifetime = Number(e.target.value))}></uui-select>
+                .options=${LIFETIMES.map((l) => ({ name: l.name, value: String(l.value), selected: l.value === this._lifetime }))}
+                @change=${(e: UUISelectEvent) => {
+                  const value = String(e.target.value);
+                  this._lifetime = value === "midnight" || value === "custom" ? value : Number(value);
+                }}></uui-select>
+              ${this._lifetime === "custom"
+                ? html`<div class="custom">
+                    <uui-input
+                      type="number"
+                      label="Hours"
+                      min="0"
+                      max=${LONGEST_MINUTES / 60}
+                      .value=${String(this._customHours)}
+                      @input=${(e: InputEvent) => (this._customHours = Number((e.target as HTMLInputElement).value))}>
+                      <span slot="append" class="unit">hours</span>
+                    </uui-input>
+                    <uui-input
+                      type="number"
+                      label="Minutes"
+                      min="0"
+                      max="59"
+                      .value=${String(this._customMinutes)}
+                      @input=${(e: InputEvent) => (this._customMinutes = Number((e.target as HTMLInputElement).value))}>
+                      <span slot="append" class="unit">minutes</span>
+                    </uui-input>
+                  </div>`
+                : nothing}
+              ${this.#renderExpiry()}
             </uui-form-layout-item>
           </form>
         </uui-box>
@@ -267,6 +338,29 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
     uui-select,
     uui-textarea {
       width: 100%;
+    }
+
+    .custom {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--uui-size-space-3);
+      margin-top: var(--uui-size-space-3);
+    }
+
+    .unit {
+      display: flex;
+      align-items: center;
+      padding: 0 var(--uui-size-space-3);
+      color: var(--uui-color-text-alt);
+    }
+
+    .expiry {
+      margin: var(--uui-size-space-2) 0 0;
+      font-size: var(--uui-type-small-size);
+    }
+
+    .expiry.invalid {
+      color: var(--uui-color-danger-standalone);
     }
   `;
 }

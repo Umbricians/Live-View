@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
@@ -33,11 +34,22 @@ public class LiveViewComposer : IComposer
             sp.GetRequiredService<TimeProvider>()));
         builder.AddNotificationHandler<UserDeletedNotification, BackofficeUserDeletedHandler>();
         builder.AddNotificationHandler<UserSavedNotification, BackofficeUserDisabledHandler>();
+        // A site's own avatar provider wins whichever composer runs first: TryAdd skips ours if it is already
+        // there, and a registration after ours is the one resolved.
+        builder.Services.TryAddSingleton<IMemberAvatarProvider, PropertyMemberAvatarProvider>();
         builder.Services.AddSingleton<IMemberDirectory, UmbracoMemberDirectory>();
         builder.Services.AddSingleton(sp => new MemberPresence(
             sp.GetRequiredService<IMemberDirectory>(),
             sp.GetRequiredService<IOptionsMonitor<LiveViewOptions>>(),
             sp.GetRequiredService<TimeProvider>()));
+        builder.Services.AddSingleton(sp => new McpCallers(
+            sp.GetRequiredService<BackofficePresence>(),
+            sp.GetRequiredService<MemberPresence>(),
+            sp.GetRequiredService<IBackofficeUserDirectory>(),
+            sp.GetRequiredService<IMemberDirectory>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILogger<McpCallers>>()));
+        builder.Services.AddSingleton<ILiveViewPresence>(sp => sp.GetRequiredService<McpCallers>());
         builder.AddNotificationHandler<MemberLogoutSuccessNotification, MemberLogoutHandler>();
         builder.AddNotificationHandler<MemberDeletedNotification, MemberDeletedHandler>();
         builder.Services.AddSingleton<BackofficeMessenger>();

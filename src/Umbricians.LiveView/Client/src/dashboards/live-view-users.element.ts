@@ -1,9 +1,12 @@
 import { LitElement, css, html, customElement, property, state, repeat, nothing } from "@umbraco-cms/backoffice/external/lit";
 import { UmbElementMixin } from "@umbraco-cms/backoffice/element-api";
 import { UmbChangeEvent } from "@umbraco-cms/backoffice/event";
+// Registers <umb-user-avatar>, so users look as they do in the Users section.
+import "@umbraco-cms/backoffice/user";
 import type { UUIBooleanInputEvent, UUIPaginationElement } from "@umbraco-cms/backoffice/external/uui";
 import { fetchOnlineUsers, type OnlineBackofficeUser } from "../api/live-view.resource.js";
 import { PAGE_SIZE, formatAgo, plural } from "../utils/format.js";
+import { renderOnlineVia } from "../utils/online-via.js";
 
 /** Who a message goes to: everyone online, or the users picked in the table. */
 export interface UserSelection {
@@ -29,6 +32,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
 
   @state() private _users: Array<OnlineBackofficeUser> = [];
   @state() private _total = 0;
+  @state() private _anyOnMcp = false;
   @state() private _recipients = 0;
   @state() private _page = 1;
   @state() private _selected = new Map<string, string>();
@@ -73,6 +77,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
       if (abort.signal.aborted) return;
       this._users = result.items;
       this._total = result.total;
+      this._anyOnMcp = result.anyOnMcp;
       this._recipients = result.recipients;
       this._now = Date.now();
       if (this._recipients === 0) this._allOnline = false;
@@ -89,12 +94,13 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
   }
 
   /** Users on this page who can be messaged: everyone but the current user. */
+  // Users only on MCP can't be messaged: a backoffice message is shown in a backoffice tab.
   get #selectableUsers() {
-    return this._users.filter((u) => !u.isCurrentUser);
+    return this._users.filter((u) => !u.isCurrentUser && u.backofficeLastSeen !== null);
   }
 
   #isSelected(user: OnlineBackofficeUser) {
-    return !user.isCurrentUser && (this._allOnline || this._selected.has(user.key));
+    return !user.isCurrentUser && user.backofficeLastSeen !== null && (this._allOnline || this._selected.has(user.key));
   }
 
   #toggle(user: OnlineBackofficeUser, checked: boolean) {
@@ -209,7 +215,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                     <uui-table-row>
                       ${this.selectable
                         ? html`<uui-table-cell class="select">
-                            ${u.isCurrentUser
+                            ${u.isCurrentUser || u.backofficeLastSeen === null
                               ? nothing
                               : html`<uui-checkbox
                                   label="Select ${u.name}"
@@ -221,7 +227,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                         : nothing}
                       <uui-table-cell>
                         <div class="user">
-                          <uui-avatar name=${u.name}></uui-avatar>
+                          <umb-user-avatar .name=${u.name} .imgUrls=${u.avatarUrls}></umb-user-avatar>
                           <div class="user-text">
                             <div class="user-name">
                               ${u.name}
@@ -230,20 +236,32 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                                     >You</uui-tag
                                   >`
                                 : nothing}
+                              ${renderOnlineVia(
+                                this._anyOnMcp,
+                                [
+                                  { label: "Backoffice", lastSeen: u.backofficeLastSeen },
+                                  { label: "MCP", lastSeen: u.mcpLastSeen },
+                                ],
+                                this._now,
+                              )}
                             </div>
                             ${u.email ? html`<div class="muted user-email">${u.email}</div>` : nothing}
                           </div>
                         </div>
                       </uui-table-cell>
-                      <uui-table-cell class="tabs" title=${`${plural(u.openTabs, "backoffice tab", "backoffice tabs")} open`}>
-                        <span class="tab-count">${u.openTabs}</span>
+                      <uui-table-cell
+                        class="tabs"
+                        title=${u.backofficeLastSeen === null ? "Only on MCP" : `${plural(u.openTabs, "backoffice tab", "backoffice tabs")} open`}>
+                        ${u.backofficeLastSeen === null
+                          ? html`<span class="muted">–</span>`
+                          : html`<span class="tab-count">${u.openTabs}</span>`}
                       </uui-table-cell>
                       <uui-table-cell class="last-seen" title=${new Date(u.lastSeen).toLocaleString()}>
                         ${formatAgo(this._now - Date.parse(u.lastSeen))}
                       </uui-table-cell>
                       ${this.selectable
                         ? html`<uui-table-cell class="delivery">
-                        ${u.isCurrentUser
+                        ${u.isCurrentUser || u.backofficeLastSeen === null
                           ? nothing
                           : u.isConnected
                           ? html`<uui-tag color="positive" look="secondary" title="Receives messages instantly"
@@ -358,7 +376,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
       font-size: var(--uui-type-small-size);
     }
 
-    uui-avatar {
+    umb-user-avatar {
       flex: none;
       font-size: 11px;
       width: 28px;
