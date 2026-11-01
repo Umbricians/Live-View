@@ -74,11 +74,20 @@ off, and every line is back on the next time you open the dashboard.
 | **MCP sessions** | clients of an MCP endpoint hosted by the site (`/mcp`, `/umbraco/mcp`) | an `Mcp-Session-Id`, or the caller's token or IP address |
 | **API sessions** | callers of `/api` and the Delivery API | an `Api-Key` header, or the caller's token or IP address, seen in the last 60 seconds |
 
-Below the chart, **Backoffice users online** and **Members online** list who is online right now, 25 per page.
-Someone using an MCP endpoint the site hosts, signed in as a backoffice user or member, is listed in the matching
-table too. While anyone in a table is on MCP, each row is tagged with how that person is online.
-Backoffice users are shown with the avatar they set in Umbraco. Members are shown with their initials, or with a
-picture if you name a member image property in `MemberAvatarProperty` (see below).
+Below the chart, **Backoffice users online** and **Members online** list who is online right now, one row per person,
+25 per page.
+
+- **Pictures.** Backoffice users are shown with the avatar they set in Umbraco. Members are shown with their initials,
+  or with a picture if you name a member image property in `MemberAvatarProperty` (see below) or plug in your own
+  [avatar provider](../README.md#5-member-avatars).
+- **How they are online.** Someone using an MCP endpoint the site hosts, signed in as a backoffice user or member, is
+  listed in the matching table too, still on one row. While anyone in a table is on MCP, every row in it is tagged:
+  **Website** or **MCP** for members, **Backoffice** or **MCP** for users, or both. Hover over a tag to see when they
+  were last seen that way. While nobody is on MCP, there are no tags.
+- **Users only on MCP** show "–" for open tabs and can't be selected for a message, since a backoffice message is
+  shown in a backoffice tab.
+
+![The Members online table: members with pictures or initials, tagged Website, MCP or both](images/live-view-members-online.png)
 
 Crawlers, static files (CSS, JavaScript, images and so on) and the backoffice's own requests are not counted as web
 sessions.
@@ -118,7 +127,7 @@ endpoint, keyed on a client id header.
 | `IgnoreBots` | `true` | Ignores requests whose User-Agent looks like a crawler. |
 | `MaxSessionsPerChannel` | `100000` | A safety limit on sessions held in memory per line. |
 | `MemberAvatarProperty` | none | The alias of a member image property (media picker, image cropper or upload) to show as each member's picture. For other sources, see [Member avatars](../README.md#5-member-avatars). |
-| `MessageTimeZone` | the sender's own | The time zone "midnight tonight" means when messaging members, as an IANA id such as `America/Denver`. |
+| `MessageTimeZone` | the sender's own | The time zone "midnight tonight" means when messaging members, as an IANA id such as `America/Denver` (a Windows id works too). |
 
 Each channel under `Channels` can set `Enabled`, `Name`, `Color`, `SortOrder`, `PathPrefixes`,
 `ExcludePathPrefixes`, `SessionKeys` (`Header:<name>`, `Cookie:<name>`, `Authorization`, `User` or `Client`),
