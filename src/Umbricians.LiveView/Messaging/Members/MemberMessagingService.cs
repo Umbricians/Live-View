@@ -4,7 +4,7 @@ using Umbricians.LiveView.Presence;
 
 namespace Umbricians.LiveView.Messaging.Members;
 
-public sealed record MemberMessageRequest(
+internal sealed record MemberMessageRequest(
     string Headline,
     string Body,
     MemberMessageType Type,
@@ -13,14 +13,14 @@ public sealed record MemberMessageRequest(
     IReadOnlyCollection<string> SenderAliases,
     DateTimeOffset ExpiresAt);
 
-public sealed record MemberMessageSenderResult(string Alias, string Name, int? Delivered, string? Note, string? Error);
+internal sealed record MemberMessageSenderResult(string Alias, string Name, int? Delivered, string? Note, string? Error);
 
-public sealed record MemberMessageSendResult(Guid Key, MemberMessageAudience Audience, int? Recipients, IReadOnlyList<MemberMessageSenderResult> Results);
+internal sealed record MemberMessageSendResult(Guid Key, MemberMessageAudience Audience, int? Recipients, IReadOnlyList<MemberMessageSenderResult> Results);
 
 /// <summary>
 /// Works out who a member message is for, then hands it to each chosen <see cref="IMemberMessageSender"/>.
 /// </summary>
-public sealed class MemberMessagingService
+internal sealed class MemberMessagingService
 {
     private static readonly TimeSpan SenderTimeout = TimeSpan.FromSeconds(30);
 

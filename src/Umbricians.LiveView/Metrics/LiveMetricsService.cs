@@ -6,12 +6,12 @@ using Umbricians.LiveView.Tracking;
 
 namespace Umbricians.LiveView.Metrics;
 
-public sealed record LiveMetricReading(string Alias, string Name, string? Color, double? Value, string? Error);
+internal sealed record LiveMetricReading(string Alias, string Name, string? Color, double? Value, string? Error);
 
 /// <summary>
 /// Takes a snapshot of every enabled tracked channel and registered <see cref="ILiveMetricProvider"/>.
 /// </summary>
-public sealed class LiveMetricsService
+internal sealed class LiveMetricsService
 {
     private static readonly TimeSpan ProviderTimeout = TimeSpan.FromSeconds(2);
 

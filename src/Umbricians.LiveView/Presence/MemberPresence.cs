@@ -27,7 +27,7 @@ internal sealed record OnlineMember(
 /// Members are always held by their key, with one row each however they are online (the website, MCP, or both).
 /// Rows are listed in arrival order, newest first, so they don't jump between pages as members keep browsing.
 /// </remarks>
-public sealed class MemberPresence
+internal sealed class MemberPresence
 {
     /// <summary>
     /// How long "seen" is ignored after a member signs out. The sign-out request itself is still made as the member,

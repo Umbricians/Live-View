@@ -8,6 +8,7 @@ using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Core.Notifications;
 using Umbraco.Cms.Web.Common.ApplicationBuilder;
 using Umbricians.LiveView.Configuration;
+using Umbricians.LiveView.Controllers;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Metrics;
@@ -23,6 +24,8 @@ public class LiveViewComposer : IComposer
         builder.Services.AddOptions<LiveViewOptions>().Bind(builder.Config.GetSection(Constants.ConfigurationSection));
         LiveViewOptionsDefaults.AddTo(builder.Services);
 
+        builder.Services.AddMvcCore().ConfigureApplicationPartManager(parts =>
+            parts.FeatureProviders.Add(new LiveViewControllerFeatureProvider()));
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<ILiveActivityTracker, LiveActivityTracker>();
         builder.Services.AddSingleton<RequestClassifier>();

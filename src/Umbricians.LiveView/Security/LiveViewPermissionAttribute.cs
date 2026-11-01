@@ -11,7 +11,7 @@ namespace Umbricians.LiveView.Security;
 /// Apply alongside the controller's authorization policy, which signs the user in.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
-public sealed class LiveViewPermissionAttribute : TypeFilterAttribute
+internal sealed class LiveViewPermissionAttribute : TypeFilterAttribute
 {
     /// <param name="permission">One of <see cref="Constants.Permissions"/>.</param>
     public LiveViewPermissionAttribute(string permission)

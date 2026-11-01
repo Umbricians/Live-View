@@ -22,7 +22,7 @@ namespace Umbricians.LiveView.Controllers;
 [Authorize(Policy = AuthorizationPolicies.SectionAccessSettings)]
 [LiveViewPermission(Constants.Permissions.View)]
 [JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
-public class LiveViewApiController : ControllerBase
+internal class LiveViewApiController : ControllerBase
 {
     private const int MaxPageSize = 100;
 
@@ -133,14 +133,14 @@ public class LiveViewApiController : ControllerBase
     }
 }
 
-public class LiveViewSnapshotResponseModel
+internal class LiveViewSnapshotResponseModel
 {
     public required DateTimeOffset Timestamp { get; init; }
 
     public required IReadOnlyList<LiveMetricReading> Metrics { get; init; }
 }
 
-public class OnlineBackofficeUsersResponseModel : PagedViewModel<OnlineBackofficeUserResponseModel>
+internal class OnlineBackofficeUsersResponseModel : PagedViewModel<OnlineBackofficeUserResponseModel>
 {
     /// <summary>Whether anyone online is using MCP; only then does each row need to say how its user is online.</summary>
     public required bool AnyOnMcp { get; init; }
@@ -149,7 +149,7 @@ public class OnlineBackofficeUsersResponseModel : PagedViewModel<OnlineBackoffic
     public required long Recipients { get; init; }
 }
 
-public class OnlineBackofficeUserResponseModel
+internal class OnlineBackofficeUserResponseModel
 {
     public required Guid Key { get; init; }
 
@@ -177,13 +177,13 @@ public class OnlineBackofficeUserResponseModel
     public DateTimeOffset? McpLastSeen { get; init; }
 }
 
-public class OnlineMembersResponseModel : PagedViewModel<OnlineMemberResponseModel>
+internal class OnlineMembersResponseModel : PagedViewModel<OnlineMemberResponseModel>
 {
     /// <summary>Whether anyone online is using MCP; only then does each row need to say how its member is online.</summary>
     public required bool AnyOnMcp { get; init; }
 }
 
-public class OnlineMemberResponseModel
+internal class OnlineMemberResponseModel
 {
     public required Guid Key { get; init; }
 
@@ -205,7 +205,7 @@ public class OnlineMemberResponseModel
     public DateTimeOffset? McpLastSeen { get; init; }
 }
 
-public class SendBackofficeMessageRequestModel
+internal class SendBackofficeMessageRequestModel
 {
     public string? Headline { get; init; }
 
@@ -220,7 +220,7 @@ public class SendBackofficeMessageRequestModel
     public bool AllOnline { get; init; }
 }
 
-public class SendBackofficeMessageResponseModel
+internal class SendBackofficeMessageResponseModel
 {
     public required Guid Key { get; init; }
 
