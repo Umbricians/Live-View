@@ -98,17 +98,7 @@ internal sealed class McpConnections
 
     private long Now => _timeProvider.GetUtcNow().UtcTicks;
 
-    private TimeSpan Window
-    {
-        get
-        {
-            LiveViewOptions options = _options.CurrentValue;
-            int? channelWindow = options.Channels.TryGetValue(Constants.Channels.Mcp, out LiveViewChannelOptions? channel)
-                ? channel.ActivityWindowSeconds
-                : null;
-            return TimeSpan.FromSeconds(channelWindow ?? options.ActivityWindowSeconds);
-        }
-    }
+    private TimeSpan Window => ChannelSettings.Of(_options.CurrentValue, Constants.Channels.Mcp).ActivityWindow;
 
     /// <summary>When the caller first came online on MCP, when last seen there, and how many MCP requests are open.</summary>
     private sealed record Visit(long First, long Last, int Open);

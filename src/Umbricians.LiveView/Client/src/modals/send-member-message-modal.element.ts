@@ -122,7 +122,7 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
         message: this._message.trim(),
         color: this._color,
         audience: this._audience,
-        memberKeys: this._audience === "selected" ? this.data.selection.members.map((m) => m.key) : undefined,
+        memberKeys: this._audience === "selected" ? this.data.selection.people.map((m) => m.key) : undefined,
         senders: [...this._senders],
         expiresAt: expiresAt.toISOString(),
       });

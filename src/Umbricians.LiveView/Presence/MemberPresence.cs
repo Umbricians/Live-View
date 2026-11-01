@@ -180,17 +180,7 @@ internal sealed class MemberPresence
 
     private static DateTimeOffset At(long ticks) => new(ticks, TimeSpan.Zero);
 
-    private TimeSpan Window
-    {
-        get
-        {
-            LiveViewOptions options = _options.CurrentValue;
-            int? channelWindow = options.Channels.TryGetValue(Constants.Channels.Members, out LiveViewChannelOptions? channel)
-                ? channel.ActivityWindowSeconds
-                : null;
-            return TimeSpan.FromSeconds(channelWindow ?? options.ActivityWindowSeconds);
-        }
-    }
+    private TimeSpan Window => ChannelSettings.Of(_options.CurrentValue, Constants.Channels.Members).ActivityWindow;
 
     private sealed record Visit(long First, long Last);
 }

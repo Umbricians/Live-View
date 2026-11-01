@@ -75,6 +75,7 @@ jobs:
         working-directory: ${{ env.CLIENT_DIR }}
         run: |
           npm ci
+          npm test
           npm run build
 
       # Builds the demo site too, so changes that break integration fail here.

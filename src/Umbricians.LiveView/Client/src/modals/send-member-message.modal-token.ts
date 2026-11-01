@@ -1,10 +1,10 @@
 import { UmbModalToken } from "@umbraco-cms/backoffice/modal";
 import type { MemberMessageSendResult, MemberMessageSender } from "../api/live-view.resource.js";
-import type { MemberSelection } from "../dashboards/live-view-members.element.js";
+import type { SelectionSummary } from "../dashboards/online-selection.js";
 
 export interface UmbriciansSendMemberMessageModalData {
   /** The members picked in the table, if any. */
-  selection: MemberSelection;
+  selection: SelectionSummary;
   onlineCount: number;
   totalMembers: number;
   senders: Array<MemberMessageSender>;

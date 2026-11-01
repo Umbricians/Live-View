@@ -1,23 +1,24 @@
-import { LitElement, css, html, customElement, property, state, repeat, nothing } from "@umbraco-cms/backoffice/external/lit";
+import { LitElement, css, html, customElement, property, repeat, nothing } from "@umbraco-cms/backoffice/external/lit";
 import { UmbElementMixin } from "@umbraco-cms/backoffice/element-api";
-import { UmbChangeEvent } from "@umbraco-cms/backoffice/event";
-import type { UUIBooleanInputEvent, UUIPaginationElement } from "@umbraco-cms/backoffice/external/uui";
 import { fetchOnlineMembers, type OnlineMember } from "../api/live-view.resource.js";
-import { PAGE_SIZE, formatAgo, plural } from "../utils/format.js";
+import { formatAgo } from "../utils/format.js";
 import { renderOnlineVia } from "../utils/online-via.js";
-
-/** Which members a message goes to: everyone online, or the members picked in the table. */
-export interface MemberSelection {
-  allOnline: boolean;
-  count: number;
-  members: Array<{ key: string; name: string }>;
-}
+import {
+  OnlineList,
+  onlineListStyles,
+  renderPageCheckbox,
+  renderPagination,
+  renderRowCheckbox,
+  renderSelectAllButton,
+  renderSelectionBar,
+} from "./online-list.js";
+import type { SelectionSummary } from "./online-selection.js";
 
 /**
  * Lists members online, on the website or MCP, one page at a time, newest arrivals first. When anyone is on MCP,
  * each row says how its member is online. When the site has member message senders, members can be selected, across
  * pages or all at once, and the dashboard sends to them.
- * Fires a change event whenever the selection changes.
+ * Fires a change event whenever who the selection reaches changes.
  */
 @customElement("umbricians-live-view-members")
 export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement) {
@@ -28,183 +29,56 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
   /** Shows the selection checkboxes; only useful when the site can deliver member messages. */
   @property({ type: Boolean }) selectable = false;
 
-  @state() private _members: Array<OnlineMember> = [];
-  @state() private _total = 0;
-  @state() private _anyOnMcp = false;
-  @state() private _page = 1;
-  @state() private _selected = new Map<string, string>();
-  @state() private _allOnline = false;
-  @state() private _now = Date.now();
+  // Every member online can be messaged.
+  #list = new OnlineList<OnlineMember>(this, async (skip, take, signal) => {
+    const page = await fetchOnlineMembers(skip, take, signal);
+    return { ...page, recipients: page.total };
+  });
 
-  #timer?: number;
-  #abort?: AbortController;
-
-  get selection(): MemberSelection {
-    return this._allOnline
-      ? { allOnline: true, count: this._total, members: [] }
-      : {
-          allOnline: false,
-          count: this._selected.size,
-          members: [...this._selected].map(([key, name]) => ({ key, name })),
-        };
+  get selection(): SelectionSummary {
+    return this.#list.summary;
   }
 
   /** How many members are online right now. */
   get onlineCount() {
-    return this._total;
-  }
-
-  override disconnectedCallback() {
-    super.disconnectedCallback();
-    window.clearTimeout(this.#timer);
-    this.#abort?.abort();
-  }
-
-  override updated(changed: Map<string, unknown>) {
-    if (changed.has("paused") || changed.has("interval") || changed.has("_page")) this.#refresh();
-    if (changed.has("_selected") || changed.has("_allOnline") || changed.has("_total")) {
-      this.dispatchEvent(new UmbChangeEvent());
-    }
+    return this.#list.total;
   }
 
   /** Clears the selection, e.g. after a message has been sent. */
   clearSelection() {
-    this._allOnline = false;
-    this._selected = new Map();
+    this.#list.clearSelection();
   }
 
-  /** Each call supersedes the last: an older response is dropped and only one timer is ever pending. */
-  async #refresh() {
-    window.clearTimeout(this.#timer);
-    this.#abort?.abort();
-    if (this.paused || !this.isConnected) return;
-
-    const abort = (this.#abort = new AbortController());
-    try {
-      const result = await fetchOnlineMembers((this._page - 1) * PAGE_SIZE, PAGE_SIZE, abort.signal);
-      if (abort.signal.aborted) return;
-      this._members = result.items;
-      this._total = result.total;
-      this._anyOnMcp = result.anyOnMcp;
-      this._now = Date.now();
-      if (this._total === 0) this._allOnline = false;
-
-      const pages = Math.max(1, Math.ceil(this._total / PAGE_SIZE));
-      if (this._page > pages) this._page = pages;
-    } catch {
-      if (abort.signal.aborted) return;
-      // The chart shows connection errors; keep the last list.
-    }
-
-    this.#timer = window.setTimeout(() => this.#refresh(), this.interval * 1000);
-  }
-
-  #isSelected(key: string) {
-    return this._allOnline || this._selected.has(key);
-  }
-
-  #toggle(member: OnlineMember, checked: boolean) {
-    // Unticking someone while "all online" is on turns it into an explicit pick of this page minus them.
-    const selected = this._allOnline ? new Map(this._members.map((m) => [m.key, m.name])) : new Map(this._selected);
-    this._allOnline = false;
-    if (checked) selected.set(member.key, member.name);
-    else selected.delete(member.key);
-    this._selected = selected;
-  }
-
-  #togglePage(checked: boolean) {
-    const selected = new Map(this._selected);
-    for (const member of this._members) {
-      if (checked) selected.set(member.key, member.name);
-      else selected.delete(member.key);
-    }
-    this._allOnline = false;
-    this._selected = selected;
-  }
-
-  #selectAllOnline = () => {
-    this._allOnline = true;
-  };
-
-  #clearSelection = () => this.clearSelection();
-
-  #renderSelectionBar() {
-    const pageSelected = this._members.length > 0 && this._members.every((m) => this.#isSelected(m.key));
-
-    if (this._allOnline) {
-      return html`<div class="selection-bar">
-        All ${plural(this._total, "online member is", "online members are")} selected.
-        <uui-button look="placeholder" compact label="Clear selection" @click=${this.#clearSelection}></uui-button>
-      </div>`;
-    }
-    if (pageSelected && this._total > this._members.length) {
-      return html`<div class="selection-bar">
-        All ${plural(this._members.length, "member", "members")} on this page selected.
-        <uui-button
-          look="placeholder"
-          compact
-          label=${`Select all ${this._total} online`}
-          @click=${this.#selectAllOnline}></uui-button>
-      </div>`;
-    }
-    return nothing;
+  override updated(changed: Map<string, unknown>) {
+    if (changed.has("paused") || changed.has("interval")) this.#list.refresh();
   }
 
   override render() {
-    const pages = Math.ceil(this._total / PAGE_SIZE);
-    const pageSelected = this._members.length > 0 && this._members.every((m) => this.#isSelected(m.key));
-    const someOnPage = !pageSelected && this._members.some((m) => this.#isSelected(m.key));
-
+    const list = this.#list;
     return html`
       <uui-box headline="Members online">
         <div slot="header-actions" class="header-actions">
-          <span class="muted">${this._total} online</span>
-          ${this.selectable && this._total > 0
-            ? html`<uui-button
-                look="secondary"
-                compact
-                label=${this._allOnline ? "Clear selection" : `Select all ${this._total} online`}
-                @click=${this._allOnline ? this.#clearSelection : this.#selectAllOnline}></uui-button>`
-            : nothing}
+          <span class="muted">${list.total} online</span>
+          ${this.selectable ? renderSelectAllButton(list) : nothing}
         </div>
 
-        ${this._total === 0
+        ${list.total === 0
           ? html`<p class="muted">No members are online right now.</p>`
           : html`
-              ${this.selectable ? this.#renderSelectionBar() : nothing}
+              ${this.selectable ? renderSelectionBar(list, { one: "member", many: "members" }) : nothing}
               <uui-table aria-label="Members online">
                 <uui-table-head>
-                  ${this.selectable
-                    ? html`<uui-table-head-cell class="select">
-                        <!-- An empty slotted span replaces the visible label; the label attribute still names it. -->
-                        <uui-checkbox
-                          label="Select everyone on this page"
-                          .checked=${pageSelected}
-                          .indeterminate=${someOnPage}
-                          @change=${(e: UUIBooleanInputEvent) => this.#togglePage(e.target.checked)}
-                          ><span></span
-                        ></uui-checkbox>
-                      </uui-table-head-cell>`
-                    : nothing}
+                  ${this.selectable ? renderPageCheckbox(list) : nothing}
                   <uui-table-head-cell>Name</uui-table-head-cell>
                   <uui-table-head-cell class="type">Member type</uui-table-head-cell>
                   <uui-table-head-cell class="last-seen">Last active</uui-table-head-cell>
                 </uui-table-head>
                 ${repeat(
-                  this._members,
+                  list.items,
                   (m) => m.key,
                   (m) => html`
                     <uui-table-row>
-                      ${this.selectable
-                        ? html`<uui-table-cell class="select">
-                            <uui-checkbox
-                              label="Select ${m.name}"
-                              .checked=${this.#isSelected(m.key)}
-                              @change=${(e: UUIBooleanInputEvent) => this.#toggle(m, e.target.checked)}
-                              ><span></span
-                            ></uui-checkbox>
-                          </uui-table-cell>`
-                        : nothing}
+                      ${this.selectable ? renderRowCheckbox(list, m) : nothing}
                       <uui-table-cell>
                         <div class="member">
                           <uui-avatar name=${m.name} img-src=${m.avatarUrl ?? nothing}></uui-avatar>
@@ -212,12 +86,12 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
                             <div class="member-name">
                               ${m.name}
                               ${renderOnlineVia(
-                                this._anyOnMcp,
+                                list.anyOnMcp,
                                 [
                                   { label: "Website", lastSeen: m.websiteLastSeen },
                                   { label: "MCP", lastSeen: m.mcpLastSeen },
                                 ],
-                                this._now,
+                                list.now,
                               )}
                             </div>
                             ${m.email ? html`<div class="muted member-email">${m.email}</div>` : nothing}
@@ -226,115 +100,67 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
                       </uui-table-cell>
                       <uui-table-cell class="type">${m.memberType ?? ""}</uui-table-cell>
                       <uui-table-cell class="last-seen" title=${new Date(m.lastSeen).toLocaleString()}>
-                        ${formatAgo(this._now - Date.parse(m.lastSeen))}
+                        ${formatAgo(list.now - Date.parse(m.lastSeen))}
                       </uui-table-cell>
                     </uui-table-row>
                   `,
                 )}
               </uui-table>
-              ${pages > 1
-                ? html`<uui-pagination
-                    label="Members pages"
-                    .total=${pages}
-                    .current=${this._page}
-                    @change=${(e: Event) => (this._page = (e.target as UUIPaginationElement).current)}></uui-pagination>`
-                : nothing}
+              ${renderPagination(list, "Members pages")}
             `}
       </uui-box>
     `;
   }
 
-  static override styles = css`
-    :host {
-      display: block;
-      min-width: 0;
-      container-type: inline-size;
-    }
-
-    .muted {
-      color: var(--uui-color-text-alt);
-    }
-
-    p.muted {
-      margin: 0;
-    }
-
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: var(--uui-size-space-3);
-    }
-
-    .selection-bar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-      gap: var(--uui-size-space-2);
-      padding: var(--uui-size-space-2) var(--uui-size-space-4);
-      margin-bottom: var(--uui-size-space-3);
-      background: var(--uui-color-surface-alt);
-      border-radius: var(--uui-border-radius);
-    }
-
-    uui-pagination {
-      display: block;
-      margin-top: var(--uui-size-space-4);
-    }
-
-    .select {
-      width: 40px;
-    }
-
-    .type {
-      width: 160px;
-    }
-
-    .last-seen {
-      width: 110px;
-    }
-
-    .member {
-      display: flex;
-      align-items: center;
-      gap: var(--uui-size-space-3);
-      min-width: 0;
-    }
-
-    .member-text {
-      min-width: 0;
-    }
-
-    .member-name {
-      display: flex;
-      align-items: center;
-      gap: var(--uui-size-space-2);
-    }
-
-    .member-name,
-    .member-email {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .member-email {
-      font-size: var(--uui-type-small-size);
-    }
-
-    uui-avatar {
-      flex: none;
-      font-size: 11px;
-      width: 28px;
-      height: 28px;
-    }
-
-    @container (max-width: 480px) {
+  static override styles = [
+    onlineListStyles,
+    css`
       .type {
-        display: none;
+        width: 160px;
       }
-    }
-  `;
+
+      .member {
+        display: flex;
+        align-items: center;
+        gap: var(--uui-size-space-3);
+        min-width: 0;
+      }
+
+      .member-text {
+        min-width: 0;
+      }
+
+      .member-name {
+        display: flex;
+        align-items: center;
+        gap: var(--uui-size-space-2);
+      }
+
+      .member-name,
+      .member-email {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .member-email {
+        font-size: var(--uui-type-small-size);
+      }
+
+      uui-avatar {
+        flex: none;
+        font-size: 11px;
+        width: 28px;
+        height: 28px;
+      }
+
+      @container (max-width: 480px) {
+        .type {
+          display: none;
+        }
+      }
+    `,
+  ];
 }
 
 export default UmbriciansLiveViewMembersElement;

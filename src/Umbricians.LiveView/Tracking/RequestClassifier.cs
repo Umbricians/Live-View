@@ -67,34 +67,29 @@ internal sealed partial class RequestClassifier
     private static IEnumerable<(string Channel, string[] Sources)> Match(string path, LiveViewOptions options)
     {
         bool isStaticFile = IsStaticFile(path, options.StaticFileExtensions);
-        foreach ((string alias, LiveViewChannelOptions channelOptions) in options.Channels.OrderBy(c => c.Value.SortOrder ?? 0))
+        foreach (ChannelSettings channel in ChannelSettings.InOrder(options))
         {
-            if (!channelOptions.Enabled
-                || !MatchesAny(path, channelOptions.PathPrefixes)
-                || MatchesAny(path, channelOptions.ExcludePathPrefixes))
+            if (!channel.Enabled
+                || !MatchesAny(path, channel.PathPrefixes)
+                || MatchesAny(path, channel.ExcludePathPrefixes))
             {
                 continue;
             }
 
-            if (!(channelOptions.IgnoreStaticFiles == true && isStaticFile))
+            if (!(channel.IgnoreStaticFiles && isStaticFile))
             {
-                yield return (alias, channelOptions.SessionKeys ?? [Constants.SessionKeySources.Client]);
+                yield return (channel.Alias, channel.SessionKeys);
             }
 
-            if (channelOptions.Exclusive ?? true)
+            if (channel.Exclusive)
             {
                 yield break;
             }
         }
     }
 
-    private static bool MatchesAny(string path, string[]? prefixes)
+    private static bool MatchesAny(string path, string[] prefixes)
     {
-        if (prefixes is null)
-        {
-            return false;
-        }
-
         foreach (string prefix in prefixes)
         {
             string trimmed = prefix.TrimEnd('/');

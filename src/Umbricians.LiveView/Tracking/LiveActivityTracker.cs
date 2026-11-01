@@ -61,14 +61,8 @@ internal sealed class LiveActivityTracker : ILiveActivityTracker
 
     private long Now => _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
 
-    private long WindowFor(string channel)
-    {
-        LiveViewOptions options = _options.CurrentValue;
-        int seconds = options.Channels.TryGetValue(channel, out LiveViewChannelOptions? channelOptions)
-            ? channelOptions.ActivityWindowSeconds ?? options.ActivityWindowSeconds
-            : options.ActivityWindowSeconds;
-        return seconds * 1000L;
-    }
+    private long WindowFor(string channel) =>
+        (long)ChannelSettings.Of(_options.CurrentValue, channel).ActivityWindow.TotalMilliseconds;
 
     private bool TryGetSession(string channel, string sessionKey, [NotNullWhen(true)] out Session? session)
     {
