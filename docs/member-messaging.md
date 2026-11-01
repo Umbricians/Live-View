@@ -449,7 +449,7 @@ Register senders with `builder.AddMemberMessageSender<T>()`. They are singletons
 | `MemberKeys` | The recipients' member keys, for `Selected` and `AllOnline`. Empty for `AllMembers`. |
 | `SenderName` | The backoffice user who sent it. |
 | `SentAt` | When it was sent. |
-| `ExpiresAt` | When it stops being relevant (15 minutes to 7 days, chosen on the dashboard). Don't show it after this. |
+| `ExpiresAt` | When it stops being relevant (up to 30 days away, chosen on the dashboard: a duration or midnight tonight). Don't show it after this. |
 
 ### `MemberMessageAudience`
 

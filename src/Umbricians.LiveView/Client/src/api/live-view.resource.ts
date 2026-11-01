@@ -17,10 +17,16 @@ export interface OnlineBackofficeUser {
   key: string;
   name: string;
   email: string | null;
+  /** The user's avatar in Umbraco's sizes, smallest first; empty when they have not set one. */
+  avatarUrls: Array<string>;
   lastSeen: string;
   openTabs: number;
   isConnected: boolean;
   isCurrentUser: boolean;
+  /** When the user was last seen in the backoffice, or null when they are only on MCP. */
+  backofficeLastSeen: string | null;
+  /** When the user last used MCP, or null when they are not on it. */
+  mcpLastSeen: string | null;
 }
 
 export interface OnlineMember {
@@ -28,7 +34,13 @@ export interface OnlineMember {
   name: string;
   email: string | null;
   memberType: string | null;
+  /** The member's picture from the site's avatar provider, or null to show their initials. */
+  avatarUrl: string | null;
   lastSeen: string;
+  /** When the member was last seen on the website, or null when they are only on MCP. */
+  websiteLastSeen: string | null;
+  /** When the member last used MCP, or null when they are not on it. */
+  mcpLastSeen: string | null;
 }
 
 /** Matches Umbraco's PagedViewModel. */
@@ -37,7 +49,14 @@ export interface PagedResult<T> {
   items: Array<T>;
 }
 
+export interface OnlineMembers extends PagedResult<OnlineMember> {
+  /** Whether anyone online is using MCP; only then do rows say how each member is online. */
+  anyOnMcp: boolean;
+}
+
 export interface OnlineBackofficeUsers extends PagedResult<OnlineBackofficeUser> {
+  /** Whether anyone online is using MCP; only then do rows say how each user is online. */
+  anyOnMcp: boolean;
   /** How many users a message to everyone online reaches: everyone online except the current user. */
   recipients: number;
 }
@@ -69,6 +88,8 @@ async function request<T>(
     url: BASE_URL + path,
     // Tells the client to apply the backoffice authentication to this call.
     security: [{ type: "http", scheme: "bearer" }],
+    // The client throws the error body as it is by default; returning it lets every failure become an Error below.
+    throwOnError: false,
     ...options,
   });
 
@@ -86,7 +107,7 @@ export const fetchOnlineUsers = (skip: number, take: number, signal?: AbortSigna
   request<OnlineBackofficeUsers>("GET", `backoffice-users?skip=${skip}&take=${take}`, { signal });
 
 export const fetchOnlineMembers = (skip: number, take: number, signal?: AbortSignal) =>
-  request<PagedResult<OnlineMember>>("GET", `members?skip=${skip}&take=${take}`, { signal });
+  request<OnlineMembers>("GET", `members?skip=${skip}&take=${take}`, { signal });
 
 /** Sends to the given users, or to everyone online when `allOnline` is set. */
 export const sendMessage = (body: {
@@ -107,6 +128,8 @@ export interface MemberMessageSender {
 export interface MemberMessaging {
   senders: Array<MemberMessageSender>;
   totalMembers: number;
+  /** The IANA time zone "midnight tonight" is worked out in, or null for the sender's own. */
+  timeZone: string | null;
 }
 
 export type MemberAudience = "selected" | "allOnline" | "allMembers";
@@ -127,7 +150,8 @@ export const sendMemberMessage = (body: {
   audience: MemberAudience;
   memberKeys?: Array<string>;
   senders: Array<string>;
-  expiresInMinutes: number;
+  /** When the message stops being relevant, as an ISO date: in the future, and no more than 30 days away. */
+  expiresAt: string;
 }) => request<MemberMessageSendResult>("POST", "member-messages", { body });
 
 export const heartbeat = (tabId: string) =>

@@ -11,7 +11,7 @@ public sealed record MemberMessageRequest(
     MemberMessageAudience Audience,
     IReadOnlyCollection<Guid> SelectedMemberKeys,
     IReadOnlyCollection<string> SenderAliases,
-    TimeSpan Lifetime);
+    DateTimeOffset ExpiresAt);
 
 public sealed record MemberMessageSenderResult(string Alias, string Name, int? Delivered, string? Note, string? Error);
 
@@ -57,7 +57,6 @@ public sealed class MemberMessagingService
             _ => [],
         };
 
-        DateTimeOffset now = _timeProvider.GetUtcNow();
         var message = new MemberMessage(
             Guid.NewGuid(),
             request.Headline,
@@ -66,8 +65,8 @@ public sealed class MemberMessagingService
             request.Audience,
             memberKeys,
             senderName,
-            now,
-            now + request.Lifetime);
+            _timeProvider.GetUtcNow(),
+            request.ExpiresAt);
 
         MemberMessageSenderResult[] results = await Task.WhenAll(chosen.Select(s => SendWithAsync(s, message, cancellationToken)));
 

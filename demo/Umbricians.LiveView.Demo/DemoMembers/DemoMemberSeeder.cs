@@ -7,6 +7,7 @@ using Umbraco.Cms.Core.Notifications;
 using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Core.Services;
 using Umbricians.LiveView.Extensions;
+using Umbricians.LiveView.Presence;
 
 namespace Umbricians.LiveView.Demo.DemoMembers;
 
@@ -86,5 +87,12 @@ public class DemoMembersComposer : IComposer
         builder.Services.AddSignalR();
         builder.AddMemberMessageSender<SignalRMemberMessageSender>();
         builder.AddMemberMessageSender<BannerMemberMessageSender>();
+
+        // Replaces the package's property-based avatar provider for the dashboard's members table, unless
+        // Umbricians:LiveView:MemberAvatarProperty is set to try that instead.
+        if (string.IsNullOrEmpty(builder.Config["Umbricians:LiveView:MemberAvatarProperty"]))
+        {
+            builder.Services.AddSingleton<IMemberAvatarProvider, DemoMemberAvatarProvider>();
+        }
     }
 }

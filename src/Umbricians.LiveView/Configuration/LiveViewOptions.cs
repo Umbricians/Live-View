@@ -25,6 +25,19 @@ public class LiveViewOptions
     ];
 
     /// <summary>
+    /// The alias of a member property holding the member's picture: a media picker, an image cropper or an upload
+    /// field. Members without one are shown with their initials. Ignored when the site registers its own
+    /// <see cref="Presence.IMemberAvatarProvider"/>.
+    /// </summary>
+    public string? MemberAvatarProperty { get; set; }
+
+    /// <summary>
+    /// The time zone a member message sent until "midnight tonight" expires in, as an IANA id such as
+    /// <c>America/Denver</c> (or a Windows id). When empty, it is the sending backoffice user's own time zone.
+    /// </summary>
+    public string? MessageTimeZone { get; set; }
+
+    /// <summary>
     /// Request-tracked channels, keyed by alias. The built-in <c>web</c>, <c>members</c>, <c>backoffice</c>, <c>mcp</c> and <c>api</c> channels are
     /// added when not configured; any property left empty on them falls back to its built-in value.
     /// </summary>

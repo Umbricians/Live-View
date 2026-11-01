@@ -163,28 +163,23 @@ public class MemberPresenceTests
         Assert.Equal(2, _presence.CountOnline());
     }
 
+    [Fact]
+    public async Task Each_row_carries_the_members_avatar_or_none()
+    {
+        Guid alice = _directory.Add(1, "Alice", avatarUrl: "/media/alice.jpg?width=64&height=64");
+        Guid bob = _directory.Add(2, "Bob");
+        _presence.Seen(SignedInWithKey(alice));
+        _presence.Seen(SignedInWithKey(bob));
+
+        (_, IReadOnlyList<OnlineMember> page) = await _presence.PageAsync(0, 10);
+
+        Assert.Equal("/media/alice.jpg?width=64&height=64", page.Single(m => m.Key == alice).AvatarUrl);
+        Assert.Null(page.Single(m => m.Key == bob).AvatarUrl);
+    }
+
     private static ClaimsPrincipal SignedInWithKey(Guid key) =>
         new(new ClaimsIdentity([new Claim("sub", key.ToString())], "Test"));
 
     private static ClaimsPrincipal SignedInWithId(string id) =>
         new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, id)], "Test"));
-
-    private sealed class InMemoryMemberDirectory : IMemberDirectory
-    {
-        private readonly Dictionary<int, MemberDetails> _members = new();
-
-        public Guid Add(int id, string name, string? email = null, string? memberType = null)
-        {
-            var key = Guid.NewGuid();
-            _members[id] = new MemberDetails(key, name, email, memberType);
-            return key;
-        }
-
-        public void Remove(Guid key) => _members.Remove(_members.Single(m => m.Value.Key == key).Key);
-
-        public Guid? FindKey(int memberId) => _members.TryGetValue(memberId, out MemberDetails? member) ? member.Key : null;
-
-        public Task<IReadOnlyList<MemberDetails>> GetAsync(IReadOnlyCollection<Guid> keys) =>
-            Task.FromResult<IReadOnlyList<MemberDetails>>(_members.Values.Where(m => keys.Contains(m.Key)).ToList());
-    }
 }

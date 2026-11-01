@@ -246,6 +246,21 @@ public class BackofficePresenceTests
         Assert.Equal(page.Select(u => u.Key), _presence.AllOnline());
     }
 
+    [Fact]
+    public async Task Each_row_carries_the_users_avatar_sizes()
+    {
+        string[] sizes = ["/media/a.jpg?width=30", "/media/a.jpg?width=60"];
+        Guid alice = _directory.Add("Alice", avatarUrls: sizes);
+        Guid bob = _directory.Add("Bob");
+        _presence.Seen(SignedIn(alice));
+        _presence.Seen(SignedIn(bob));
+
+        (_, IReadOnlyList<OnlineBackofficeUser> page) = await _presence.PageAsync(0, 10);
+
+        Assert.Equal(sizes, page.Single(u => u.Key == alice).AvatarUrls);
+        Assert.Empty(page.Single(u => u.Key == bob).AvatarUrls);
+    }
+
     private static ClaimsPrincipal SignedIn(Guid key) =>
         new(new ClaimsIdentity([new Claim("sub", key.ToString())], "Test"));
 }

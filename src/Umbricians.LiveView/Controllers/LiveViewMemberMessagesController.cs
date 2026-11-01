@@ -2,12 +2,14 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Umbraco.Cms.Api.Common.Filters;
 using Umbraco.Cms.Core.Models.Membership;
 using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Web.Common.Routing;
+using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Security;
 
@@ -45,15 +47,21 @@ public class LiveViewMemberMessagesController : ControllerBase
     private readonly MemberMessagingService _messaging;
     private readonly IMemberService _memberService;
     private readonly IBackOfficeSecurityAccessor _security;
+    private readonly IOptionsMonitor<LiveViewOptions> _options;
+    private readonly TimeProvider _timeProvider;
 
     public LiveViewMemberMessagesController(
         MemberMessagingService messaging,
         IMemberService memberService,
-        IBackOfficeSecurityAccessor security)
+        IBackOfficeSecurityAccessor security,
+        IOptionsMonitor<LiveViewOptions> options,
+        TimeProvider timeProvider)
     {
         _messaging = messaging;
         _memberService = memberService;
         _security = security;
+        _options = options;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>The registered delivery methods (none means member messaging is unavailable) and the member count.</summary>
@@ -71,6 +79,7 @@ public class LiveViewMemberMessagesController : ControllerBase
             })
             .ToList(),
         TotalMembers = _memberService.GetCount(MemberCountType.All),
+        TimeZone = MemberMessageExpiry.TimeZoneId(_options.CurrentValue.MessageTimeZone),
     };
 
     [HttpPost("member-messages")]
@@ -104,7 +113,11 @@ public class LiveViewMemberMessagesController : ControllerBase
             return MessageNotSent.Because("Choose at least one delivery method.");
         }
 
-        int minutes = Math.Clamp(request.ExpiresInMinutes ?? 60, 1, 60 * 24 * 30);
+        if (!MemberMessageExpiry.TryResolve(request.ExpiresAt, _timeProvider.GetUtcNow(), out DateTimeOffset expiresAt))
+        {
+            return MessageNotSent.Because("Choose when the message stops being shown: a time in the future.");
+        }
+
         MemberMessageSendResult result = await _messaging.SendAsync(
             new MemberMessageRequest(
                 headline,
@@ -113,7 +126,7 @@ public class LiveViewMemberMessagesController : ControllerBase
                 audience,
                 selected,
                 senders,
-                TimeSpan.FromMinutes(minutes)),
+                expiresAt),
             _security.BackOfficeSecurity?.CurrentUser?.Name,
             cancellationToken);
 
@@ -126,6 +139,9 @@ public class MemberMessagingResponseModel
     public required IReadOnlyList<MemberMessageSenderResponseModel> Senders { get; init; }
 
     public required int TotalMembers { get; init; }
+
+    /// <summary>The IANA id of the zone "midnight tonight" is worked out in, or null for the sender's own.</summary>
+    public string? TimeZone { get; init; }
 }
 
 public class MemberMessageSenderResponseModel
@@ -157,6 +173,6 @@ public class SendMemberMessageRequestModel
     /// <summary>Aliases of the senders to deliver with.</summary>
     public string[]? Senders { get; init; }
 
-    /// <summary>How long the message stays relevant; defaults to an hour.</summary>
-    public int? ExpiresInMinutes { get; init; }
+    /// <summary>When the message stops being relevant: in the future, and no more than 30 days away.</summary>
+    public DateTimeOffset? ExpiresAt { get; init; }
 }

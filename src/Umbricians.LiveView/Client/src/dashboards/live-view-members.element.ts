@@ -4,6 +4,7 @@ import { UmbChangeEvent } from "@umbraco-cms/backoffice/event";
 import type { UUIBooleanInputEvent, UUIPaginationElement } from "@umbraco-cms/backoffice/external/uui";
 import { fetchOnlineMembers, type OnlineMember } from "../api/live-view.resource.js";
 import { PAGE_SIZE, formatAgo, plural } from "../utils/format.js";
+import { renderOnlineVia } from "../utils/online-via.js";
 
 /** Which members a message goes to: everyone online, or the members picked in the table. */
 export interface MemberSelection {
@@ -13,8 +14,9 @@ export interface MemberSelection {
 }
 
 /**
- * Lists members logged in on the website, one page at a time, newest arrivals first. When the site has member
- * message senders, members can be selected, across pages or all at once, and the dashboard sends to them.
+ * Lists members online, on the website or MCP, one page at a time, newest arrivals first. When anyone is on MCP,
+ * each row says how its member is online. When the site has member message senders, members can be selected, across
+ * pages or all at once, and the dashboard sends to them.
  * Fires a change event whenever the selection changes.
  */
 @customElement("umbricians-live-view-members")
@@ -28,6 +30,7 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
 
   @state() private _members: Array<OnlineMember> = [];
   @state() private _total = 0;
+  @state() private _anyOnMcp = false;
   @state() private _page = 1;
   @state() private _selected = new Map<string, string>();
   @state() private _allOnline = false;
@@ -82,6 +85,7 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
       if (abort.signal.aborted) return;
       this._members = result.items;
       this._total = result.total;
+      this._anyOnMcp = result.anyOnMcp;
       this._now = Date.now();
       if (this._total === 0) this._allOnline = false;
 
@@ -165,7 +169,7 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
         </div>
 
         ${this._total === 0
-          ? html`<p class="muted">No members are logged in on the website right now.</p>`
+          ? html`<p class="muted">No members are online right now.</p>`
           : html`
               ${this.selectable ? this.#renderSelectionBar() : nothing}
               <uui-table aria-label="Members online">
@@ -203,9 +207,19 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
                         : nothing}
                       <uui-table-cell>
                         <div class="member">
-                          <uui-avatar name=${m.name}></uui-avatar>
+                          <uui-avatar name=${m.name} img-src=${m.avatarUrl ?? nothing}></uui-avatar>
                           <div class="member-text">
-                            <div class="member-name">${m.name}</div>
+                            <div class="member-name">
+                              ${m.name}
+                              ${renderOnlineVia(
+                                this._anyOnMcp,
+                                [
+                                  { label: "Website", lastSeen: m.websiteLastSeen },
+                                  { label: "MCP", lastSeen: m.mcpLastSeen },
+                                ],
+                                this._now,
+                              )}
+                            </div>
                             ${m.email ? html`<div class="muted member-email">${m.email}</div>` : nothing}
                           </div>
                         </div>
@@ -289,6 +303,12 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
 
     .member-text {
       min-width: 0;
+    }
+
+    .member-name {
+      display: flex;
+      align-items: center;
+      gap: var(--uui-size-space-2);
     }
 
     .member-name,

@@ -62,6 +62,10 @@ section, **View Live View** and **Message backoffice users**.
 The chart refreshes every 2, 5, 10, 15 or 30 seconds (the drop-down in the header; each browser remembers its choice)
 and keeps the last 120 readings while the page is open. Nothing is stored in the database.
 
+Click a counter above the chart, or its entry in the legend, to take that line off the chart: the line disappears and
+the counter and legend entry fade. Click either of them again to bring the line back. The line keeps recording while it is
+off, and every line is back on the next time you open the dashboard.
+
 | Line | Counts | A session is |
 |---|---|---|
 | **Web sessions** | front-end visitors | a browser (IP address + User-Agent) seen in the last 5 minutes |
@@ -71,6 +75,10 @@ and keeps the last 120 readings while the page is open. Nothing is stored in the
 | **API sessions** | callers of `/api` and the Delivery API | an `Api-Key` header, or the caller's token or IP address, seen in the last 60 seconds |
 
 Below the chart, **Backoffice users online** and **Members online** list who is online right now, 25 per page.
+Someone using an MCP endpoint the site hosts, signed in as a backoffice user or member, is listed in the matching
+table too. While anyone in a table is on MCP, each row is tagged with how that person is online.
+Backoffice users are shown with the avatar they set in Umbraco. Members are shown with their initials, or with a
+picture if you name a member image property in `MemberAvatarProperty` (see below).
 
 Crawlers, static files (CSS, JavaScript, images and so on) and the backoffice's own requests are not counted as web
 sessions.
@@ -109,6 +117,8 @@ endpoint, keyed on a client id header.
 | `ActivityWindowSeconds` | `300` | How long a session counts as active after its last request. Each channel can override it. |
 | `IgnoreBots` | `true` | Ignores requests whose User-Agent looks like a crawler. |
 | `MaxSessionsPerChannel` | `100000` | A safety limit on sessions held in memory per line. |
+| `MemberAvatarProperty` | none | The alias of a member image property (media picker, image cropper or upload) to show as each member's picture. For other sources, see [Member avatars](../README.md#5-member-avatars). |
+| `MessageTimeZone` | the sender's own | The time zone "midnight tonight" means when messaging members, as an IANA id such as `America/Denver`. |
 
 Each channel under `Channels` can set `Enabled`, `Name`, `Color`, `SortOrder`, `PathPrefixes`,
 `ExcludePathPrefixes`, `SessionKeys` (`Header:<name>`, `Cookie:<name>`, `Authorization`, `User` or `Client`),

@@ -69,10 +69,13 @@ public class LiveViewApiController : ControllerBase
                 Key = u.Key,
                 Name = u.Name,
                 Email = u.Email,
+                AvatarUrls = u.AvatarUrls,
                 LastSeen = u.LastSeen,
                 OpenTabs = u.OpenTabs,
                 IsConnected = u.IsConnected,
                 IsCurrentUser = u.Key == currentUserKey,
+                BackofficeLastSeen = u.BackofficeLastSeen,
+                McpLastSeen = u.McpLastSeen,
             })
             .ToList();
 
@@ -80,14 +83,15 @@ public class LiveViewApiController : ControllerBase
         {
             Total = total,
             Items = items,
+            AnyOnMcp = _presence.AnyOnMcp(),
             Recipients = _messenger.CountAllOnlineRecipients(currentUserKey),
         };
     }
 
     /// <summary>One page of the members who are logged in on the website, newest arrivals first.</summary>
     [HttpGet("members")]
-    [ProducesResponseType<PagedViewModel<OnlineMemberResponseModel>>(StatusCodes.Status200OK)]
-    public async Task<PagedViewModel<OnlineMemberResponseModel>> Members(int skip = 0, int take = 25)
+    [ProducesResponseType<OnlineMembersResponseModel>(StatusCodes.Status200OK)]
+    public async Task<OnlineMembersResponseModel> Members(int skip = 0, int take = 25)
     {
         (int total, IReadOnlyList<OnlineMember> page) = await _memberPresence.PageAsync(
             Math.Max(skip, 0), Math.Clamp(take, 1, MaxPageSize));
@@ -99,11 +103,14 @@ public class LiveViewApiController : ControllerBase
                 Name = m.Name,
                 Email = m.Email,
                 MemberType = m.MemberType,
+                AvatarUrl = m.AvatarUrl,
                 LastSeen = m.LastSeen,
+                WebsiteLastSeen = m.WebsiteLastSeen,
+                McpLastSeen = m.McpLastSeen,
             })
             .ToList();
 
-        return new PagedViewModel<OnlineMemberResponseModel> { Total = total, Items = items };
+        return new OnlineMembersResponseModel { Total = total, Items = items, AnyOnMcp = _memberPresence.AnyOnMcp() };
     }
 
     [HttpPost("messages")]
@@ -135,6 +142,9 @@ public class LiveViewSnapshotResponseModel
 
 public class OnlineBackofficeUsersResponseModel : PagedViewModel<OnlineBackofficeUserResponseModel>
 {
+    /// <summary>Whether anyone online is using MCP; only then does each row need to say how its user is online.</summary>
+    public required bool AnyOnMcp { get; init; }
+
     /// <summary>How many users a message to everyone online reaches: everyone online except the current user.</summary>
     public required long Recipients { get; init; }
 }
@@ -147,6 +157,9 @@ public class OnlineBackofficeUserResponseModel
 
     public string? Email { get; init; }
 
+    /// <summary>The user's avatar in Umbraco's sizes, smallest first; empty when they have not set one.</summary>
+    public required IReadOnlyList<string> AvatarUrls { get; init; }
+
     public required DateTimeOffset LastSeen { get; init; }
 
     /// <summary>Backoffice tabs the user has open, counted from their realtime connections, or heartbeats without them.</summary>
@@ -156,6 +169,18 @@ public class OnlineBackofficeUserResponseModel
     public required bool IsConnected { get; init; }
 
     public required bool IsCurrentUser { get; init; }
+
+    /// <summary>When the user was last seen in the backoffice, or null when they are only on MCP.</summary>
+    public DateTimeOffset? BackofficeLastSeen { get; init; }
+
+    /// <summary>When the user last used MCP, or null when they are not on it.</summary>
+    public DateTimeOffset? McpLastSeen { get; init; }
+}
+
+public class OnlineMembersResponseModel : PagedViewModel<OnlineMemberResponseModel>
+{
+    /// <summary>Whether anyone online is using MCP; only then does each row need to say how its member is online.</summary>
+    public required bool AnyOnMcp { get; init; }
 }
 
 public class OnlineMemberResponseModel
@@ -168,7 +193,16 @@ public class OnlineMemberResponseModel
 
     public string? MemberType { get; init; }
 
+    /// <summary>The member's picture from the site's avatar provider, or null to show their initials.</summary>
+    public string? AvatarUrl { get; init; }
+
     public required DateTimeOffset LastSeen { get; init; }
+
+    /// <summary>When the member was last seen on the website, or null when they are only on MCP.</summary>
+    public DateTimeOffset? WebsiteLastSeen { get; init; }
+
+    /// <summary>When the member last used MCP, or null when they are not on it.</summary>
+    public DateTimeOffset? McpLastSeen { get; init; }
 }
 
 public class SendBackofficeMessageRequestModel

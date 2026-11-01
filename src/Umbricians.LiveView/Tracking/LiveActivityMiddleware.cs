@@ -19,17 +19,20 @@ internal sealed partial class LiveActivityMiddleware : IMiddleware
     private readonly ILiveActivityTracker _tracker;
     private readonly BackofficePresence _backofficePresence;
     private readonly MemberPresence _memberPresence;
+    private readonly McpCallers _mcpCallers;
     private readonly IOptionsMonitor<LiveViewOptions> _options;
 
     public LiveActivityMiddleware(
         ILiveActivityTracker tracker,
         BackofficePresence backofficePresence,
         MemberPresence memberPresence,
+        McpCallers mcpCallers,
         IOptionsMonitor<LiveViewOptions> options)
     {
         _tracker = tracker;
         _backofficePresence = backofficePresence;
         _memberPresence = memberPresence;
+        _mcpCallers = mcpCallers;
         _options = options;
     }
 
@@ -46,6 +49,20 @@ internal sealed partial class LiveActivityMiddleware : IMiddleware
         // The signed-in user (or member) is only known once authentication has run further down the pipeline,
         // so channels keyed on it are counted when the request completes. The rest are held open for its length.
         var activities = new List<IDisposable>();
+        McpCall? mcpCall = matches.Any(m => m.Channel == Constants.Channels.Mcp) ? new McpCall() : null;
+        if (mcpCall is not null)
+        {
+            // By the time the response starts, the caller has signed in, so a long-lived stream shows who it is
+            // while it is open rather than once it closes.
+            context.Response.OnStarting(async () =>
+            {
+                if (!mcpCall.Finished)
+                {
+                    mcpCall.Hold = await _mcpCallers.OpenedAsync(context.User);
+                }
+            });
+        }
+
         try
         {
             foreach ((string channel, string[] sources) in matches)
@@ -66,6 +83,20 @@ internal sealed partial class LiveActivityMiddleware : IMiddleware
             activities.ForEach(a => a.Dispose());
         }
 
+        if (mcpCall is not null)
+        {
+            mcpCall.Finished = true;
+            if (mcpCall.Hold is { } hold)
+            {
+                hold.Dispose();
+            }
+            else
+            {
+                // The response had not started (it starts after this middleware returns), so record it as finished.
+                await _mcpCallers.SeenAsync(context.User);
+            }
+        }
+
         foreach ((string channel, string[] sources) in matches)
         {
             // Member and backoffice presence keep their lines themselves, always keyed on the signed-in member or user.
@@ -82,6 +113,14 @@ internal sealed partial class LiveActivityMiddleware : IMiddleware
                 _tracker.Touch(channel, userKey);
             }
         }
+    }
+
+    /// <summary>One MCP request: the hold keeping its caller online while it is open, and whether it has finished.</summary>
+    private sealed class McpCall
+    {
+        public IDisposable? Hold { get; set; }
+
+        public bool Finished { get; set; }
     }
 
     private static bool IsKeyedOnUser(string[] sources) =>
