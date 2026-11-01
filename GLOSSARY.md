@@ -20,7 +20,8 @@ the delivery always agree.
 ## Channel
 
 One line on the Live View chart: a named, coloured count of active sessions (`web`, `mcp`, `api`, `backoffice`,
-`members`, or one a site adds). Request-based channels are fed by the tracking middleware; others are fed from code.
+`members`, or one a site adds). Request-based channels are fed by the tracking middleware, as the **request
+classifier** decides; others are fed from code.
 
 ## MCP caller
 
@@ -59,6 +60,13 @@ as an **MCP caller**, and whose account still exists. Each has one row, however 
 MCP, each row is tagged with how its member is online (Website, MCP) and when they were last seen that way. Rows are
 listed in **arrival** order (when they came online), so they don't jump between pages. Signing out of the website
 leaves a member online on MCP.
+
+## Request classifier
+
+The module that decides which **channels** a request counts in, under what session key, and who it shows was seen:
+a member (for **Member presence**), a backoffice user (for **Backoffice presence**) or an **MCP caller**. It owns
+every rule about which requests count: path prefixes and exclusions, sort order and exclusive channels, static
+files, bots, and the session key sources. The tracking middleware only acts on what it decides.
 
 ## Signed-out marker
 

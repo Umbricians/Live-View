@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 namespace Umbricians.LiveView.Presence;
@@ -72,15 +73,27 @@ internal sealed class McpCallers : ILiveViewPresence
         }
     }
 
+    /// <summary>
+    /// Follows one MCP request to the site, recording whoever is signed in to it; dispose it once the request has
+    /// run. By the time the response starts the caller has signed in, so a long-lived stream lists them while it is
+    /// open; a response that only starts once the request has run records them as seen then.
+    /// </summary>
+    internal IAsyncDisposable Begin(HttpContext context)
+    {
+        var call = new McpCall(this, context);
+        context.Response.OnStarting(call.StartedAsync);
+        return call;
+    }
+
     /// <summary>Records a finished MCP request by whoever is signed in. Requests nobody is signed in to are ignored.</summary>
-    internal Task SeenAsync(ClaimsPrincipal user) =>
+    private Task SeenAsync(ClaimsPrincipal user) =>
         PrincipalKey.Resolve(user, _members.FindKey) is { } key ? McpCallerSeenAsync(key) : Task.CompletedTask;
 
     /// <summary>
     /// Records an open MCP request, such as a stream, by whoever is signed in. They stay online until the returned
     /// hold is disposed; null when nobody known is signed in.
     /// </summary>
-    internal async Task<IDisposable?> OpenedAsync(ClaimsPrincipal user)
+    private async Task<IDisposable?> OpenedAsync(ClaimsPrincipal user)
     {
         if (PrincipalKey.Resolve(user, _members.FindKey) is not { } key)
         {
@@ -125,5 +138,41 @@ internal sealed class McpCallers : ILiveViewPresence
 
         _known[key] = (caller, now + RememberFor.Ticks);
         return caller;
+    }
+
+    /// <summary>One MCP request: the hold keeping its caller online while it is open, and whether it has finished.</summary>
+    private sealed class McpCall : IAsyncDisposable
+    {
+        private readonly McpCallers _callers;
+        private readonly HttpContext _context;
+        private IDisposable? _hold;
+        private bool _finished;
+
+        public McpCall(McpCallers callers, HttpContext context)
+        {
+            _callers = callers;
+            _context = context;
+        }
+
+        public async Task StartedAsync()
+        {
+            if (!_finished)
+            {
+                _hold = await _callers.OpenedAsync(_context.User);
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _finished = true;
+            if (_hold is { } hold)
+            {
+                hold.Dispose();
+            }
+            else
+            {
+                await _callers.SeenAsync(_context.User);
+            }
+        }
     }
 }
