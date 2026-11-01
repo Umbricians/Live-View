@@ -2,20 +2,14 @@ import { css, html, customElement, state, repeat, nothing } from "@umbraco-cms/b
 import { UmbModalBaseElement } from "@umbraco-cms/backoffice/modal";
 import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
 import type { UUIBooleanInputEvent, UUIRadioGroupEvent, UUISelectEvent } from "@umbraco-cms/backoffice/external/uui";
-import { sendMemberMessage, type MemberAudience, type MessageColor } from "../api/live-view.resource.js";
+import { sendMemberMessage, type MemberAudience } from "../api/live-view.resource.js";
 import { plural } from "../utils/format.js";
 import { LONGEST_MINUTES, formatAt, formatDuration, nextMidnight, timeZoneLabel } from "../utils/expiry.js";
 import type {
   UmbriciansSendMemberMessageModalData,
   UmbriciansSendMemberMessageModalValue,
 } from "./send-member-message.modal-token.js";
-
-const COLORS: Array<{ name: string; value: MessageColor }> = [
-  { name: "Information", value: "default" },
-  { name: "Warning", value: "warning" },
-  { name: "Urgent", value: "danger" },
-  { name: "Good news", value: "positive" },
-];
+import { hasHeadline, newMessage, renderMessageFields, sendColor, trimmed } from "./message-fields.js";
 
 /** A number of minutes, midnight tonight in the site's time zone, or hours and minutes typed in. */
 type Lifetime = number | "midnight" | "custom";
@@ -40,9 +34,7 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
 > {
   @state() private _audience: MemberAudience = "allOnline";
   @state() private _senders = new Set<string>();
-  @state() private _headline = "";
-  @state() private _message = "";
-  @state() private _color: MessageColor = "warning";
+  @state() private _text = newMessage();
   @state() private _lifetime: Lifetime = 60;
   @state() private _customHours = 1;
   @state() private _customMinutes = 0;
@@ -95,7 +87,7 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
   get #canSend() {
     return (
       !this._sending &&
-      this._headline.trim().length > 0 &&
+      hasHeadline(this._text) &&
       this._senders.size > 0 &&
       (this._audience === "allMembers" || this.#recipientCount(this._audience) > 0) &&
       this.#expiresAt(this._now) !== undefined
@@ -118,9 +110,7 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
     this._sending = true;
     try {
       const result = await sendMemberMessage({
-        headline: this._headline.trim(),
-        message: this._message.trim(),
-        color: this._color,
+        ...trimmed(this._text),
         audience: this._audience,
         memberKeys: this._audience === "selected" ? this.data.selection.people.map((m) => m.key) : undefined,
         senders: [...this._senders],
@@ -217,37 +207,10 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
 
         <uui-box headline="Message">
           <form @submit=${this.#send}>
-            <uui-form-layout-item>
-              <uui-label slot="label" for="headline" required>Headline</uui-label>
-              <uui-input
-                id="headline"
-                label="Headline"
-                placeholder="e.g. Scheduled maintenance at 18:00"
-                maxlength="200"
-                .value=${this._headline}
-                @input=${(e: InputEvent) => (this._headline = (e.target as HTMLInputElement).value)}></uui-input>
-            </uui-form-layout-item>
-
-            <uui-form-layout-item>
-              <uui-label slot="label" for="type">Type</uui-label>
-              <uui-select
-                id="type"
-                label="Type"
-                .options=${COLORS.map((c) => ({ ...c, selected: c.value === this._color }))}
-                @change=${(e: UUISelectEvent) => (this._color = e.target.value as MessageColor)}></uui-select>
-            </uui-form-layout-item>
-
-            <uui-form-layout-item>
-              <uui-label slot="label" for="message">Message</uui-label>
-              <uui-textarea
-                id="message"
-                label="Message"
-                placeholder="The site will be unavailable for about 15 minutes. Please save anything you are working on."
-                maxlength="2000"
-                rows="5"
-                .value=${this._message}
-                @input=${(e: InputEvent) => (this._message = (e.target as HTMLTextAreaElement).value)}></uui-textarea>
-            </uui-form-layout-item>
+            ${renderMessageFields(this._text, (text) => (this._text = text), {
+              headline: "e.g. Scheduled maintenance at 18:00",
+              message: "The site will be unavailable for about 15 minutes. Please save anything you are working on.",
+            }, 5)}
 
             <uui-form-layout-item>
               <uui-label slot="label" for="lifetime">Relevant for</uui-label>
@@ -292,7 +255,7 @@ export class UmbriciansSendMemberMessageModalElement extends UmbModalBaseElement
           <uui-button
             slot="actions"
             look="primary"
-            color=${this._color === "danger" ? "danger" : "positive"}
+            color=${sendColor(this._text)}
             label=${this._audience === "allMembers"
               ? "Send to every member"
               : `Send to ${plural(this.#recipientCount(this._audience), "member", "members")}`}

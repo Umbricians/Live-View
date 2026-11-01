@@ -39,8 +39,8 @@ internal abstract record BackofficeSendResult
 /// Sends a one-off notification to chosen backoffice users, e.g. to warn them before an upgrade or restart.
 /// </summary>
 /// <remarks>
-/// It owns the send rules: the text limits, the colours, who "all online" means at the moment of sending, and
-/// that the sender is never a recipient. Selected users are sent to as chosen, even if they have since gone
+/// It owns the send rules: the message content (see <see cref="MessageContent"/>), who "all online" means at the
+/// moment of sending, and that the sender is never a recipient. Selected users are sent to as chosen, even if they have since gone
 /// offline, and pick the message up if they come back within its lifetime.
 /// Server events only carry a key, so the message is held in memory and each recipient's backoffice fetches it
 /// by key. Recipients whose realtime connection is down pick it up from their next heartbeat instead.
@@ -51,11 +51,8 @@ internal sealed class BackofficeMessenger
     public const string EventSource = "Umbricians.LiveView";
     public const string EventType = "Message";
 
-    internal const int MaxHeadlineLength = 200;
-    internal const int MaxMessageLength = 2000;
     internal const int MaxRecipients = 1000;
 
-    private static readonly string[] Colors = ["default", "positive", "warning", "danger"];
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
 
     private readonly ConcurrentDictionary<Guid, Entry> _messages = new();
@@ -79,9 +76,10 @@ internal sealed class BackofficeMessenger
     /// <summary>Checks the message, works out its recipients and delivers it, or says why it can't be sent.</summary>
     internal async Task<BackofficeSendResult> SendAsync(BackofficeMessageRequest request, BackofficeSender sender)
     {
-        string headline = request.Headline?.Trim() ?? string.Empty;
-        string message = request.Message?.Trim() ?? string.Empty;
-        string color = request.Color is { } c && Colors.Contains(c) ? c : Colors[0];
+        if (!MessageContent.TryCreate(request.Headline, request.Message, request.Color, out MessageContent content))
+        {
+            return new BackofficeSendResult.Rejected(MessageContent.Limits);
+        }
 
         // "All online" is resolved here rather than in the browser, which only ever holds one page of users.
         Guid[] recipients = (request.AllOnline ? _presence.AllInBackoffice() : request.UserKeys ?? [])
@@ -89,18 +87,15 @@ internal sealed class BackofficeMessenger
             .Distinct()
             .ToArray();
 
-        if (headline.Length is 0 or > MaxHeadlineLength
-            || message.Length > MaxMessageLength
-            || recipients.Length is 0 or > MaxRecipients)
+        if (recipients.Length is 0 or > MaxRecipients)
         {
-            return new BackofficeSendResult.Rejected(
-                $"A headline (up to {MaxHeadlineLength} characters), a message (up to {MaxMessageLength}) and "
-                + $"between 1 and {MaxRecipients} other users to send to are required.");
+            return new BackofficeSendResult.Rejected($"Choose between 1 and {MaxRecipients} other users to send to.");
         }
 
         Prune();
 
-        var sent = new BackofficeMessage(Guid.NewGuid(), headline, message, color, sender.Name, _timeProvider.GetUtcNow());
+        var sent = new BackofficeMessage(
+            Guid.NewGuid(), content.Headline, content.Message, content.Color, sender.Name, _timeProvider.GetUtcNow());
         _messages[sent.Key] = new Entry(sent, new ConcurrentDictionary<Guid, bool>(recipients.Select(r => KeyValuePair.Create(r, false))));
 
         var serverEvent = new ServerEvent { EventSource = EventSource, EventType = EventType, Key = sent.Key };

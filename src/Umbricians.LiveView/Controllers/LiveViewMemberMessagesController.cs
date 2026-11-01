@@ -27,41 +27,21 @@ namespace Umbricians.LiveView.Controllers;
 [JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
 internal class LiveViewMemberMessagesController : ControllerBase
 {
-    private static readonly Dictionary<string, MemberMessageType> Types = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["default"] = MemberMessageType.Information,
-        ["warning"] = MemberMessageType.Warning,
-        ["danger"] = MemberMessageType.Urgent,
-        ["positive"] = MemberMessageType.GoodNews,
-    };
-
-    private static readonly Dictionary<string, MemberMessageAudience> Audiences = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["selected"] = MemberMessageAudience.Selected,
-        ["allOnline"] = MemberMessageAudience.AllOnline,
-        ["allMembers"] = MemberMessageAudience.AllMembers,
-    };
-
-    private const int MaxSelectedMembers = 10_000;
-
     private readonly MemberMessagingService _messaging;
     private readonly IMemberService _memberService;
     private readonly IBackOfficeSecurityAccessor _security;
     private readonly IOptionsMonitor<LiveViewOptions> _options;
-    private readonly TimeProvider _timeProvider;
 
     public LiveViewMemberMessagesController(
         MemberMessagingService messaging,
         IMemberService memberService,
         IBackOfficeSecurityAccessor security,
-        IOptionsMonitor<LiveViewOptions> options,
-        TimeProvider timeProvider)
+        IOptionsMonitor<LiveViewOptions> options)
     {
         _messaging = messaging;
         _memberService = memberService;
         _security = security;
         _options = options;
-        _timeProvider = timeProvider;
     }
 
     /// <summary>The registered delivery methods (none means member messaging is unavailable) and the member count.</summary>
@@ -88,49 +68,24 @@ internal class LiveViewMemberMessagesController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Send(SendMemberMessageRequestModel request, CancellationToken cancellationToken)
     {
-        string headline = request.Headline?.Trim() ?? string.Empty;
-        string message = request.Message?.Trim() ?? string.Empty;
-        Guid[] selected = request.MemberKeys?.Distinct().ToArray() ?? [];
-        string[] senders = request.Senders?.Where(a => _messaging.Senders.Any(s => s.Alias.Equals(a, StringComparison.OrdinalIgnoreCase))).ToArray() ?? [];
-
-        if (headline.Length is 0 or > 200 || message.Length > 2000)
-        {
-            return MessageNotSent.Because("A headline (up to 200 characters) is required, and the message can be up to 2000 characters.");
-        }
-
-        if (!Audiences.TryGetValue(request.Audience ?? string.Empty, out MemberMessageAudience audience))
-        {
-            return MessageNotSent.Because("Audience must be 'selected', 'allOnline' or 'allMembers'.");
-        }
-
-        if (audience == MemberMessageAudience.Selected && selected.Length is 0 or > MaxSelectedMembers)
-        {
-            return MessageNotSent.Because($"Select between 1 and {MaxSelectedMembers} members, or send to all online members instead.");
-        }
-
-        if (senders.Length == 0)
-        {
-            return MessageNotSent.Because("Choose at least one delivery method.");
-        }
-
-        if (!MemberMessageExpiry.TryResolve(request.ExpiresAt, _timeProvider.GetUtcNow(), out DateTimeOffset expiresAt))
-        {
-            return MessageNotSent.Because("Choose when the message stops being shown: a time in the future.");
-        }
-
-        MemberMessageSendResult result = await _messaging.SendAsync(
+        MemberSendResult result = await _messaging.SendAsync(
             new MemberMessageRequest(
-                headline,
-                message,
-                Types.GetValueOrDefault(request.Color ?? string.Empty, MemberMessageType.Information),
-                audience,
-                selected,
-                senders,
-                expiresAt),
+                request.Headline,
+                request.Message,
+                request.Color,
+                request.Audience,
+                request.MemberKeys,
+                request.Senders,
+                request.ExpiresAt),
             _security.BackOfficeSecurity?.CurrentUser?.Name,
             cancellationToken);
 
-        return Ok(result);
+        return result switch
+        {
+            MemberSendResult.Sent sent => Ok(sent.Result),
+            MemberSendResult.Rejected rejected => MessageNotSent.Because(rejected.Reason),
+            _ => throw new InvalidOperationException($"Unexpected send result {result.GetType().Name}."),
+        };
     }
 }
 
