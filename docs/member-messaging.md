@@ -37,6 +37,24 @@ Once at least one sender is registered:
    each with 30 seconds to finish, and the dashboard shows what each one did, or that it failed.
 4. Each send is written to the Umbraco log: who sent it, to whom, and through which senders.
 
+![The Message members slide-out with Relevant for set to Midnight tonight and the time it stops being shown](images/live-view-message-members.png)
+
+**Relevant for** sets when the message stops being shown. The choices are **15 minutes**, **1 hour**,
+**Midnight tonight**, **24 hours**, **7 days** and **Custom…**, which adds boxes for hours and minutes (anything from
+1 minute to 30 days). The line below the field shows exactly when that is, and how long from now:
+
+![Relevant for set to Custom… with 2 hours 30 minutes, and the line saying when the message stops being shown](images/live-view-message-custom.png)
+
+**Midnight tonight** is midnight in the site's `MessageTimeZone`, an IANA id such as `America/Denver` (a Windows id
+works too), so a "restarting tonight" message ends at the same moment wherever the sender is:
+
+```json
+{ "Umbricians": { "LiveView": { "MessageTimeZone": "America/Denver" } } }
+```
+
+Without it, midnight is in the sending backoffice user's own browser time zone. Whichever is chosen, your senders get
+the end time as `ExpiresAt` (see the [reference](#membermessage)).
+
 Your sender only has to answer one question: *given this message and these members, how do I get it to them?*
 
 ## Quick start: your first sender

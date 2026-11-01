@@ -21,21 +21,36 @@ the page is open.
 
 Click a counter, or its legend entry, to take its line off the chart; both fade until you click either again.
 
-![The Live View dashboard: session counts per channel and a live chart of members logging in and out](docs/images/live-view-dashboard.png)
+![The Live View dashboard: session counts per channel, a live chart of members logging in and out, and the online tables](docs/images/live-view-dashboard.png)
 
-Below the chart, two tables list who is online right now. Both are paged on the server (25 per page), so only the
-page being viewed is ever looked up, however many people are online. Rows are ordered by when each person came
-online, newest first, so they stay put between refreshes.
+Below the chart, two tables list who is online right now, one row per person. Both are paged on the server (25 per
+page), so only the page being viewed is ever looked up, however many people are online. Rows are ordered by when each
+person came online, newest first, so they stay put between refreshes.
 
-**Members online** lists logged-in members with their picture, member type and when they were last active (see
-[member avatars](#5-member-avatars) for where the picture comes from). A member drops
-off as soon as they log out, or once their activity window passes. Members using an [MCP](#mcp-callers) endpoint are listed
-too; while anyone is on MCP, each row is tagged **Website**, **MCP** or both. If the site has
-[member message senders](#4-messaging-members), members can be selected and messaged too: tick some, or click
-**Select all N online**, then **Message members…**. The slide-out sends to the selected members, everyone online, or
-every member of the site, using whichever of the site's delivery methods you tick.
+**Members online** lists logged-in members with their picture, member type and when they were last active. The
+picture comes from the site's [member avatar provider](#5-member-avatars); members without one show their initials. A
+member drops off as soon as they log out, or once their activity window passes.
 
-**Backoffice users online** lists who has the backoffice open, with the avatar each user set in Umbraco. Tick one or several of them (the selection is kept
+Members using an [MCP](#mcp-callers) endpoint are listed too. While anyone in the table is on MCP, every row is tagged
+with how that member is online: **Website**, **MCP** or both. Hover over a tag to see when they were last seen that
+way. While nobody is on MCP, there are no tags.
+
+![The Members online table: members with pictures or initials, tagged Website, MCP or both](docs/images/live-view-members-online.png)
+
+If the site has [member message senders](#4-messaging-members), members can be selected and messaged too: tick some,
+or click **Select all N online**, then **Message members…**. The slide-out sends to the selected members, everyone
+online, or every member of the site, using whichever of the site's delivery methods you tick.
+
+**Relevant for** sets when the message stops being shown: **15 minutes**, **1 hour**, **Midnight tonight**,
+**24 hours**, **7 days**, or **Custom…**, which takes hours and minutes, from 1 minute up to 30 days. The line below
+it shows the exact time, for example "Stops being shown Sun, Nov 1, 12:00 AM Denver time (in 3 h 48 min)". Midnight
+is in the [`MessageTimeZone`](#configuration) if the site sets one, otherwise in your own browser's time zone.
+
+![The Message members slide-out with Relevant for set to Midnight tonight and the time it stops being shown](docs/images/live-view-message-members.png)
+
+**Backoffice users online** lists who has the backoffice open, with the avatar each user set in Umbraco, or their
+initials. Users on MCP are tagged the same way, **Backoffice**, **MCP** or both. A user only on MCP shows "–" for open
+tabs and can't be selected, since a backoffice message is shown in a backoffice tab. Tick one or several of the others (the selection is kept
 across pages), or click **Select all N online** to include every page, then click **Message users…** in the footer to open a slide-out where you write a headline, pick a type
 (information, warning, urgent or good news) and add a message, for example to warn people before an upgrade or
 restart. It appears in their backoffice as a standard Umbraco notification that stays until dismissed, and is
