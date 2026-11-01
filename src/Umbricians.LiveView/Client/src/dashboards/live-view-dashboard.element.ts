@@ -299,7 +299,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
 
     try {
       const { sentTo } = await umbOpenModal(this, UMBRICIANS_SEND_MESSAGE_MODAL, {
-        data: { allOnline: selection.allOnline, count: selection.count, recipients: selection.users },
+        data: { allOnline: selection.allOnline, count: selection.count, recipients: selection.people },
       });
       this.#notifications?.peek("positive", {
         data: { headline: "Message sent", message: `Sent to ${sentTo} ${sentTo === 1 ? "user" : "users"}.` },

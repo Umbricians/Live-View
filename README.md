@@ -402,7 +402,7 @@ cd src/Umbricians.LiveView/Client && npm install && npm run build
 dotnet run --project demo/Umbricians.LiveView.Demo
 ```
 
-Run `npm run watch` in `Client/` while working on the dashboard. The demo's test admin login is in
+Run `npm run watch` in `Client/` while working on the dashboard, and `npm test` there for the dashboard's tests. The demo's test admin login is in
 `demo/Umbricians.LiveView.Demo/appsettings.Development.json`.
 
 ### Testing members (demo only)

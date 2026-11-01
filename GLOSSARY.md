@@ -23,6 +23,13 @@ One line on the Live View chart: a named, coloured count of active sessions (`we
 `members`, or one a site adds). Request-based channels are fed by the tracking middleware, as the **request
 classifier** decides; others are fed from code.
 
+## Channel settings
+
+A channel's settings as they apply, with every value filled in: its name, sort order, paths, session key sources,
+activity window and so on. Appsettings beat channels declared in code, which beat the built-in defaults; whatever is
+still empty then gets the package defaults (counted by client, a window of `ActivityWindowSeconds`). Everything that
+reads a channel's settings reads them here.
+
 ## MCP caller
 
 A backoffice user or member using an MCP endpoint. Requests to an MCP endpoint the site hosts are matched to the
@@ -52,6 +59,13 @@ A backoffice user with an open backoffice tab, seen within the backoffice channe
 **MCP caller**, whose account still exists and is not disabled. A tab is open while it keeps sending heartbeats.
 Online backoffice users are listed like online members: one row each, saying how they are online when anyone is on
 MCP.
+
+## Online list
+
+What the backoffice users table and the members table both are: one page of people online, refreshed with the chart
+and paused with it, and a **selection** of who to message. The selection survives paging; **all online** covers people
+on pages never loaded, and unticking someone while it is on picks the rest of their page instead. Each table only says
+which of its people can be picked and how a row looks.
 
 ## Online member
 

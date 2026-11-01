@@ -40,10 +40,9 @@ internal sealed class LiveMetricsService
 
     public async Task<IReadOnlyList<LiveMetricReading>> GetSnapshotAsync(CancellationToken cancellationToken)
     {
-        var channels = _options.CurrentValue.Channels
-            .Where(c => c.Value.Enabled)
-            .Select(c => (Order: c.Value.SortOrder ?? 0, Reading: new LiveMetricReading(
-                c.Key, c.Value.Name ?? c.Key, c.Value.Color, CountActive(c.Key), null)));
+        var channels = ChannelSettings.InOrder(_options.CurrentValue)
+            .Where(c => c.Enabled)
+            .Select(c => (Order: c.SortOrder, Reading: new LiveMetricReading(c.Alias, c.Name, c.Color, CountActive(c.Alias), null)));
 
         var providers = await Task.WhenAll(_providers.Select(async p =>
             (Order: p.SortOrder, Reading: await ReadAsync(p, cancellationToken))));
