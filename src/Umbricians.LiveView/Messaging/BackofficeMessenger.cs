@@ -19,6 +19,7 @@ internal sealed record BackofficeMessageRequest(
     string? Message,
     string? Color,
     IReadOnlyCollection<Guid>? UserKeys,
+    IReadOnlyCollection<Guid>? UserGroupKeys,
     bool AllOnline);
 
 /// <summary>The backoffice user sending a message, who is never one of its recipients.</summary>
@@ -39,8 +40,9 @@ internal abstract record BackofficeSendResult
 /// Sends a one-off notification to chosen backoffice users, e.g. to warn them before an upgrade or restart.
 /// </summary>
 /// <remarks>
-/// It owns the send rules: the message content (see <see cref="MessageContent"/>), who "all online" means at the
-/// moment of sending, and that the sender is never a recipient. Selected users are sent to as chosen, even if they have since gone
+/// It owns the send rules: the message content (see <see cref="MessageContent"/>), who "all online" and the chosen
+/// user groups mean at the moment of sending, and that the sender is never a recipient. A user group audience is
+/// everyone online in the backoffice in any of the groups, which must all exist. Selected users are sent to as chosen, even if they have since gone
 /// offline, and pick the message up if they come back within its lifetime.
 /// Server events only carry a key, so the message is held in memory and each recipient's backoffice fetches it
 /// by key. Recipients whose realtime connection is down pick it up from their next heartbeat instead.
@@ -52,18 +54,25 @@ internal sealed class BackofficeMessenger
     public const string EventType = "Message";
 
     internal const int MaxRecipients = 1000;
+    internal const int MaxUserGroups = 100;
 
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
 
     private readonly ConcurrentDictionary<Guid, Entry> _messages = new();
     private readonly IServerEventRouter _router;
     private readonly BackofficePresence _presence;
+    private readonly IBackofficeUserDirectory _directory;
     private readonly TimeProvider _timeProvider;
 
-    public BackofficeMessenger(IServerEventRouter router, BackofficePresence presence, TimeProvider timeProvider)
+    public BackofficeMessenger(
+        IServerEventRouter router,
+        BackofficePresence presence,
+        IBackofficeUserDirectory directory,
+        TimeProvider timeProvider)
     {
         _router = router;
         _presence = presence;
+        _directory = directory;
         _timeProvider = timeProvider;
     }
 
@@ -73,6 +82,17 @@ internal sealed class BackofficeMessenger
     /// </summary>
     internal int CountAllOnlineRecipients(Guid? senderKey) => _presence.AllInBackoffice().Count(k => k != senderKey);
 
+    /// <summary>
+    /// How many users a message to these user groups would reach right now: everyone in the backoffice in any of them
+    /// but the sender. Or why the groups can't be sent to.
+    /// </summary>
+    internal async Task<(int Recipients, string? Rejected)> CountUserGroupRecipientsAsync(
+        IReadOnlyCollection<Guid> userGroupKeys, Guid? senderKey)
+    {
+        (IReadOnlyList<Guid> users, string? rejected) = await InUserGroupsAsync(userGroupKeys);
+        return (users.Count(k => k != senderKey), rejected);
+    }
+
     /// <summary>Checks the message, works out its recipients and delivers it, or says why it can't be sent.</summary>
     internal async Task<BackofficeSendResult> SendAsync(BackofficeMessageRequest request, BackofficeSender sender)
     {
@@ -81,8 +101,28 @@ internal sealed class BackofficeMessenger
             return new BackofficeSendResult.Rejected(MessageContent.Limits);
         }
 
-        // "All online" is resolved here rather than in the browser, which only ever holds one page of users.
-        Guid[] recipients = (request.AllOnline ? _presence.AllInBackoffice() : request.UserKeys ?? [])
+        // "All online" and user groups are resolved here rather than in the browser, which only ever holds one page of users.
+        IReadOnlyCollection<Guid> chosen;
+        if (request.AllOnline)
+        {
+            chosen = _presence.AllInBackoffice();
+        }
+        else if (request.UserGroupKeys is { } userGroupKeys)
+        {
+            (IReadOnlyList<Guid> inGroups, string? rejected) = await InUserGroupsAsync(userGroupKeys);
+            if (rejected is not null)
+            {
+                return new BackofficeSendResult.Rejected(rejected);
+            }
+
+            chosen = inGroups;
+        }
+        else
+        {
+            chosen = request.UserKeys ?? [];
+        }
+
+        Guid[] recipients = chosen
             .Where(k => k != sender.Key)
             .Distinct()
             .ToArray();
@@ -124,6 +164,29 @@ internal sealed class BackofficeMessenger
             .Where(e => e.Recipients.TryGetValue(userKey, out bool delivered) && !delivered)
             .Select(e => e.Message.Key)
             .ToList();
+    }
+
+    /// <summary>
+    /// Everyone online in the backoffice who is in any of the user groups, read once, or why the groups can't be sent
+    /// to. As for everyone online, users only on MCP are left out, and so are users whose account has gone or been
+    /// disabled.
+    /// </summary>
+    private async Task<(IReadOnlyList<Guid> Users, string? Rejected)> InUserGroupsAsync(
+        IReadOnlyCollection<Guid> userGroupKeys)
+    {
+        Guid[] groups = userGroupKeys.Distinct().ToArray();
+        if (groups.Length is 0 or > MaxUserGroups)
+        {
+            return ([], $"Choose between 1 and {MaxUserGroups} user groups to send to.");
+        }
+
+        if ((await _directory.FindUserGroupsAsync(groups)).Count != groups.Length)
+        {
+            return ([], "A user group you chose no longer exists.");
+        }
+
+        IReadOnlyList<BackofficeUserDetails> online = await _directory.GetAsync(_presence.AllInBackoffice());
+        return (online.Where(u => u.UserGroupKeys.Any(groups.Contains)).Select(u => u.Key).ToList(), null);
     }
 
     private void Prune()

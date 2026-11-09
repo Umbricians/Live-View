@@ -6,17 +6,18 @@ namespace Umbricians.LiveView.Tests;
 internal sealed class InMemoryBackofficeUserDirectory : IBackofficeUserDirectory
 {
     private readonly Dictionary<Guid, BackofficeUserDetails> _users = new();
+    private readonly HashSet<Guid> _userGroups = [];
 
     /// <summary>How many times the directory has been asked to look users up.</summary>
     public int Lookups { get; private set; }
 
     /// <summary>Adds a user with a key of your choosing, e.g. one a member has too.</summary>
-    public void Add(Guid key, string name) => _users[key] = new BackofficeUserDetails(key, name, null, 0, []);
+    public void Add(Guid key, string name) => _users[key] = new BackofficeUserDetails(key, name, null, 0, [], []);
 
     public Guid Add(string name, string? email = null, IReadOnlyList<string>? avatarUrls = null)
     {
         var key = Guid.NewGuid();
-        _users[key] = new BackofficeUserDetails(key, name, email, 0, avatarUrls ?? []);
+        _users[key] = new BackofficeUserDetails(key, name, email, 0, avatarUrls ?? [], []);
         return key;
     }
 
@@ -24,6 +25,22 @@ internal sealed class InMemoryBackofficeUserDirectory : IBackofficeUserDirectory
     public void Remove(Guid key) => _users.Remove(key);
 
     public void SetConnections(Guid key, int connections) => _users[key] = _users[key] with { Connections = connections };
+
+    /// <summary>Adds a user group with the given users in it.</summary>
+    public Guid AddUserGroup(params Guid[] users)
+    {
+        var key = Guid.NewGuid();
+        _userGroups.Add(key);
+        foreach (Guid u in users)
+        {
+            _users[u] = _users[u] with { UserGroupKeys = [.. _users[u].UserGroupKeys, key] };
+        }
+
+        return key;
+    }
+
+    public Task<IReadOnlyCollection<Guid>> FindUserGroupsAsync(IReadOnlyCollection<Guid> keys) =>
+        Task.FromResult<IReadOnlyCollection<Guid>>(keys.Where(_userGroups.Contains).ToList());
 
     public Task<IReadOnlyList<BackofficeUserDetails>> GetAsync(IReadOnlyCollection<Guid> keys)
     {
