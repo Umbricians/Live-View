@@ -133,7 +133,7 @@ public class McpPresenceTests
         Assert.Equal(2, _backoffice.CountOnline());
         Assert.Equal([bob], _backoffice.AllInBackoffice());
 
-        var messenger = new BackofficeMessenger(new NoServerEvents(), _backoffice, _clock);
+        var messenger = new BackofficeMessenger(new NoServerEvents(), _backoffice, new RecordingEventAggregator(), _clock);
         Assert.Equal(1, messenger.CountAllOnlineRecipients(senderKey: null));
     }
 

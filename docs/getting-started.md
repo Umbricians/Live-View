@@ -184,6 +184,9 @@ are marked **You** in the list and can't select yourself, and "everyone online" 
 messages should reach them: a banner, a live pop-up, email or something else. See
 [Messaging members](member-messaging.md).
 
+Every message sent is written to Umbraco's audit log, and a site can stop one with a notification handler: see
+[Before and after a message is sent](../README.md#6-before-and-after-a-message-is-sent).
+
 ## Before you go live
 
 - **Behind a proxy or load balancer, forward the client IP.** Web sessions are told apart by IP address and
