@@ -1,96 +1,68 @@
 using System.Collections.Concurrent;
-using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Umbricians.LiveView.Configuration;
+using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Tracking;
 
 internal sealed class LiveActivityTracker : ILiveActivityTracker
 {
-    private readonly ConcurrentDictionary<string, Channel> _channels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, PruneState> _pruning = new();
+    private readonly ILiveViewActivityStore _store;
     private readonly IOptionsMonitor<LiveViewOptions> _options;
     private readonly TimeProvider _timeProvider;
 
-    public LiveActivityTracker(IOptionsMonitor<LiveViewOptions> options, TimeProvider timeProvider)
+    public LiveActivityTracker(
+        ILiveViewActivityStore store, IOptionsMonitor<LiveViewOptions> options, TimeProvider timeProvider)
     {
+        _store = store;
         _options = options;
         _timeProvider = timeProvider;
     }
 
     public void Touch(string channel, string sessionKey)
     {
-        if (TryGetSession(channel, sessionKey, out Session? session))
-        {
-            session.LastSeen = Now;
-        }
+        DateTimeOffset now = _timeProvider.GetUtcNow();
+        string set = ActivitySets.Channel(channel);
+        PruneIfDue(channel, set, now);
+        _store.Seen(set, Hash(sessionKey), now);
     }
 
     public IDisposable BeginActivity(string channel, string sessionKey)
     {
-        if (!TryGetSession(channel, sessionKey, out Session? session))
-        {
-            return NoActivity.Instance;
-        }
-
-        Interlocked.Increment(ref session.OpenActivities);
-        session.LastSeen = Now;
-        return new Activity(this, session);
+        DateTimeOffset now = _timeProvider.GetUtcNow();
+        string set = ActivitySets.Channel(channel);
+        string key = Hash(sessionKey);
+        PruneIfDue(channel, set, now);
+        _store.Opened(set, key, now);
+        return new Activity(this, set, key);
     }
 
-    public void End(string channel, string sessionKey)
-    {
-        if (_channels.TryGetValue(channel, out Channel? state))
-        {
-            state.Sessions.TryRemove(Hash(sessionKey), out _);
-        }
-    }
+    public void End(string channel, string sessionKey) =>
+        _store.Remove(ActivitySets.Channel(channel), Hash(sessionKey));
 
     public int CountActive(string channel)
     {
-        if (!_channels.TryGetValue(channel, out Channel? state))
-        {
-            return 0;
-        }
-
-        long now = Now;
-        state.Prune(now, now - WindowFor(channel));
-        return state.Sessions.Count;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
+        return _store.CountActive(ActivitySets.Channel(channel), now - WindowFor(channel));
     }
 
-    private long Now => _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+    private TimeSpan WindowFor(string channel) => ChannelSettings.Of(_options.CurrentValue, channel).ActivityWindow;
 
-    private long WindowFor(string channel) =>
-        (long)ChannelSettings.Of(_options.CurrentValue, channel).ActivityWindow.TotalMilliseconds;
-
-    private bool TryGetSession(string channel, string sessionKey, [NotNullWhen(true)] out Session? session)
+    // Prune from the write path too, so memory stays bounded when nobody is watching the dashboard.
+    private void PruneIfDue(string channel, string set, DateTimeOffset now)
     {
-        Channel state = _channels.GetOrAdd(channel, static _ => new Channel());
-        string key = Hash(sessionKey);
-        if (state.Sessions.TryGetValue(key, out session))
+        PruneState state = _pruning.GetOrAdd(set, static _ => new PruneState());
+        TimeSpan window = WindowFor(channel);
+        long sinceLastPrune = now.UtcTicks - Interlocked.Read(ref state.LastPruned);
+        bool full = Volatile.Read(ref state.LastCount) >= _options.CurrentValue.MaxSessionsPerChannel;
+        if (sinceLastPrune > window.Ticks || (full && sinceLastPrune > TimeSpan.TicksPerSecond))
         {
-            return true;
+            Interlocked.Exchange(ref state.LastPruned, now.UtcTicks);
+            Volatile.Write(ref state.LastCount, _store.CountActive(set, now - window));
         }
-
-        // Prune from the write path too, so memory stays bounded when nobody is watching the dashboard.
-        long now = Now;
-        long window = WindowFor(channel);
-        int max = _options.CurrentValue.MaxSessionsPerChannel;
-        long sinceLastPrune = now - Interlocked.Read(ref state.LastPruned);
-        if (sinceLastPrune > window || (state.Sessions.Count >= max && sinceLastPrune > 1000))
-        {
-            state.Prune(now, now - window);
-        }
-
-        // At capacity, existing sessions stay tracked but new ones are dropped rather than growing without bound.
-        if (state.Sessions.Count >= max)
-        {
-            return false;
-        }
-
-        session = state.Sessions.GetOrAdd(key, static (_, n) => new Session { LastSeen = n }, now);
-        return true;
     }
 
     // Session keys may be tokens or IP addresses, so only a truncated hash is kept in memory.
@@ -101,37 +73,14 @@ internal sealed class LiveActivityTracker : ILiveActivityTracker
         return Convert.ToHexString(hash[..12]);
     }
 
-    private sealed class Channel
+    /// <summary>When a channel's store was last asked to drop finished sessions, and how many it then held.</summary>
+    private sealed class PruneState
     {
-        public readonly ConcurrentDictionary<string, Session> Sessions = new();
         public long LastPruned;
-
-        public void Prune(long now, long cutoff)
-        {
-            Interlocked.Exchange(ref LastPruned, now);
-            foreach ((string key, Session session) in Sessions)
-            {
-                if (Volatile.Read(ref session.OpenActivities) <= 0 && session.LastSeen < cutoff)
-                {
-                    Sessions.TryRemove(new KeyValuePair<string, Session>(key, session));
-                }
-            }
-        }
+        public int LastCount;
     }
 
-    private sealed class Session
-    {
-        public int OpenActivities;
-        private long _lastSeen;
-
-        public long LastSeen
-        {
-            get => Interlocked.Read(ref _lastSeen);
-            set => Interlocked.Exchange(ref _lastSeen, value);
-        }
-    }
-
-    private sealed class Activity(LiveActivityTracker tracker, Session session) : IDisposable
+    private sealed class Activity(LiveActivityTracker tracker, string set, string key) : IDisposable
     {
         private int _disposed;
 
@@ -139,18 +88,8 @@ internal sealed class LiveActivityTracker : ILiveActivityTracker
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                session.LastSeen = tracker.Now;
-                Interlocked.Decrement(ref session.OpenActivities);
+                tracker._store.Closed(set, key, tracker._timeProvider.GetUtcNow());
             }
-        }
-    }
-
-    private sealed class NoActivity : IDisposable
-    {
-        public static readonly NoActivity Instance = new();
-
-        public void Dispose()
-        {
         }
     }
 }

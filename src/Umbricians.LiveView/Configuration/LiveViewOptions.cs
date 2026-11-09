@@ -14,7 +14,7 @@ public class LiveViewOptions
     /// <summary>Requests whose User-Agent looks like a crawler are not tracked.</summary>
     public bool IgnoreBots { get; set; } = true;
 
-    /// <summary>Upper bound on sessions held in memory per channel, to protect the server from floods.</summary>
+    /// <summary>Upper bound on entries the in-memory store holds per line (sessions, or people online), to protect the server from floods.</summary>
     public int MaxSessionsPerChannel { get; set; } = 100_000;
 
     /// <summary>File extensions ignored by channels with <see cref="LiveViewChannelOptions.IgnoreStaticFiles"/> set.</summary>

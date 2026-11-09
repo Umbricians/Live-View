@@ -1,7 +1,8 @@
 namespace Umbricians.LiveView.Tracking;
 
 /// <summary>
-/// Holds the in-memory set of recently active sessions per channel. Nothing is persisted.
+/// Tracks the recently active sessions per channel, which are kept in the <see cref="Storage.ILiveViewActivityStore"/>.
+/// Nothing is persisted by default.
 /// </summary>
 /// <remarks>
 /// Request-tracked channels are fed by middleware. Inject this service to feed a channel from your own code,

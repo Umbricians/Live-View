@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Options;
+using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Tests;
 
@@ -61,4 +63,101 @@ internal sealed class StaticOptionsMonitor<T>(T value) : IOptionsMonitor<T>
     public T Get(string? name) => value;
 
     public IDisposable? OnChange(Action<T, string?> listener) => null;
+}
+
+/// <summary>An activity store written the way a site would write one to share between servers: no cap, no pruning.</summary>
+internal sealed class SharedActivityStore : ILiveViewActivityStore
+{
+    private readonly object _lock = new();
+    private readonly Dictionary<(string Set, string Key), LiveViewActivity> _entries = new();
+
+    public void Seen(string set, string key, DateTimeOffset at)
+    {
+        lock (_lock)
+        {
+            _entries[(set, key)] = _entries.TryGetValue((set, key), out LiveViewActivity? entry)
+                ? entry with { Last = at }
+                : new LiveViewActivity(key, at, at, 0);
+        }
+    }
+
+    public void Opened(string set, string key, DateTimeOffset at)
+    {
+        lock (_lock)
+        {
+            LiveViewActivity entry = _entries.TryGetValue((set, key), out LiveViewActivity? found)
+                ? found
+                : new LiveViewActivity(key, at, at, 0);
+            _entries[(set, key)] = entry with { Last = at, Open = entry.Open + 1 };
+        }
+    }
+
+    public void Closed(string set, string key, DateTimeOffset at)
+    {
+        lock (_lock)
+        {
+            if (_entries.TryGetValue((set, key), out LiveViewActivity? entry))
+            {
+                _entries[(set, key)] = entry with { Last = at, Open = Math.Max(0, entry.Open - 1) };
+            }
+        }
+    }
+
+    public void Remove(string set, string key)
+    {
+        lock (_lock)
+        {
+            _entries.Remove((set, key));
+        }
+    }
+
+    public IReadOnlyList<LiveViewActivity> GetActive(string set, DateTimeOffset since)
+    {
+        lock (_lock)
+        {
+            return _entries.Where(e => e.Key.Set == set && (e.Value.Open > 0 || e.Value.Last >= since)).Select(e => e.Value).ToList();
+        }
+    }
+
+    public int CountActive(string set, DateTimeOffset since) => GetActive(set, since).Count;
+}
+
+/// <summary>A message store written the way a site would write one to share between servers.</summary>
+internal sealed class SharedBackofficeMessageStore : IBackofficeMessageStore
+{
+    private readonly object _lock = new();
+    private readonly Dictionary<Guid, (BackofficeMessage Message, HashSet<Guid> Undelivered, HashSet<Guid> Recipients)> _messages = new();
+
+    public Task AddAsync(BackofficeMessage message, IReadOnlyCollection<Guid> recipients, DateTimeOffset expiresAt)
+    {
+        lock (_lock)
+        {
+            _messages[message.Key] = (message, [.. recipients], [.. recipients]);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<BackofficeMessage?> ReceiveAsync(Guid messageKey, Guid userKey)
+    {
+        lock (_lock)
+        {
+            if (!_messages.TryGetValue(messageKey, out var entry) || !entry.Recipients.Contains(userKey))
+            {
+                return Task.FromResult<BackofficeMessage?>(null);
+            }
+
+            entry.Undelivered.Remove(userKey);
+            return Task.FromResult<BackofficeMessage?>(entry.Message);
+        }
+    }
+
+    public Task<IReadOnlyList<Guid>> GetUndeliveredAsync(Guid userKey)
+    {
+        lock (_lock)
+        {
+            IReadOnlyList<Guid> keys = _messages.Values.Where(e => e.Undelivered.Contains(userKey)).Select(e => e.Message.Key).ToList();
+            return Task.FromResult(keys);
+        }
+    }
 }

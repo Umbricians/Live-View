@@ -1,6 +1,6 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Options;
 using Umbricians.LiveView.Configuration;
+using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Presence;
 
@@ -44,64 +44,45 @@ internal readonly record struct OnlinePerson(Guid Key, long First, long? SiteLas
 /// </summary>
 internal sealed class McpConnections
 {
-    private readonly ConcurrentDictionary<Guid, Visit> _callers = new();
+    private readonly ILiveViewActivityStore _store;
+    private readonly string _set;
     private readonly IOptionsMonitor<LiveViewOptions> _options;
     private readonly TimeProvider _timeProvider;
 
-    public McpConnections(IOptionsMonitor<LiveViewOptions> options, TimeProvider timeProvider)
+    public McpConnections(
+        ILiveViewActivityStore store, string set, IOptionsMonitor<LiveViewOptions> options, TimeProvider timeProvider)
     {
+        _store = store;
+        _set = set;
         _options = options;
         _timeProvider = timeProvider;
     }
 
     /// <summary>Records one MCP request that has finished.</summary>
-    public void Seen(Guid key) =>
-        _callers.AddOrUpdate(key, static (_, n) => new Visit(n, n, 0), static (_, seen, n) => seen with { Last = n }, Now);
+    public void Seen(Guid key) => _store.Seen(_set, ActivitySets.Person(key), Now);
 
     /// <summary>Records an MCP request that is still open; the caller stays online until it is disposed.</summary>
     public IDisposable Opened(Guid key)
     {
-        _callers.AddOrUpdate(
-            key, static (_, n) => new Visit(n, n, 1), static (_, seen, n) => seen with { Last = n, Open = seen.Open + 1 }, Now);
+        _store.Opened(_set, ActivitySets.Person(key), Now);
         return new Hold(this, key);
     }
 
-    public void Forget(Guid key) => _callers.TryRemove(key, out _);
+    public void Forget(Guid key) => _store.Remove(_set, ActivitySets.Person(key));
 
-    /// <summary>
-    /// Callers online on MCP, last seen now while a request of theirs is open. Those with nothing open who are past
-    /// the window are dropped as it goes.
-    /// </summary>
+    /// <summary>Callers online on MCP, last seen now while a request of theirs is open.</summary>
     public IEnumerable<(Guid Key, long First, long Last)> Snapshot()
     {
-        long now = Now;
-        long cutoff = now - Window.Ticks;
-        foreach ((Guid key, Visit seen) in _callers)
-        {
-            if (seen.Open == 0 && seen.Last < cutoff)
-            {
-                _callers.TryRemove(new KeyValuePair<Guid, Visit>(key, seen));
-            }
-            else
-            {
-                yield return (key, seen.First, seen.Open > 0 ? now : seen.Last);
-            }
-        }
+        DateTimeOffset now = Now;
+        return _store.GetActive(_set, now - Window)
+            .Select(a => (Guid.ParseExact(a.Key, "N"), a.First.UtcTicks, a.Open > 0 ? now.UtcTicks : a.Last.UtcTicks));
     }
 
-    private void Closed(Guid key) =>
-        _callers.AddOrUpdate(
-            key,
-            static (_, n) => new Visit(n, n, 0),
-            static (_, seen, n) => seen with { Last = n, Open = Math.Max(0, seen.Open - 1) },
-            Now);
+    private void Closed(Guid key) => _store.Closed(_set, ActivitySets.Person(key), Now);
 
-    private long Now => _timeProvider.GetUtcNow().UtcTicks;
+    private DateTimeOffset Now => _timeProvider.GetUtcNow();
 
     private TimeSpan Window => ChannelSettings.Of(_options.CurrentValue, Constants.Channels.Mcp).ActivityWindow;
-
-    /// <summary>When the caller first came online on MCP, when last seen there, and how many MCP requests are open.</summary>
-    private sealed record Visit(long First, long Last, int Open);
 
     private sealed class Hold(McpConnections connections, Guid key) : IDisposable
     {

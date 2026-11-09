@@ -13,6 +13,7 @@ using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Metrics;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 using Umbricians.LiveView.Tracking;
 
 namespace Umbricians.LiveView.Composers;
@@ -27,12 +28,13 @@ public class LiveViewComposer : IComposer
         builder.Services.AddMvcCore().ConfigureApplicationPartManager(parts =>
             parts.FeatureProviders.Add(new LiveViewControllerFeatureProvider()));
         builder.Services.TryAddSingleton(TimeProvider.System);
-        builder.Services.AddSingleton<ILiveActivityTracker, LiveActivityTracker>();
+        AddStores(builder.Services);
         builder.Services.AddSingleton<RequestClassifier>();
         builder.Services.AddSingleton<LiveActivityMiddleware>();
         builder.Services.AddSingleton<LiveMetricsService>();
         builder.Services.AddSingleton<IBackofficeUserDirectory, UmbracoBackofficeUserDirectory>();
         builder.Services.AddSingleton(sp => new BackofficePresence(
+            sp.GetRequiredService<ILiveViewActivityStore>(),
             sp.GetRequiredService<IBackofficeUserDirectory>(),
             sp.GetRequiredService<IOptionsMonitor<LiveViewOptions>>(),
             sp.GetRequiredService<TimeProvider>()));
@@ -43,6 +45,7 @@ public class LiveViewComposer : IComposer
         builder.Services.TryAddSingleton<IMemberAvatarProvider, PropertyMemberAvatarProvider>();
         builder.Services.AddSingleton<IMemberDirectory, UmbracoMemberDirectory>();
         builder.Services.AddSingleton(sp => new MemberPresence(
+            sp.GetRequiredService<ILiveViewActivityStore>(),
             sp.GetRequiredService<IMemberDirectory>(),
             sp.GetRequiredService<IOptionsMonitor<LiveViewOptions>>(),
             sp.GetRequiredService<TimeProvider>()));
@@ -65,5 +68,14 @@ public class LiveViewComposer : IComposer
             {
                 PrePipeline = app => app.UseMiddleware<LiveActivityMiddleware>(),
             }));
+    }
+
+    // A site's own stores win whichever composer runs first: TryAdd skips ours if one is already there, and a
+    // registration after ours is the one resolved. The tracker takes the store, so it is registered the same way.
+    internal static void AddStores(IServiceCollection services)
+    {
+        services.TryAddSingleton<ILiveViewActivityStore, InMemoryActivityStore>();
+        services.TryAddSingleton<IBackofficeMessageStore, InMemoryBackofficeMessageStore>();
+        services.TryAddSingleton<ILiveActivityTracker, LiveActivityTracker>();
     }
 }

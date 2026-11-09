@@ -10,6 +10,7 @@ This guide takes you from installing Umbricians Live View to a dashboard showing
 - [4. Configure what is counted](#4-configure-what-is-counted)
 - [5. Add your own lines](#5-add-your-own-lines)
 - [6. Message backoffice users and members](#6-message-backoffice-users-and-members)
+- [Load-balanced sites](#load-balanced-sites)
 - [Before you go live](#before-you-go-live)
 - [Troubleshooting](#troubleshooting)
 
@@ -125,7 +126,7 @@ endpoint, keyed on a client id header.
 | `TrackingEnabled` | `true` | Turns request counting off entirely. Custom lines from code still show. |
 | `ActivityWindowSeconds` | `300` | How long a session counts as active after its last request. Each channel can override it. |
 | `IgnoreBots` | `true` | Ignores requests whose User-Agent looks like a crawler. |
-| `MaxSessionsPerChannel` | `100000` | A safety limit on sessions held in memory per line. |
+| `MaxSessionsPerChannel` | `100000` | Upper bound on entries the in-memory store holds per line (sessions, or people online), to protect the server from floods. |
 | `MemberAvatarProperty` | none | The alias of a member image property (media picker, image cropper or upload) to show as each member's picture. For other sources, see [Member avatars](../README.md#5-member-avatars). |
 | `MessageTimeZone` | the sender's own | The time zone "midnight tonight" means when messaging members, as an IANA id such as `America/Denver` (a Windows id works too). |
 
@@ -184,6 +185,36 @@ are marked **You** in the list and can't select yourself, and "everyone online" 
 messages should reach them: a banner, a live pop-up, email or something else. See
 [Messaging members](member-messaging.md).
 
+## Load-balanced sites
+
+By default each server keeps its own counts, online lists and sent backoffice messages in memory, so each server
+shows only what it handled. To make every server show the same, replace the two stores Live View keeps them in. Register
+yours in a composer with `builder.Services.AddSingleton<...>()`; it wins whichever composer runs first.
+
+- `ILiveViewActivityStore` holds who is active: sessions per channel, backoffice users and their tabs, members and
+  MCP callers.
+- `IBackofficeMessageStore` holds sent backoffice messages until their recipients' backoffice fetches them.
+
+The stores only hold data. Live View decides the activity windows, the tab timeout, who counts as online and how long
+a message lives, and passes the cutoff times in. What a store must do:
+
+- Set names and keys are opaque strings; store them as given.
+- An entry is active while its open count is above 0 or its last-seen time is at or after the `since` that
+  `GetActive` and `CountActive` are given.
+- `Closed` on an entry that is not there does nothing.
+- Keep the calls quick: the activity store is called on every tracked request, and its methods are synchronous.
+- An open count left behind by a server that stops is never closed, so a shared store should expire entries.
+
+Even with shared stores, these stay per server, and need no action:
+
+- The instant push of a backoffice message reaches only the editors connected to the server that sent it. The others
+  get the message from their next heartbeat, within about a minute.
+- The open tab count and the realtime connection state, which come from Umbraco's realtime connections.
+- The `IMemberMessageInbox`, which has its own registration (see [Messaging members](member-messaging.md)).
+- Member sign-out markers.
+
+No distributed store ships with the package.
+
 ## Before you go live
 
 - **Behind a proxy or load balancer, forward the client IP.** Web sessions are told apart by IP address and
@@ -191,8 +222,9 @@ messages should reach them: a banner, a live pop-up, email or something else. Se
   proxy, and visitors with the same browser are counted as one. Configure ASP.NET Core's
   [forwarded headers](https://learn.microsoft.com/aspnet/core/host-and-deploy/proxy-load-balancer) so the real client
   IP is used.
-- **Counts are per server.** Everything is held in memory, so on a load-balanced site each server shows the traffic it
-  handled. The same goes for queued messages.
+- **Counts are per server by default.** Everything is held in memory, so on a load-balanced site each server shows the
+  traffic it handled, and the same goes for sent backoffice messages. To share them, see
+  [Load-balanced sites](#load-balanced-sites).
 - **Nothing is persisted.** Restarting the site resets the counts and clears any queued messages.
 
 ## Troubleshooting

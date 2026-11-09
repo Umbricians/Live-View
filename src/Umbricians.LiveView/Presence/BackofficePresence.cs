@@ -1,9 +1,8 @@
-using System.Collections.Concurrent;
-using System.Collections.Immutable;
 using System.Security.Claims;
 using Microsoft.Extensions.Options;
 using Umbraco.Extensions;
 using Umbricians.LiveView.Configuration;
+using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Presence;
 
@@ -37,21 +36,23 @@ internal sealed class BackofficePresence
 
     internal const int MaxTabsPerUser = 50;
 
-    private static readonly ImmutableDictionary<string, long> NoTabs = ImmutableDictionary<string, long>.Empty;
-
-    private readonly ConcurrentDictionary<Guid, Visit> _users = new();
+    private readonly ILiveViewActivityStore _store;
     private readonly McpConnections _mcp;
     private readonly IBackofficeUserDirectory _directory;
     private readonly IOptionsMonitor<LiveViewOptions> _options;
     private readonly TimeProvider _timeProvider;
 
     internal BackofficePresence(
-        IBackofficeUserDirectory directory, IOptionsMonitor<LiveViewOptions> options, TimeProvider timeProvider)
+        ILiveViewActivityStore store,
+        IBackofficeUserDirectory directory,
+        IOptionsMonitor<LiveViewOptions> options,
+        TimeProvider timeProvider)
     {
+        _store = store;
         _directory = directory;
         _options = options;
         _timeProvider = timeProvider;
-        _mcp = new McpConnections(options, timeProvider);
+        _mcp = new McpConnections(store, ActivitySets.BackofficeMcp, options, timeProvider);
     }
 
     /// <summary>Records that the signed-in backoffice user made a request. Anyone else is ignored.</summary>
@@ -59,35 +60,26 @@ internal sealed class BackofficePresence
     {
         if (user.Identity?.IsAuthenticated == true && user.Identity.GetUserKey() is { } key)
         {
-            _users.AddOrUpdate(key, static (_, n) => new Visit(n, n, NoTabs), static (_, seen, n) => seen with { Last = n }, Now);
+            _store.Seen(ActivitySets.BackofficeUsers, ActivitySets.Person(key), Now);
         }
     }
 
     /// <summary>Records a heartbeat from one of the user's backoffice tabs.</summary>
-    internal void TabHeartbeat(Guid userKey, string tabId) =>
-        _users.AddOrUpdate(
-            userKey,
-            static (_, s) => new Visit(s.Now, s.Now, NoTabs.SetItem(s.TabId, s.Now)),
-            static (_, seen, s) => seen with
-            {
-                Last = s.Now,
-                Tabs = seen.Tabs.Count < MaxTabsPerUser || seen.Tabs.ContainsKey(s.TabId)
-                    ? seen.Tabs.SetItem(s.TabId, s.Now)
-                    : seen.Tabs,
-            },
-            (TabId: tabId, Now: Now));
-
-    /// <summary>Forgets a tab straight away, e.g. when it is closed.</summary>
-    internal void TabClosed(Guid userKey, string tabId)
+    internal void TabHeartbeat(Guid userKey, string tabId)
     {
-        while (_users.TryGetValue(userKey, out Visit? seen) && seen.Tabs.ContainsKey(tabId))
+        DateTimeOffset now = Now;
+        _store.Seen(ActivitySets.BackofficeUsers, ActivitySets.Person(userKey), now);
+
+        string tabs = ActivitySets.BackofficeTabs(userKey);
+        IReadOnlyList<LiveViewActivity> open = _store.GetActive(tabs, now - TabTimeout);
+        if (open.Count < MaxTabsPerUser || open.Any(t => t.Key == tabId))
         {
-            if (_users.TryUpdate(userKey, seen with { Tabs = seen.Tabs.Remove(tabId) }, seen))
-            {
-                return;
-            }
+            _store.Seen(tabs, tabId, now);
         }
     }
+
+    /// <summary>Forgets a tab straight away, e.g. when it is closed.</summary>
+    internal void TabClosed(Guid userKey, string tabId) => _store.Remove(ActivitySets.BackofficeTabs(userKey), tabId);
 
     /// <summary>Records a finished MCP request by the user.</summary>
     internal void McpSeen(Guid userKey) => _mcp.Seen(userKey);
@@ -98,7 +90,13 @@ internal sealed class BackofficePresence
     /// <summary>Forgets a user whose account has gone or been disabled.</summary>
     internal void Forget(Guid userKey)
     {
-        _users.TryRemove(userKey, out _);
+        string tabs = ActivitySets.BackofficeTabs(userKey);
+        foreach (LiveViewActivity tab in _store.GetActive(tabs, DateTimeOffset.MinValue))
+        {
+            _store.Remove(tabs, tab.Key);
+        }
+
+        _store.Remove(ActivitySets.BackofficeUsers, ActivitySets.Person(userKey));
         _mcp.Forget(userKey);
     }
 
@@ -125,7 +123,7 @@ internal sealed class BackofficePresence
     {
         while (true)
         {
-            Dictionary<Guid, Visit> inBackoffice = Snapshot().ToDictionary(u => u.Key, u => u.Visit);
+            Dictionary<Guid, Row> inBackoffice = Snapshot().ToDictionary(u => u.Key);
             List<OnlinePerson> online = People(inBackoffice);
             List<OnlinePerson> page = online.Skip(skip).Take(take).ToList();
             Dictionary<Guid, BackofficeUserDetails> found = (await _directory.GetAsync(page.Select(u => u.Key).ToList()))
@@ -143,7 +141,7 @@ internal sealed class BackofficePresence
                 .Select(u =>
                 {
                     BackofficeUserDetails details = found[u.Key];
-                    bool backoffice = inBackoffice.TryGetValue(u.Key, out Visit? visit);
+                    bool backoffice = inBackoffice.TryGetValue(u.Key, out Row visit);
 
                     // Every open backoffice tab holds one realtime connection, which closes the moment the tab does,
                     // so that is the exact tab count. Heartbeats only stand in when realtime is unavailable.
@@ -153,7 +151,7 @@ internal sealed class BackofficePresence
                         details.Email,
                         details.AvatarUrls,
                         At(u.Last),
-                        !backoffice ? 0 : details.Connections > 0 ? details.Connections : visit!.Tabs.Count,
+                        !backoffice ? 0 : details.Connections > 0 ? details.Connections : visit.Tabs,
                         backoffice && details.Connections > 0,
                         u.SiteLast is { } inTheBackoffice ? At(inTheBackoffice) : null,
                         u.McpLast is { } mcp ? At(mcp) : null);
@@ -165,55 +163,41 @@ internal sealed class BackofficePresence
     }
 
     /// <summary>Every online user, in the backoffice, on MCP or both, in arrival order.</summary>
-    private List<OnlinePerson> People(IReadOnlyDictionary<Guid, Visit>? inBackoffice = null) =>
+    private List<OnlinePerson> People(IReadOnlyDictionary<Guid, Row>? inBackoffice = null) =>
         OnlinePerson.Merge(
-            (inBackoffice ?? Snapshot().ToDictionary(u => u.Key, u => u.Visit)).Select(u => (u.Key, u.Value.First, u.Value.Last)),
+            (inBackoffice ?? Snapshot().ToDictionary(u => u.Key)).Select(u => (u.Key, u.Value.First, u.Value.Last)),
             _mcp.Snapshot());
 
     /// <summary>
-    /// Online users in arrival order, newest first. Tabs past their timeout, and users with no open tab who are past
-    /// the window, are dropped as it goes.
+    /// Online users in arrival order, newest first: those with an open tab, or seen within the window. Tabs past their
+    /// timeout are not counted.
     /// </summary>
-    private List<(Guid Key, Visit Visit)> Snapshot()
+    private List<Row> Snapshot()
     {
-        long now = Now;
-        long seenCutoff = now - Window.Ticks;
-        long tabCutoff = now - TabTimeout.Ticks;
-        var online = new List<(Guid Key, Visit Visit)>(_users.Count);
-        foreach ((Guid key, Visit seen) in _users)
+        DateTimeOffset now = Now;
+        DateTimeOffset seenCutoff = now - Window;
+        DateTimeOffset tabCutoff = now - TabTimeout;
+        var online = new List<Row>();
+        foreach (LiveViewActivity user in _store.GetActive(ActivitySets.BackofficeUsers, now - (Window > TabTimeout ? Window : TabTimeout)))
         {
-            Visit current = seen;
-            List<string> closed = seen.Tabs.Where(t => t.Value < tabCutoff).Select(t => t.Key).ToList();
-            if (closed.Count > 0)
+            Guid key = Guid.ParseExact(user.Key, "N");
+            int tabs = _store.CountActive(ActivitySets.BackofficeTabs(key), tabCutoff);
+            if (tabs > 0 || user.Last >= seenCutoff)
             {
-                current = seen with { Tabs = seen.Tabs.RemoveRange(closed) };
-                if (!_users.TryUpdate(key, current, seen))
-                {
-                    // Updated meanwhile, so it was just seen; count it as it was read.
-                    current = seen;
-                }
-            }
-
-            if (current.Tabs.IsEmpty && current.Last < seenCutoff)
-            {
-                _users.TryRemove(new KeyValuePair<Guid, Visit>(key, current));
-            }
-            else
-            {
-                online.Add((key, current));
+                online.Add(new Row(key, user.First.UtcTicks, user.Last.UtcTicks, tabs));
             }
         }
 
-        online.Sort(static (a, b) => b.Visit.First != a.Visit.First ? b.Visit.First.CompareTo(a.Visit.First) : a.Key.CompareTo(b.Key));
+        online.Sort(static (a, b) => b.First != a.First ? b.First.CompareTo(a.First) : a.Key.CompareTo(b.Key));
         return online;
     }
 
-    private long Now => _timeProvider.GetUtcNow().UtcTicks;
+    private DateTimeOffset Now => _timeProvider.GetUtcNow();
 
     private static DateTimeOffset At(long ticks) => new(ticks, TimeSpan.Zero);
 
     private TimeSpan Window => ChannelSettings.Of(_options.CurrentValue, Constants.Channels.Backoffice).ActivityWindow;
 
-    /// <summary>When the user came online, when they were last seen, and when each open tab last sent a heartbeat.</summary>
-    private sealed record Visit(long First, long Last, ImmutableDictionary<string, long> Tabs);
+    /// <summary>A user in the backoffice: when they came online, when they were last seen, and how many tabs are open.</summary>
+    private readonly record struct Row(Guid Key, long First, long Last, int Tabs);
 }

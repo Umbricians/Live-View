@@ -5,6 +5,7 @@ using Umbraco.Cms.Core.ServerEvents;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Tests.Messaging;
 
@@ -19,8 +20,9 @@ public class BackofficeMessengerTests
 
     public BackofficeMessengerTests()
     {
-        _presence = new BackofficePresence(_directory, new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions()), _clock);
-        _messenger = new BackofficeMessenger(_router, _presence, _clock);
+        var options = new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions());
+        _presence = new BackofficePresence(new InMemoryActivityStore(options), _directory, options, _clock);
+        _messenger = new BackofficeMessenger(_router, _presence, new InMemoryBackofficeMessageStore(_clock), _clock);
         _me = _directory.Add("Me");
     }
 
@@ -37,7 +39,7 @@ public class BackofficeMessengerTests
         Assert.Equal(2, sent.Recipients);
         Assert.Equal([alice, bob], _router.Notified.Select(n => n.UserKey));
         Assert.All(_router.Notified, n => Assert.Equal(sent.Message.Key, n.Event.Key));
-        Assert.Equal("Me", _messenger.Receive(sent.Message.Key, alice)?.SenderName);
+        Assert.Equal("Me", (await _messenger.ReceiveAsync(sent.Message.Key, alice))?.SenderName);
     }
 
     [Fact]
@@ -49,7 +51,7 @@ public class BackofficeMessengerTests
 
         Assert.Equal(1, sent.Recipients);
         Assert.Equal([alice], _router.Notified.Select(n => n.UserKey));
-        Assert.Null(_messenger.Receive(sent.Message.Key, _me));
+        Assert.Null(await _messenger.ReceiveAsync(sent.Message.Key, _me));
     }
 
     [Fact]
@@ -102,7 +104,7 @@ public class BackofficeMessengerTests
         BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(Request(userKeys: [alice]), Me));
 
         Assert.Equal(0, _presence.CountOnline());
-        Assert.Equal([sent.Message.Key], _messenger.GetUndelivered(alice));
+        Assert.Equal([sent.Message.Key], await _messenger.GetUndeliveredAsync(alice));
     }
 
     [Fact]
@@ -187,7 +189,7 @@ public class BackofficeMessengerTests
         Assert.IsType<BackofficeSendResult.Rejected>(allOnline);
         Assert.IsType<BackofficeSendResult.Rejected>(nobody);
         Assert.Empty(_router.Notified);
-        Assert.Empty(_messenger.GetUndelivered(_me));
+        Assert.Empty(await _messenger.GetUndeliveredAsync(_me));
     }
 
     private static BackofficeMessageRequest Request(

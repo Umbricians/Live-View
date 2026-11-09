@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Tests.Messaging;
 
@@ -19,7 +20,8 @@ public class MemberMessagingServiceTests
 
     public MemberMessagingServiceTests()
     {
-        _presence = new MemberPresence(_directory, new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions()), _clock);
+        var options = new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions());
+        _presence = new MemberPresence(new InMemoryActivityStore(options), _directory, options, _clock);
         _messaging = new MemberMessagingService([_banner], _presence, _clock, NullLogger<MemberMessagingService>.Instance);
     }
 

@@ -16,8 +16,8 @@ sessions are active right now:
 - **Anything else** you plug in
 
 The chart refreshes every 2, 5, 10, 15 or 30 seconds (your choice is remembered per browser). Nothing is stored:
-the server keeps an in-memory set of recently active sessions, and the browser keeps the last 120 readings while
-the page is open.
+the server keeps an in-memory set of recently active sessions (by default; see
+[load-balanced sites](#6-load-balanced-sites)), and the browser keeps the last 120 readings while the page is open.
 
 Click a counter, or its legend entry, to take its line off the chart; both fade until you click either again.
 
@@ -70,7 +70,7 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
   is down, the count falls back to heartbeats, and a closed tab then drops off within about two and a half minutes.
 - Messages are pushed over Umbraco's server events (SignalR), so they arrive instantly. If a user's realtime
   connection is down, their next heartbeat picks the message up instead ("Delivery" column).
-- Messages are held in memory for 15 minutes, then discarded.
+- Messages are held for 15 minutes in the message store (in memory by default), then discarded.
 
 ## Documentation
 
@@ -152,7 +152,8 @@ Web sessions are counted per visitor, not per tab: several tabs in the same brow
 User-Agent that identify the visitor, so they count once. Different browsers or devices count separately, while
 visitors behind one shared IP address using an identical browser version are counted as one.
 
-> Counts are per server. On a load-balanced site, each server sees only its own traffic.
+> By default counts are per server: on a load-balanced site, each server sees only its own traffic. See
+> [Load-balanced sites](docs/getting-started.md#load-balanced-sites) to share them.
 
 ## Configuration
 
@@ -359,6 +360,27 @@ refreshes, so keep it quick: it has two seconds, and a member whose provider fai
 their initials. The demo site's
 [DemoMemberAvatarProvider.cs](demo/Umbricians.LiveView.Demo/DemoMembers/DemoMemberAvatarProvider.cs) hands out a few
 bundled pictures.
+
+### 6. Load-balanced sites
+
+By default each server keeps its own counts, online lists and sent backoffice messages in memory. To share them,
+register your own `ILiveViewActivityStore` (sessions, users, tabs, members and MCP callers) and
+`IBackofficeMessageStore` (backoffice messages), which replace the in-memory ones whichever composer runs first:
+
+```csharp
+public class LiveViewStoresComposer : IComposer
+{
+    public void Compose(IUmbracoBuilder builder)
+    {
+        builder.Services.AddSingleton<ILiveViewActivityStore, RedisActivityStore>();
+        builder.Services.AddSingleton<IBackofficeMessageStore, RedisBackofficeMessageStore>();
+    }
+}
+```
+
+`RedisActivityStore` and `RedisBackofficeMessageStore` are your own classes; no distributed store ships with the
+package. See [Load-balanced sites](docs/getting-started.md#load-balanced-sites) for what each store must do and what
+stays per server.
 
 ## API
 

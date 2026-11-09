@@ -8,6 +8,7 @@ using Umbraco.Cms.Core.ServerEvents;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 using Umbricians.LiveView.Tracking;
 
 namespace Umbricians.LiveView.Tests.Presence;
@@ -32,8 +33,9 @@ public class McpPresenceTests
             SessionKeys = [Constants.SessionKeySources.HeaderPrefix + "Mcp-Session-Id", Constants.SessionKeySources.Client],
         };
         var options = new StaticOptionsMonitor<LiveViewOptions>(liveViewOptions);
-        _backoffice = new BackofficePresence(_users, options, _clock);
-        _memberPresence = new MemberPresence(_members, options, _clock);
+        var store = new InMemoryActivityStore(options);
+        _backoffice = new BackofficePresence(store, _users, options, _clock);
+        _memberPresence = new MemberPresence(store, _members, options, _clock);
         _callers = new McpCallers(_backoffice, _memberPresence, _users, _members, _clock, NullLogger<McpCallers>.Instance);
         _middleware = new LiveActivityMiddleware(new RequestClassifier(options), new NoTracker(), _backoffice, _memberPresence, _callers);
     }
@@ -133,7 +135,7 @@ public class McpPresenceTests
         Assert.Equal(2, _backoffice.CountOnline());
         Assert.Equal([bob], _backoffice.AllInBackoffice());
 
-        var messenger = new BackofficeMessenger(new NoServerEvents(), _backoffice, _clock);
+        var messenger = new BackofficeMessenger(new NoServerEvents(), _backoffice, new InMemoryBackofficeMessageStore(_clock), _clock);
         Assert.Equal(1, messenger.CountAllOnlineRecipients(senderKey: null));
     }
 

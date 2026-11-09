@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.Extensions.Time.Testing;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Tests.Presence;
 
@@ -12,8 +13,11 @@ public class BackofficePresenceTests
     private readonly LiveViewOptions _options = new();
     private readonly BackofficePresence _presence;
 
-    public BackofficePresenceTests() =>
-        _presence = new BackofficePresence(_directory, new StaticOptionsMonitor<LiveViewOptions>(_options), _clock);
+    public BackofficePresenceTests()
+    {
+        var options = new StaticOptionsMonitor<LiveViewOptions>(_options);
+        _presence = new BackofficePresence(new InMemoryActivityStore(options), _directory, options, _clock);
+    }
 
     [Fact]
     public void A_user_seen_is_online()
