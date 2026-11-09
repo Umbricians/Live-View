@@ -4,7 +4,7 @@ using Umbricians.LiveView.Tracking;
 
 namespace Umbricians.LiveView.Tests.Tracking;
 
-/// <summary>How long a session counts: for the activity window after its last request, and while a request is open.</summary>
+/// <summary>How long a session counts: for the activity window after its last request or touch, while a request is open, until it is ended, and only while its channel has room.</summary>
 public class LiveActivityTrackerTests
 {
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
