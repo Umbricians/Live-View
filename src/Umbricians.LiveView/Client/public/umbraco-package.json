@@ -5,7 +5,7 @@
   "allowTelemetry": true,
   "importmap": {
     "imports": {
-      "@umbricians/live-view": "/App_Plugins/UmbriciansLiveView/umbricians-live-view.js"
+      "@umbricians/live-view": "/App_Plugins/UmbriciansLiveView/umbricians-live-view-api.js"
     }
   },
   "extensions": [

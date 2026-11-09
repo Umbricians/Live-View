@@ -1,0 +1,13 @@
+{
+  // Declarations for src/index.ts, shipped next to the bundle so sites can type their panels.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "outDir": "../wwwroot/App_Plugins/UmbriciansLiveView/types",
+    "rootDir": "src"
+  },
+  "include": [ "src" ],
+  "exclude": [ "src/**/*.test.ts", "src/bundle.manifests.ts" ]
+}

@@ -458,8 +458,13 @@ To replace a panel, register yours with `overwrites` set to its alias. To show o
 with `extensionRegistry.appendCondition(alias, condition)`. "Message users…" and "Message members…" show only while
 their panel is shown.
 
-The manifest's TypeScript interface is `ManifestLiveViewPanel`, exported from `@umbricians/live-view` with the
-context token.
+For a TypeScript site, the package ships declarations for `@umbricians/live-view` (the context token and the
+`ManifestLiveViewPanel` manifest interface). They sit in `App_Plugins/UmbriciansLiveView/types/index.d.ts` among the
+package's static web assets; point a `paths` entry in the site's `tsconfig.json` at that file:
+
+```json
+{ "compilerOptions": { "paths": { "@umbricians/live-view": ["<path to>/App_Plugins/UmbriciansLiveView/types/index.d.ts"] } } }
+```
 
 ## API
 

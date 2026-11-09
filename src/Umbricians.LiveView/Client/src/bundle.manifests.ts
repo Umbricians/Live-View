@@ -6,4 +6,3 @@ import { manifests as permissions } from "./permissions/manifest.js";
 // Loaded from umbraco-package.json; collates every manifest in the package.
 export const manifests: Array<UmbExtensionManifest> = [...entrypoints, ...dashboards, ...modals, ...permissions];
 
-export * from "./index.js";
