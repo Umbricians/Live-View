@@ -25,8 +25,8 @@ classifier** decides; others are fed from code.
 
 ## Channel settings
 
-A channel's settings as they apply, with every value filled in: its name, sort order, paths, session key sources,
-activity window and so on. Appsettings beat channels declared in code, which beat the built-in defaults; whatever is
+A channel's settings as they apply, with every value filled in: its name, sort order, paths, hosts, request predicate,
+session key sources, activity window and so on. Appsettings beat channels declared in code, which beat the built-in defaults; whatever is
 still empty then gets the package defaults (counted by client, a window of `ActivityWindowSeconds`). Everything that
 reads a channel's settings reads them here.
 
@@ -91,8 +91,15 @@ leaves a member online on MCP.
 
 The module that decides which **channels** a request counts in, under what session key, and who it shows was seen:
 a member (for **Member presence**), a backoffice user (for **Backoffice presence**) or an **MCP caller**. It owns
-every rule about which requests count: path prefixes and exclusions, sort order and exclusive channels, static
-files, bots, and the session key sources. The tracking middleware only acts on what it decides.
+every rule about which requests count: path prefixes and exclusions, hosts and request predicates, sort order and
+exclusive channels, static files, bots, and the **session key sources**, including those a site registers. The tracking middleware only acts on what it decides.
+
+## Session key source
+
+Where a channel's session key comes from: a request header, a cookie, the Authorization header, the signed-in user,
+the client (IP address and User-Agent), or a source the site registers in code under its own alias. A channel tries
+its sources in order and uses the first with a value, which is hashed before it is held. Sources that use the
+signed-in user are read once authentication has run.
 
 ## Signed-out marker
 

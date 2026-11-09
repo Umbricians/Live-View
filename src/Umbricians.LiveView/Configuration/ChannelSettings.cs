@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http;
+
 namespace Umbricians.LiveView.Configuration;
 
 /// <summary>
@@ -13,6 +15,8 @@ internal sealed record ChannelSettings(
     bool Enabled,
     string[] PathPrefixes,
     string[] ExcludePathPrefixes,
+    string[] Hosts,
+    Func<HttpContext, bool>? RequestPredicate,
     string[] SessionKeys,
     TimeSpan ActivityWindow,
     bool IgnoreStaticFiles,
@@ -35,6 +39,8 @@ internal sealed record ChannelSettings(
             channel.Enabled,
             channel.PathPrefixes ?? [],
             channel.ExcludePathPrefixes ?? [],
+            channel.Hosts ?? [],
+            channel.RequestPredicate,
             channel.SessionKeys ?? [Constants.SessionKeySources.Client],
             TimeSpan.FromSeconds(channel.ActivityWindowSeconds ?? options.ActivityWindowSeconds),
             channel.IgnoreStaticFiles ?? false,

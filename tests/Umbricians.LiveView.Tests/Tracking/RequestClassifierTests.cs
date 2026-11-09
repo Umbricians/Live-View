@@ -11,7 +11,7 @@ public class RequestClassifierTests
     private readonly LiveViewOptions _options = new();
     private readonly RequestClassifier _classifier;
 
-    public RequestClassifierTests() => _classifier = new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options));
+    public RequestClassifierTests() => _classifier = new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options), []);
 
     [Theory]
     [InlineData("/api", true)]
@@ -161,6 +161,75 @@ public class RequestClassifierTests
         Assert.Equal([new ChannelSession(Constants.Channels.Mcp, "Header:Mcp-Session-Id:s1")], request.Sessions);
     }
 
+    [Theory]
+    [InlineData("brand-a.com", true)]
+    [InlineData("BRAND-A.com", true)]
+    [InlineData("brand-a.com:8080", true)]
+    [InlineData("www.brand-a.com", false)]
+    [InlineData("brand-b.com", false)]
+    [InlineData("", false)]
+    public void A_host_channel_counts_only_its_hosts(string host, bool counted)
+    {
+        Channel("brand-a", prefixes: ["/"]).Hosts = ["brand-a.com"];
+
+        Assert.Equal(counted ? ["brand-a"] : [], Channels(Get("/page", host)));
+    }
+
+    [Theory]
+    [InlineData("shop.brand-a.com", true)]
+    [InlineData("brand-a.com", false)]
+    [InlineData("shop.brand-b.com", false)]
+    public void A_wildcard_host_matches_subdomains_only(string host, bool counted)
+    {
+        Channel("brand-a", prefixes: ["/"]).Hosts = ["*.brand-a.com"];
+
+        Assert.Equal(counted ? ["brand-a"] : [], Channels(Get("/page", host)));
+    }
+
+    [Fact]
+    public void Each_site_counts_in_its_own_channel_and_the_rest_in_web()
+    {
+        Channel("brand-a", prefixes: ["/"], sortOrder: 10).Hosts = ["brand-a.com"];
+        Channel("web", prefixes: ["/"], sortOrder: 20);
+
+        Assert.Equal(["brand-a"], Channels(Get("/page", "brand-a.com")));
+        Assert.Equal(["web"], Channels(Get("/page", "brand-b.com")));
+    }
+
+    [Fact]
+    public void A_request_predicate_narrows_a_channels_paths()
+    {
+        Channel("checkout", prefixes: ["/shop"]).RequestPredicate = c => c.Request.Query.ContainsKey("basket");
+
+        DefaultHttpContext withBasket = Get("/shop");
+        withBasket.Request.QueryString = new QueryString("?basket=1");
+        DefaultHttpContext otherPath = Get("/about");
+        otherPath.Request.QueryString = new QueryString("?basket=1");
+
+        Assert.Equal(["checkout"], Channels(withBasket));
+        Assert.Empty(Channels(Get("/shop")));
+        Assert.Empty(Channels(otherPath));
+    }
+
+    [Fact]
+    public void A_channel_with_only_a_request_predicate_counts_any_path_it_accepts()
+    {
+        Channel("app", prefixes: []).RequestPredicate = c => c.Request.Headers.ContainsKey("X-App-Version");
+        DefaultHttpContext withHeader = Get("/anything");
+        withHeader.Request.Headers["X-App-Version"] = "2";
+
+        Assert.Equal(["app"], Channels(withHeader));
+        Assert.Empty(Channels(Get("/anything")));
+    }
+
+    [Fact]
+    public void A_channel_with_neither_paths_nor_a_predicate_counts_no_requests()
+    {
+        Channel("signalr", prefixes: []);
+
+        Assert.False(_classifier.Classify(Get("/anything").Request).IsTracked);
+    }
+
     private LiveViewChannelOptions Channel(
         string alias,
         string[] prefixes,
@@ -184,9 +253,14 @@ public class RequestClassifierTests
     private IEnumerable<string> Channels(DefaultHttpContext context) =>
         _classifier.Classify(context.Request).Sessions.Select(s => s.Channel);
 
-    private static DefaultHttpContext Get(string path)
+    private static DefaultHttpContext Get(string path, string? host = null)
     {
         var context = new DefaultHttpContext();
+        if (!string.IsNullOrEmpty(host))
+        {
+            context.Request.Host = new HostString(host);
+        }
+
         context.Request.Method = HttpMethods.Get;
         context.Request.Path = path;
         context.Connection.RemoteIpAddress = IPAddress.Loopback;

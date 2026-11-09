@@ -103,9 +103,11 @@ receive messages. See [Permissions](docs/getting-started.md#permissions) for det
 
 ## How sessions are counted
 
-Middleware offers each request to the channels in order and counts it in every channel whose path prefixes it falls
-under, stopping at the first *exclusive* one (channels are exclusive unless `Exclusive` is `false`). For each, it
-works out a session key and keeps the session active for the length of the request and for the channel's
+Middleware offers each request to the channels in order and counts it in every channel it matches, stopping at the
+first *exclusive* one (channels are exclusive unless `Exclusive` is `false`). A request matches a channel when it
+falls under one of the channel's path prefixes and none of its excluded ones, and, when the channel has them, is for
+one of its `Hosts` and passes its request predicate. For each channel, it works out a session key from the channel's
+session key sources and keeps the session active for the length of the request and for the channel's
 *activity window* after it. Session keys are hashed before they are held in memory, and no cookies are set.
 
 | Channel | Paths | Session key (first one present) | Window |
@@ -118,6 +120,9 @@ works out a session key and keeps the session active for the length of the reque
 
 Because the session stays active for as long as a request is open, long-lived MCP streams (SSE) count while they
 are connected. Crawlers are ignored by default.
+
+A site with several domains can count each on its own line with `Hosts`, and sessions can be keyed on anything the
+site's code works out, such as a tenant or API client id: see [Extending](#1-a-channel-for-requests).
 
 Backoffice users and members are counted once per person, however many tabs or devices they use, and whether they
 are in the backoffice or on the website, on MCP, or both. Only requests that pass authentication count, so a failed
@@ -185,7 +190,9 @@ Everything is optional. Override only what you need in `appsettings.json`:
 ```
 
 Built-in channels keep their defaults for any property you leave out. Session key sources are `Header:<name>`,
-`Cookie:<name>`, `Authorization`, `User` (the authenticated backoffice user or member) and `Client`. Set
+`Cookie:<name>`, `Authorization`, `User` (the authenticated backoffice user or member) and `Client`, or the alias of a
+[session key source of your own](#your-own-session-key-sources). `Hosts` limits a channel to requests for those host
+names, ignoring port: `brand-a.com`, or `*.brand-a.com` for its subdomains. Set
 `"Exclusive": false` on a channel whose requests should also count in later channels. The built-in `members`
 channel always counts the signed-in member and always lets members count as web visitors too, so `SessionKeys` and
 `Exclusive` don't apply to it; its other settings do. The built-in `backoffice` channel always counts the signed-in
@@ -201,9 +208,65 @@ backoffice user, so `SessionKeys` doesn't apply to it.
 
 There are three ways to put your own data on the chart, from least to most code.
 
-### 1. A path-based channel (no code)
+### 1. A channel for requests
 
-Add a channel under `Umbricians:LiveView:Channels` as shown above.
+Add a channel under `Umbricians:LiveView:Channels` as shown above. No code needed. To count each of several sites on
+its own line, give each channel its `Hosts`:
+
+```json
+"brand-a": {
+  "Name": "Brand A",
+  "SortOrder": 95,
+  "Hosts": [ "brand-a.com", "*.brand-a.com" ],
+  "PathPrefixes": [ "/" ],
+  "ExcludePathPrefixes": [ "/umbraco", "/App_Plugins", "/media", "/api", "/mcp" ],
+  "IgnoreStaticFiles": true
+}
+```
+
+It sorts after `members` (90), so members are still seen, and before `web` (100). Channels are exclusive by default,
+so Web sessions then counts the other sites; set `"Exclusive": false` to keep Web sessions as the total.
+
+#### Matching requests in code
+
+Set a `RequestPredicate` on a channel declared with `AddLiveViewChannel` to match requests by anything the request
+carries:
+
+```csharp
+builder.AddLiveViewChannel("app", "Mobile app", c =>
+{
+    c.SortOrder = 5;
+    c.RequestPredicate = context => context.Request.Headers.ContainsKey("X-App-Version");
+    c.SessionKeys = ["Header:X-Device-Id", "Client"];
+});
+```
+
+A predicate is used together with the channel's path prefixes and hosts, or on its own. It runs before authentication
+on every request offered to the channel, so keep it quick; it can't see the signed-in user.
+
+#### Your own session key sources
+
+To key sessions on something only your code knows, implement `ILiveSessionKeySource`, register it with
+`builder.AddLiveViewSessionKeySource<T>()` and list its alias in a channel's `SessionKeys`:
+
+```csharp
+public class TenantSessionKeySource : ILiveSessionKeySource
+{
+    public string Alias => "Tenant";
+
+    public bool UsesSignedInUser => true;
+
+    public string? GetSessionKey(HttpContext context) => context.User.FindFirst("tenant_id")?.Value;
+}
+```
+
+```json
+"SessionKeys": [ "Tenant", "Client" ]
+```
+
+Sources are tried in order along with the built-in ones; return null to fall through to the next. Values are hashed
+before they are held. `UsesSignedInUser` defers reading until authentication has run, as for `User`. The built-in
+names always mean the built-in sources.
 
 ### 2. Feed a channel from code
 
