@@ -30,6 +30,17 @@ activity window and so on. Appsettings beat channels declared in code, which bea
 still empty then gets the package defaults (counted by client, a window of `ActivityWindowSeconds`). Everything that
 reads a channel's settings reads them here.
 
+## Dashboard context
+
+What the dashboard shares with its panels. Every panel follows its refresh interval and paused state; the package's own
+panels also share the readings and what the footer's message actions need from the online tables' selections.
+
+## Dashboard panel
+
+One box on the Live View dashboard (Live activity, Backoffice users online, Members online, or one a site adds),
+registered as an `umbriciansLiveViewPanel` extension and shown in weight order. It refreshes and pauses with the chart
+through the **dashboard context**.
+
 ## MCP caller
 
 A backoffice user or member using an MCP endpoint. Requests to an MCP endpoint the site hosts are matched to the
