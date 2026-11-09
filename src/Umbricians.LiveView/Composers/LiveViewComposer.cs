@@ -23,6 +23,7 @@ public class LiveViewComposer : IComposer
     {
         builder.Services.AddOptions<LiveViewOptions>().Bind(builder.Config.GetSection(Constants.ConfigurationSection));
         LiveViewOptionsDefaults.AddTo(builder.Services);
+        LiveViewOptionsValidation.AddTo(builder.Services);
 
         builder.Services.AddMvcCore().ConfigureApplicationPartManager(parts =>
             parts.FeatureProviders.Add(new LiveViewControllerFeatureProvider()));

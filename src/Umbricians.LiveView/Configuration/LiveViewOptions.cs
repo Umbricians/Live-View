@@ -5,6 +5,8 @@ namespace Umbricians.LiveView.Configuration;
 /// </summary>
 public class LiveViewOptions
 {
+    internal const int DefaultBackofficeMessageLifetimeMinutes = 15;
+
     /// <summary>Turns request tracking on or off. The dashboard still shows custom metric providers when off.</summary>
     public bool TrackingEnabled { get; set; } = true;
 
@@ -36,6 +38,18 @@ public class LiveViewOptions
     /// <c>America/Denver</c> (or a Windows id). When empty, it is the sending backoffice user's own time zone.
     /// </summary>
     public string? MessageTimeZone { get; set; }
+
+    /// <summary>How long a message to backoffice users is kept for recipients to fetch, in minutes.</summary>
+    public int BackofficeMessageLifetimeMinutes { get; set; } = DefaultBackofficeMessageLifetimeMinutes;
+
+    /// <summary>
+    /// Text that marks a User-Agent as a crawler, matched anywhere in it without regard to case, on top of the
+    /// built-in patterns. Only applies while <see cref="IgnoreBots"/> is on.
+    /// </summary>
+    public string[] BotUserAgents { get; set; } = [];
+
+    /// <summary>How the dashboard refreshes and how much of the chart it keeps.</summary>
+    public LiveViewDashboardOptions Dashboard { get; set; } = new();
 
     /// <summary>
     /// Request-tracked channels, keyed by alias. The built-in <c>web</c>, <c>members</c>, <c>backoffice</c>, <c>mcp</c> and <c>api</c> channels are
@@ -84,4 +98,23 @@ public class LiveViewChannelOptions
     /// for a channel that overlaps another, such as logged-in members, who are also web visitors.
     /// </summary>
     public bool? Exclusive { get; set; }
+}
+
+public class LiveViewDashboardOptions
+{
+    internal static readonly int[] DefaultRefreshIntervals = [2, 5, 10, 15, 30];
+    internal const int PreferredRefreshInterval = 5;
+    internal const int DefaultMaxReadings = 120;
+
+    /// <summary>The refresh intervals offered on the dashboard, in seconds. When empty, 2, 5, 10, 15 and 30.</summary>
+    public int[] RefreshIntervals { get; set; } = [];
+
+    /// <summary>
+    /// The interval, in seconds, a browser uses until someone picks another; one of <see cref="RefreshIntervals"/>.
+    /// When empty, 5, or the shortest choice when 5 isn't offered.
+    /// </summary>
+    public int? DefaultRefreshInterval { get; set; }
+
+    /// <summary>How many readings the chart keeps while the dashboard is open.</summary>
+    public int MaxReadings { get; set; } = DefaultMaxReadings;
 }

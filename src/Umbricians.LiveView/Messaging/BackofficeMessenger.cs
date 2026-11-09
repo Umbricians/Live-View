@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Models.ServerEvents;
 using Umbraco.Cms.Core.ServerEvents;
+using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Presence;
 
 namespace Umbricians.LiveView.Messaging;
@@ -44,7 +46,7 @@ internal abstract record BackofficeSendResult
 /// offline, and pick the message up if they come back within its lifetime.
 /// Server events only carry a key, so the message is held in memory and each recipient's backoffice fetches it
 /// by key. Recipients whose realtime connection is down pick it up from their next heartbeat instead.
-/// Messages are discarded after <see cref="Lifetime"/>.
+/// Messages are discarded after <see cref="LiveViewOptions.BackofficeMessageLifetimeMinutes"/>.
 /// </remarks>
 internal sealed class BackofficeMessenger
 {
@@ -53,17 +55,21 @@ internal sealed class BackofficeMessenger
 
     internal const int MaxRecipients = 1000;
 
-    private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
-
     private readonly ConcurrentDictionary<Guid, Entry> _messages = new();
     private readonly IServerEventRouter _router;
     private readonly BackofficePresence _presence;
+    private readonly IOptionsMonitor<LiveViewOptions> _options;
     private readonly TimeProvider _timeProvider;
 
-    public BackofficeMessenger(IServerEventRouter router, BackofficePresence presence, TimeProvider timeProvider)
+    public BackofficeMessenger(
+        IServerEventRouter router,
+        BackofficePresence presence,
+        IOptionsMonitor<LiveViewOptions> options,
+        TimeProvider timeProvider)
     {
         _router = router;
         _presence = presence;
+        _options = options;
         _timeProvider = timeProvider;
     }
 
@@ -128,7 +134,7 @@ internal sealed class BackofficeMessenger
 
     private void Prune()
     {
-        DateTimeOffset cutoff = _timeProvider.GetUtcNow() - Lifetime;
+        DateTimeOffset cutoff = _timeProvider.GetUtcNow() - TimeSpan.FromMinutes(_options.CurrentValue.BackofficeMessageLifetimeMinutes);
         foreach ((Guid key, Entry entry) in _messages)
         {
             if (entry.Message.SentAt < cutoff)

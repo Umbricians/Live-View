@@ -88,6 +88,52 @@ public class RequestClassifierTests
         Assert.Equal(["web"], Channels(context));
     }
 
+    [Fact]
+    public void A_site_can_add_its_own_crawler_patterns()
+    {
+        _options.BotUserAgents = ["StatusCake"];
+        Channel("web", prefixes: ["/"]);
+
+        Assert.False(_classifier.Classify(WithUserAgent("Mozilla/5.0 (compatible; statuscake)").Request).IsTracked);
+    }
+
+    [Fact]
+    public void Built_in_crawler_patterns_still_apply_alongside_the_sites_own()
+    {
+        _options.BotUserAgents = ["StatusCake"];
+        Channel("web", prefixes: ["/"]);
+
+        Assert.False(_classifier.Classify(WithUserAgent("Googlebot/2.1").Request).IsTracked);
+    }
+
+    [Fact]
+    public void A_browser_matching_no_pattern_is_counted()
+    {
+        _options.BotUserAgents = ["StatusCake"];
+        Channel("web", prefixes: ["/"]);
+
+        Assert.Equal(["web"], Channels(WithUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/130.0")));
+    }
+
+    [Fact]
+    public void Blank_crawler_patterns_match_nothing()
+    {
+        _options.BotUserAgents = ["", "  "];
+        Channel("web", prefixes: ["/"]);
+
+        Assert.Equal(["web"], Channels(WithUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/130.0")));
+    }
+
+    [Fact]
+    public void The_sites_crawler_patterns_are_ignored_while_bots_are_counted()
+    {
+        _options.IgnoreBots = false;
+        _options.BotUserAgents = ["StatusCake"];
+        Channel("web", prefixes: ["/"]);
+
+        Assert.Equal(["web"], Channels(WithUserAgent("StatusCake")));
+    }
+
     [Theory]
     [InlineData("OPTIONS")]
     [InlineData("HEAD")]
@@ -183,6 +229,13 @@ public class RequestClassifierTests
 
     private IEnumerable<string> Channels(DefaultHttpContext context) =>
         _classifier.Classify(context.Request).Sessions.Select(s => s.Channel);
+
+    private static DefaultHttpContext WithUserAgent(string userAgent)
+    {
+        DefaultHttpContext context = Get("/page");
+        context.Request.Headers.UserAgent = userAgent;
+        return context;
+    }
 
     private static DefaultHttpContext Get(string path)
     {

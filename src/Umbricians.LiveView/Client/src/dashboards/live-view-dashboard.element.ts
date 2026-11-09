@@ -1,4 +1,4 @@
-import { LitElement, css, html, customElement, state, query, repeat } from "@umbraco-cms/backoffice/external/lit";
+import { LitElement, css, html, customElement, state, query, repeat, nothing } from "@umbraco-cms/backoffice/external/lit";
 import { UmbElementMixin } from "@umbraco-cms/backoffice/element-api";
 import type { UUISelectEvent } from "@umbraco-cms/backoffice/external/uui";
 import {
@@ -23,8 +23,10 @@ import { umbOpenModal } from "@umbraco-cms/backoffice/modal";
 import { UMBRICIANS_SEND_MESSAGE_MODAL } from "../modals/send-message.modal-token.js";
 import { UMBRICIANS_SEND_MEMBER_MESSAGE_MODAL } from "../modals/send-member-message.modal-token.js";
 import {
+  fetchDashboardSettings,
   fetchMemberMessaging,
   fetchSnapshot,
+  type DashboardSettings,
   type LiveMetricReading,
   type MemberMessaging,
 } from "../api/live-view.resource.js";
@@ -33,20 +35,27 @@ import type { UmbriciansLiveViewMembersElement } from "./live-view-members.eleme
 import "./live-view-users.element.js";
 import "./live-view-members.element.js";
 import { plural } from "../utils/format.js";
+import { offeredInterval } from "./refresh-interval.js";
 
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend);
 
-const INTERVALS = [2, 5, 10, 15, 30];
-const DEFAULT_INTERVAL = 5;
-const MAX_POINTS = 120;
 const STORAGE_KEY = "umbricians.liveView.interval";
 const FALLBACK_COLORS = ["#3544b1", "#f79c37", "#2bc37c", "#d42054", "#8b5cf6", "#0ea5e9", "#a16207"];
+
+/** The package defaults, used only if the site's settings can't be read. */
+const FALLBACK_SETTINGS: DashboardSettings = {
+  refreshIntervals: [2, 5, 10, 15, 30],
+  defaultRefreshInterval: 5,
+  maxReadings: 120,
+};
 
 type LineDataset = ChartDataset<"line", Array<number | null>> & { alias?: string };
 
 @customElement("umbricians-live-view-dashboard")
 export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitElement) {
-  @state() private _interval = readStoredInterval();
+  @state() private _settings?: DashboardSettings;
+  /** In seconds; set with the settings, before anything polls. */
+  @state() private _interval = 0;
   @state() private _paused = false;
   @state() private _metrics: Array<LiveMetricReading> = [];
   @state() private _lastUpdated?: Date;
@@ -86,7 +95,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
 
   override connectedCallback() {
     super.connectedCallback();
-    this.#schedule(0);
+    this.#start();
     fetchMemberMessaging()
       .then((messaging) => (this._memberMessaging = messaging))
       .catch(() => (this._memberMessaging = undefined));
@@ -147,6 +156,15 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
     });
   }
 
+  /** Reads the site's dashboard settings, then starts polling at the remembered interval if it is still offered. */
+  async #start() {
+    const settings = await fetchDashboardSettings().catch(() => FALLBACK_SETTINGS);
+    if (!this.isConnected) return;
+    this._settings = settings;
+    this._interval = offeredInterval(readStoredInterval(), settings.refreshIntervals, settings.defaultRefreshInterval);
+    this.#schedule(0);
+  }
+
   #schedule(delayMs: number) {
     window.clearTimeout(this.#timer);
     if (this._paused) return;
@@ -176,7 +194,8 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
 
   #append(timestamp: Date, metrics: Array<LiveMetricReading>) {
     const chart = this.#chart;
-    if (!chart) return;
+    const maxReadings = this._settings?.maxReadings;
+    if (!chart || !maxReadings) return;
 
     const labels = chart.data.labels!;
     const datasets = chart.data.datasets as Array<LineDataset>;
@@ -201,9 +220,9 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
       dataset.data.push(metrics.find((m) => m.alias === dataset.alias)?.value ?? null);
     }
 
-    if (labels.length > MAX_POINTS) {
-      labels.splice(0, labels.length - MAX_POINTS);
-      for (const dataset of datasets) dataset.data.splice(0, dataset.data.length - MAX_POINTS);
+    if (labels.length > maxReadings) {
+      labels.splice(0, labels.length - maxReadings);
+      for (const dataset of datasets) dataset.data.splice(0, dataset.data.length - maxReadings);
     }
 
     chart.update("none");
@@ -228,7 +247,9 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
   }
 
   #onIntervalChange(event: UUISelectEvent) {
-    this._interval = Number(event.target.value) || DEFAULT_INTERVAL;
+    const settings = this._settings;
+    if (!settings) return;
+    this._interval = offeredInterval(String(event.target.value), settings.refreshIntervals, settings.defaultRefreshInterval);
     try {
       localStorage.setItem(STORAGE_KEY, String(this._interval));
     } catch {
@@ -338,7 +359,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
           <div class="controls">
             <uui-select
               label="Refresh interval"
-              .options=${INTERVALS.map((s) => ({ name: `Every ${s}s`, value: String(s), selected: s === this._interval }))}
+              .options=${(this._settings?.refreshIntervals ?? []).map((s) => ({ name: `Every ${s}s`, value: String(s), selected: s === this._interval }))}
               @change=${this.#onIntervalChange}></uui-select>
             <uui-button
               look="secondary"
@@ -378,23 +399,29 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
             </div>
 
             <div class="chart"><canvas></canvas></div>
-            <p class="muted note">
-              A live snapshot only: nothing is stored, and the chart keeps the last ${MAX_POINTS} readings while this
-              page is open.
-            </p>
+            ${this._settings
+              ? html`<p class="muted note">
+                  A live snapshot only: nothing is stored, and the chart keeps the last
+                  ${this._settings.maxReadings} readings while this page is open.
+                </p>`
+              : nothing}
           </uui-box>
 
-          <umbricians-live-view-users
-            .interval=${this._interval}
-            ?paused=${this._paused}
-            ?selectable=${canMessageUsers}
-            @change=${this.#onUsersChange}></umbricians-live-view-users>
+          ${this._settings
+            ? html`
+                <umbricians-live-view-users
+                  .interval=${this._interval}
+                  ?paused=${this._paused}
+                  ?selectable=${canMessageUsers}
+                  @change=${this.#onUsersChange}></umbricians-live-view-users>
 
-          <umbricians-live-view-members
-            .interval=${this._interval}
-            ?paused=${this._paused}
-            ?selectable=${canMessageMembers}
-            @change=${this.#onMembersChange}></umbricians-live-view-members>
+                <umbricians-live-view-members
+                  .interval=${this._interval}
+                  ?paused=${this._paused}
+                  ?selectable=${canMessageMembers}
+                  @change=${this.#onMembersChange}></umbricians-live-view-members>
+              `
+            : nothing}
         </div>
 
         ${canMessageUsers || canMessageMembers
@@ -556,12 +583,11 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
   `;
 }
 
-function readStoredInterval() {
+function readStoredInterval(): string | null {
   try {
-    const stored = Number(localStorage.getItem(STORAGE_KEY));
-    return INTERVALS.includes(stored) ? stored : DEFAULT_INTERVAL;
+    return localStorage.getItem(STORAGE_KEY);
   } catch {
-    return DEFAULT_INTERVAL;
+    return null;
   }
 }
 
