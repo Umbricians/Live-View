@@ -43,7 +43,7 @@ Live View**, below Umbraco's own permissions:
 | Permission | What it allows |
 |---|---|
 | **View Live View** | See the Live View dashboard in Settings: live activity and who is online. |
-| **Message backoffice users** | Select backoffice users and send them a notification. |
+| **Message backoffice users** | Select backoffice users, or pick user groups, and send them a notification. |
 | **Message members** | Select website members and send them a message, once a developer has [set up a delivery method](member-messaging.md). |
 
 - **Administrators get all three** when the package is first installed, or when a site upgrades to a version with
@@ -178,7 +178,9 @@ anything expensive. The [README](../README.md#extending) has examples of the oth
 
 **Backoffice users** can be messaged by anyone with the **Message backoffice users** permission: tick users (or
 click **Select all N online**), then **Message users…**. The message pops up in their backoffice as an Umbraco notification that stays until dismissed. You
-are marked **You** in the list and can't select yourself, and "everyone online" means everyone except you.
+are marked **You** in the list and can't select yourself. The slide-out sends to the selected users, to everyone
+online, or to everyone online in the user groups you pick, and shows how many users that reaches right now. "Everyone
+online" and user groups both mean everyone except you who has the backoffice open when you send.
 
 **Members** can be messaged by anyone with the **Message members** permission, but only once you decide how
 messages should reach them: a banner, a live pop-up, email or something else. See
@@ -203,6 +205,9 @@ dashboard tabs are crowded. Permission changes apply after the user reloads the 
 
 **There are no checkboxes or Message buttons.** The user's groups need **Message backoffice users** or
 **Message members**. Members can only be messaged once a developer has set up a delivery method.
+
+**User groups can't be chosen.** Choosing user groups uses Umbraco's user group picker, which needs access to the
+**Users** section.
 
 **A line stays at zero.** Requests must reach the site through the paths the channel watches. For members, the
 request must be a front-end page view by a logged-in member. MCP and API paths default to `/mcp`, `/umbraco/mcp`,

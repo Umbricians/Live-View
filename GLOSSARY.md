@@ -6,8 +6,10 @@ The words this codebase uses for its domain. Code, docs and reviews should use t
 
 The module that sends a one-off message to backoffice users. It owns the send rules: the **message content**, who
 **everyone online** means at the moment of sending (users in the backoffice; an MCP caller only on MCP can't see a
-backoffice message), and that the **sender** is never one of the recipients. It also says how many users a message to
-everyone online would reach, so the users table's count and the delivery always agree.
+backoffice message), who a message to **user groups** reaches at the moment of sending (everyone online in the
+backoffice in any of the chosen groups, which must all exist), and that the **sender** is never one of the
+recipients. It also says how many users a message to everyone online, or to chosen user groups, would reach, so the
+counts the dashboard shows and the delivery always agree.
 
 ## Backoffice presence
 

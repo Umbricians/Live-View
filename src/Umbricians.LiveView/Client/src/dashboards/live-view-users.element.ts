@@ -41,6 +41,11 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
     return this.#list.summary;
   }
 
+  /** How many users a message to everyone online reaches right now: everyone else with the backoffice open. */
+  get onlineCount() {
+    return this.#list.recipients;
+  }
+
   /** Clears the selection, e.g. after a message has been sent. */
   clearSelection() {
     this.#list.clearSelection();
