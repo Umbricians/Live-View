@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Umbraco.Extensions;
 using Umbricians.LiveView.Configuration;
+using Umbricians.LiveView.Metrics;
 
 namespace Umbricians.LiveView.Tracking;
 
@@ -15,8 +16,13 @@ namespace Umbricians.LiveView.Tracking;
 internal sealed partial class RequestClassifier
 {
     private readonly IOptionsMonitor<LiveViewOptions> _options;
+    private readonly IEnumerable<ILiveMetricProvider> _providers;
 
-    public RequestClassifier(IOptionsMonitor<LiveViewOptions> options) => _options = options;
+    public RequestClassifier(IOptionsMonitor<LiveViewOptions> options, IEnumerable<ILiveMetricProvider> providers)
+    {
+        _options = options;
+        _providers = providers;
+    }
 
     public RequestClassification Classify(HttpRequest request)
     {
@@ -33,7 +39,7 @@ internal sealed partial class RequestClassifier
         var signedIn = new List<(string Channel, string[] Sources)>();
         bool memberSeen = false, backofficeSeen = false, mcpCall = false;
 
-        foreach ((string channel, string[] sources) in Match(request.Path.Value ?? "/", options))
+        foreach ((string channel, string[] sources) in Match(request.Path.Value ?? "/", options, _providers))
         {
             // Member and backoffice presence keep their lines themselves, always keyed on the signed-in member or user.
             if (channel == Constants.Channels.Members)
@@ -64,10 +70,11 @@ internal sealed partial class RequestClassifier
         return new RequestClassification(request, sessions, signedIn, memberSeen, backofficeSeen, mcpCall);
     }
 
-    private static IEnumerable<(string Channel, string[] Sources)> Match(string path, LiveViewOptions options)
+    private static IEnumerable<(string Channel, string[] Sources)> Match(
+        string path, LiveViewOptions options, IEnumerable<ILiveMetricProvider> providers)
     {
         bool isStaticFile = IsStaticFile(path, options.StaticFileExtensions);
-        foreach (ChannelSettings channel in ChannelSettings.InOrder(options))
+        foreach (ChannelSettings channel in ChannelSettings.InOrder(options, providers))
         {
             if (!channel.Enabled
                 || !MatchesAny(path, channel.PathPrefixes)

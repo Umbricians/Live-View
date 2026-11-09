@@ -7,10 +7,12 @@ namespace Umbricians.LiveView.Metrics;
 /// <remarks>
 /// Register with <c>builder.AddLiveViewMetric&lt;T&gt;()</c>. Providers are singletons and are called every time a
 /// dashboard polls, so keep <see cref="GetValueAsync"/> fast; slow or failing providers are reported as gaps.
+/// Settings under <c>Umbricians:LiveView:Channels:{Alias}</c> in appsettings apply to the line: <c>Enabled</c> switches
+/// it off, so the provider is not called, and <c>Name</c>, <c>Color</c> and <c>SortOrder</c> replace this provider's own values.
 /// </remarks>
 public interface ILiveMetricProvider
 {
-    /// <summary>Unique, stable key for the line.</summary>
+    /// <summary>Unique, stable key for the line. Use one no channel has, since settings under it apply to this line.</summary>
     string Alias { get; }
 
     /// <summary>Label shown in the legend.</summary>

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Umbricians.LiveView.Metrics;
 using Umbricians.LiveView.Presence;
 
 namespace Umbricians.LiveView.Tests;
@@ -61,4 +62,24 @@ internal sealed class StaticOptionsMonitor<T>(T value) : IOptionsMonitor<T>
     public T Get(string? name) => value;
 
     public IDisposable? OnChange(Action<T, string?> listener) => null;
+}
+
+/// <summary>A metric provider with fixed values that counts how often it is asked for its value.</summary>
+internal sealed class StubMetricProvider(string alias, string name = "Stub", string? color = null, int sortOrder = 1000, double value = 0) : ILiveMetricProvider
+{
+    public int Calls { get; private set; }
+
+    public string Alias => alias;
+
+    public string Name => name;
+
+    public string? Color => color;
+
+    public int SortOrder => sortOrder;
+
+    public Task<double> GetValueAsync(CancellationToken cancellationToken)
+    {
+        Calls++;
+        return Task.FromResult(value);
+    }
 }
