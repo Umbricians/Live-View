@@ -40,7 +40,7 @@ public class LiveViewAuthorizationTests
         Assert.True(controllers.Length >= 3);
         foreach (Type controller in controllers)
         {
-            string?[] policies = controller.GetCustomAttributes<AuthorizeAttribute>().Select(a => a.Policy).ToArray();
+            string[] policies = controller.GetCustomAttributes<AuthorizeAttribute>().Select(a => a.Policy!).ToArray();
             Assert.Equal([AuthorizationPolicies.BackOfficeAccess], policies);
 
             foreach (MethodInfo method in controller.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
@@ -173,7 +173,7 @@ public class LiveViewAuthorizationTests
 
         public Attempt<int> GetUserId() => throw new NotSupportedException();
 
-        public bool IsAuthenticated() => user is not null;
+        public bool IsAuthenticated() => CurrentUser is not null;
 
         public bool UserHasSectionAccess(string section, IUser user) => throw new NotSupportedException();
     }
