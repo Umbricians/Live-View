@@ -3,8 +3,8 @@ import { UmbModalBaseElement } from "@umbraco-cms/backoffice/modal";
 import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
 import type { UUIBooleanInputEvent, UUIRadioGroupEvent, UUISelectEvent } from "@umbraco-cms/backoffice/external/uui";
 import { sendMemberMessage, type MemberAudience } from "../api/live-view.resource.js";
-import { plural } from "../utils/format.js";
-import { LONGEST_MINUTES, formatAt, formatDuration, nextMidnight, timeZoneLabel } from "../utils/expiry.js";
+import { describeError } from "../utils/format.js";
+import { LONGEST_MINUTES, durationParts, nextMidnight, timeZoneCity } from "../utils/expiry.js";
 import type {
   UmbriciansSendMemberMessageModalData,
   UmbriciansSendMemberMessageModalValue,
@@ -14,13 +14,17 @@ import { hasHeadline, newMessage, renderMessageFields, sendColor, trimmed } from
 /** A number of minutes, midnight tonight in the site's time zone, or hours and minutes typed in. */
 type Lifetime = number | "midnight" | "custom";
 
-const LIFETIMES: Array<{ name: string; value: Lifetime }> = [
-  { name: "15 minutes", value: 15 },
-  { name: "1 hour", value: 60 },
-  { name: "Midnight tonight", value: "midnight" },
-  { name: "24 hours", value: 60 * 24 },
-  { name: "7 days", value: 60 * 24 * 7 },
-  { name: "Custom…", value: "custom" },
+type LifetimeChoice = { amount: number; unit: "minute" | "hour" | "day" } | "midnight" | "custom";
+
+const MINUTES_IN = { minute: 1, hour: 60, day: 60 * 24 };
+
+const LIFETIMES: Array<LifetimeChoice> = [
+  { amount: 15, unit: "minute" },
+  { amount: 1, unit: "hour" },
+  "midnight",
+  { amount: 24, unit: "hour" },
+  { amount: 7, unit: "day" },
+  "custom",
 ];
 
 /**
@@ -55,7 +59,7 @@ export class UmbriciansLiveViewSendMemberMessageModalElement extends UmbModalBas
     const selection = this.data?.selection;
     this._audience = selection?.allOnline ? "allOnline" : selection && selection.count > 0 ? "selected" : "allOnline";
     this._senders = new Set(this.data?.senders.map((s) => s.alias));
-    // Keeps "in 5 h 12 min" true while the dialog stays open.
+    // Keeps the time left true while the dialog stays open.
     this.#clock = window.setInterval(() => (this._now = Date.now()), 30_000);
   }
 
@@ -120,23 +124,54 @@ export class UmbriciansLiveViewSendMemberMessageModalElement extends UmbModalBas
       this._submitModal();
     } catch (error) {
       this.#notifications?.peek("danger", {
-        data: { headline: "Message not sent", message: error instanceof Error ? error.message : String(error) },
+        data: { headline: this.localize.term("umbriciansLiveView_messageNotSent"), message: describeError(this.localize, error) },
       });
     } finally {
       this._sending = false;
     }
   }
 
+  #lifetimeOptions() {
+    return LIFETIMES.map((choice) => {
+      if (choice === "midnight" || choice === "custom") {
+        return {
+          name: choice === "midnight" ? this.localize.term("umbriciansLiveView_lifetimeMidnight") : this.localize.term("umbriciansLiveView_lifetimeCustom"),
+          value: choice,
+          selected: choice === this._lifetime,
+        };
+      }
+      const minutes = choice.amount * MINUTES_IN[choice.unit];
+      return {
+        name: this.localize.number(choice.amount, { style: "unit", unit: choice.unit, unitDisplay: "long" }),
+        value: String(minutes),
+        selected: minutes === this._lifetime,
+      };
+    });
+  }
+
   #renderExpiry() {
     const expiresAt = this.#expiresAt(this._now);
     if (!expiresAt) {
-      return html`<p class="expiry invalid">Enter between 1 minute and ${LONGEST_MINUTES / 60 / 24} days.</p>`;
+      return html`<p class="expiry invalid">${this.localize.term("umbriciansLiveView_lifetimeOutOfRange", LONGEST_MINUTES / 60 / 24)}</p>`;
     }
     const timeZone = this.#timeZone;
-    return html`<p class="expiry muted">
-      Stops being shown ${formatAt(expiresAt, timeZone)} ${timeZoneLabel(timeZone)}
-      (in ${formatDuration(expiresAt.getTime() - this._now)}).
-    </p>`;
+    const city = timeZoneCity(timeZone);
+    const at = this.localize.date(expiresAt, {
+      timeZone,
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const zone = city ? this.localize.term("umbriciansLiveView_zoneTime", city) : this.localize.term("umbriciansLiveView_yourTime");
+    const duration = this.localize.list(
+      durationParts(expiresAt.getTime() - this._now).map((part) =>
+        this.localize.number(part.value, { style: "unit", unit: part.unit, unitDisplay: "short" }),
+      ),
+      { type: "unit", style: "narrow" },
+    );
+    return html`<p class="expiry muted">${this.localize.term("umbriciansLiveView_stopsBeingShown", at, zone, duration)}</p>`;
   }
 
   #renderAudience(audience: MemberAudience, label: string, hint: string) {
@@ -160,31 +195,31 @@ export class UmbriciansLiveViewSendMemberMessageModalElement extends UmbModalBas
     const selectedCount = this.#recipientCount("selected");
 
     return html`
-      <umb-body-layout headline="Message members">
-        <uui-box headline="Send to">
+      <umb-body-layout headline=${this.localize.term("umbriciansLiveView_messageMembers")}>
+        <uui-box headline=${this.localize.term("umbriciansLiveView_sendTo")}>
           <uui-radio-group
-            label="Send to"
+            label=${this.localize.term("umbriciansLiveView_sendTo")}
             .value=${this._audience}
             @change=${(e: UUIRadioGroupEvent) => (this._audience = e.target.value as MemberAudience)}>
             ${this.#renderAudience(
               "selected",
-              `Selected members (${selectedCount})`,
-              selectedCount === 0 ? "Tick members in the table to send to just them." : "The members ticked in the table.",
+              this.localize.term("umbriciansLiveView_selectedMembers", selectedCount),
+              selectedCount === 0 ? this.localize.term("umbriciansLiveView_selectedMembersNoneHint") : this.localize.term("umbriciansLiveView_selectedMembersHint"),
             )}
             ${this.#renderAudience(
               "allOnline",
-              `Everyone online (${data.onlineCount})`,
-              "Every member logged in when you send, on every page of the table.",
+              this.localize.term("umbriciansLiveView_everyoneOnline", data.onlineCount),
+              this.localize.term("umbriciansLiveView_everyoneOnlineHint"),
             )}
             ${this.#renderAudience(
               "allMembers",
-              `Every member (${data.totalMembers})`,
-              "All members of the site, including those not logged in right now.",
+              this.localize.term("umbriciansLiveView_everyMember", data.totalMembers),
+              this.localize.term("umbriciansLiveView_everyMemberHint"),
             )}
           </uui-radio-group>
         </uui-box>
 
-        <uui-box headline="Deliver by">
+        <uui-box headline=${this.localize.term("umbriciansLiveView_deliverBy")}>
           ${repeat(
             data.senders,
             (s) => s.alias,
@@ -197,7 +232,7 @@ export class UmbriciansLiveViewSendMemberMessageModalElement extends UmbModalBas
                   <strong>${s.name}</strong>
                   ${s.description ? html`<span class="muted">${s.description}</span>` : nothing}
                   ${this._audience === "allMembers" && !s.reachesOfflineMembers
-                    ? html`<span class="hint">Only reaches members who are online now.</span>`
+                    ? html`<span class="hint">${this.localize.term("umbriciansLiveView_onlineOnlySender")}</span>`
                     : nothing}
                 </div>
               </uui-checkbox>
@@ -205,20 +240,20 @@ export class UmbriciansLiveViewSendMemberMessageModalElement extends UmbModalBas
           )}
         </uui-box>
 
-        <uui-box headline="Message">
+        <uui-box headline=${this.localize.term("umbriciansLiveView_message")}>
           <form @submit=${this.#send}>
-            ${renderMessageFields(this._text, (text) => (this._text = text), {
-              headline: "e.g. Scheduled maintenance at 18:00",
-              message: "The site will be unavailable for about 15 minutes. Please save anything you are working on.",
+            ${renderMessageFields(this.localize, this._text, (text) => (this._text = text), {
+              headline: this.localize.term("umbriciansLiveView_memberHeadlinePlaceholder"),
+              message: this.localize.term("umbriciansLiveView_memberMessagePlaceholder"),
             }, 5)}
 
             <uui-form-layout-item>
-              <uui-label slot="label" for="lifetime">Relevant for</uui-label>
-              <span slot="description">After this, banners and other queued messages are no longer shown.</span>
+              <uui-label slot="label" for="lifetime">${this.localize.term("umbriciansLiveView_relevantFor")}</uui-label>
+              <span slot="description">${this.localize.term("umbriciansLiveView_relevantForDescription")}</span>
               <uui-select
                 id="lifetime"
-                label="Relevant for"
-                .options=${LIFETIMES.map((l) => ({ name: l.name, value: String(l.value), selected: l.value === this._lifetime }))}
+                label=${this.localize.term("umbriciansLiveView_relevantFor")}
+                .options=${this.#lifetimeOptions()}
                 @change=${(e: UUISelectEvent) => {
                   const value = String(e.target.value);
                   this._lifetime = value === "midnight" || value === "custom" ? value : Number(value);
@@ -227,21 +262,21 @@ export class UmbriciansLiveViewSendMemberMessageModalElement extends UmbModalBas
                 ? html`<div class="custom">
                     <uui-input
                       type="number"
-                      label="Hours"
+                      label=${this.localize.term("umbriciansLiveView_hours")}
                       min="0"
                       max=${LONGEST_MINUTES / 60}
                       .value=${String(this._customHours)}
                       @input=${(e: InputEvent) => (this._customHours = Number((e.target as HTMLInputElement).value))}>
-                      <span slot="append" class="unit">hours</span>
+                      <span slot="append" class="unit">${this.localize.term("umbriciansLiveView_hoursUnit")}</span>
                     </uui-input>
                     <uui-input
                       type="number"
-                      label="Minutes"
+                      label=${this.localize.term("umbriciansLiveView_minutes")}
                       min="0"
                       max="59"
                       .value=${String(this._customMinutes)}
                       @input=${(e: InputEvent) => (this._customMinutes = Number((e.target as HTMLInputElement).value))}>
-                      <span slot="append" class="unit">minutes</span>
+                      <span slot="append" class="unit">${this.localize.term("umbriciansLiveView_minutesUnit")}</span>
                     </uui-input>
                   </div>`
                 : nothing}
@@ -251,14 +286,14 @@ export class UmbriciansLiveViewSendMemberMessageModalElement extends UmbModalBas
         </uui-box>
 
         <umb-footer-layout slot="footer">
-          <uui-button slot="actions" look="secondary" label="Close" @click=${this._rejectModal}></uui-button>
+          <uui-button slot="actions" look="secondary" label=${this.localize.term("general_close")} @click=${this._rejectModal}></uui-button>
           <uui-button
             slot="actions"
             look="primary"
             color=${sendColor(this._text)}
             label=${this._audience === "allMembers"
-              ? "Send to every member"
-              : `Send to ${plural(this.#recipientCount(this._audience), "member", "members")}`}
+              ? this.localize.term("umbriciansLiveView_sendToEveryMember")
+              : this.localize.term("umbriciansLiveView_sendToMembers", this.#recipientCount(this._audience))}
             .state=${this._sending ? "waiting" : undefined}
             ?disabled=${!this.#canSend}
             @click=${this.#send}></uui-button>

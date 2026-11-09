@@ -8,7 +8,7 @@ export const manifests: Array<UmbExtensionManifest> = [
     js: () => import("./live-view-dashboard.element.js"),
     weight: -100,
     meta: {
-      label: "Live View",
+      label: "#umbriciansLiveView_dashboardName",
       pathname: "live-view",
     },
     conditions: [

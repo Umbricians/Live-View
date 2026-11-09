@@ -16,8 +16,8 @@ export const manifests: Array<UmbExtensionManifest> = [
     forEntityTypes: [LIVE_VIEW_PERMISSION_ENTITY_TYPE],
     meta: {
       verbs: [LIVE_VIEW_PERMISSION_VIEW],
-      label: "View Live View",
-      description: "See the Live View dashboard in Settings: live activity and who is online.",
+      label: "#umbriciansLiveView_permissionView",
+      description: "#umbriciansLiveView_permissionViewDescription",
     },
   },
   {
@@ -28,8 +28,8 @@ export const manifests: Array<UmbExtensionManifest> = [
     forEntityTypes: [LIVE_VIEW_PERMISSION_ENTITY_TYPE],
     meta: {
       verbs: [LIVE_VIEW_PERMISSION_MESSAGE_USERS],
-      label: "Message backoffice users",
-      description: "Send notifications to backoffice users who are online. Also needs View Live View.",
+      label: "#umbriciansLiveView_permissionMessageUsers",
+      description: "#umbriciansLiveView_permissionMessageUsersDescription",
     },
   },
   {
@@ -40,9 +40,8 @@ export const manifests: Array<UmbExtensionManifest> = [
     forEntityTypes: [LIVE_VIEW_PERMISSION_ENTITY_TYPE],
     meta: {
       verbs: [LIVE_VIEW_PERMISSION_MESSAGE_MEMBERS],
-      label: "Message members",
-      description:
-        "Send messages to website members. Also needs View Live View, and a delivery method set up by a developer.",
+      label: "#umbriciansLiveView_permissionMessageMembers",
+      description: "#umbriciansLiveView_permissionMessageMembersDescription",
     },
   },
   {
@@ -50,12 +49,5 @@ export const manifests: Array<UmbExtensionManifest> = [
     alias: LIVE_VIEW_PERMISSION_CONDITION_ALIAS,
     name: "Live View Permission Condition",
     api: () => import("./permission.condition.js"),
-  },
-  {
-    type: "localization",
-    alias: "Umbricians.LiveView.Localization.En",
-    name: "Live View English",
-    meta: { culture: "en" },
-    js: () => import("./localization.en.js"),
   },
 ];

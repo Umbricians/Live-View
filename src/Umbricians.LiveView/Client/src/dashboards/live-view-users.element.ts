@@ -3,7 +3,7 @@ import { UmbElementMixin } from "@umbraco-cms/backoffice/element-api";
 // Registers <umb-user-avatar>, so users look as they do in the Users section.
 import "@umbraco-cms/backoffice/user";
 import { fetchOnlineUsers, type OnlineBackofficeUser } from "../api/live-view.resource.js";
-import { formatAgo, plural } from "../utils/format.js";
+import { formatAgo } from "../utils/format.js";
 import { renderOnlineVia } from "../utils/online-via.js";
 import {
   OnlineList,
@@ -53,24 +53,27 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
   override render() {
     const list = this.#list;
     return html`
-      <uui-box headline="Backoffice users online">
+      <uui-box headline=${this.localize.term("umbriciansLiveView_backofficeUsersOnline")}>
         <div slot="header-actions" class="header-actions">
-          <span class="muted">${list.total} online</span>
+          <span class="muted">${this.localize.term("umbriciansLiveView_onlineCount", list.total)}</span>
           ${this.selectable ? renderSelectAllButton(list) : nothing}
         </div>
 
         ${list.total === 0
-          ? html`<p class="muted">Nobody has the backoffice open right now.</p>`
+          ? html`<p class="muted">${this.localize.term("umbriciansLiveView_nobodyInBackoffice")}</p>`
           : html`
-              ${this.selectable ? renderSelectionBar(list, { one: "user", many: "users" }) : nothing}
-              <uui-table aria-label="Backoffice users online">
+              ${this.selectable ? renderSelectionBar(list, {
+                    allOnline: "umbriciansLiveView_allOnlineUsersSelected",
+                    allOnPage: "umbriciansLiveView_allUsersOnPageSelected",
+                  }) : nothing}
+              <uui-table aria-label=${this.localize.term("umbriciansLiveView_backofficeUsersOnline")}>
                 <uui-table-head>
                   ${this.selectable ? renderPageCheckbox(list) : nothing}
-                  <uui-table-head-cell>Name</uui-table-head-cell>
-                  <uui-table-head-cell class="tabs">Open tabs</uui-table-head-cell>
-                  <uui-table-head-cell class="last-seen">Last active</uui-table-head-cell>
+                  <uui-table-head-cell>${this.localize.term("general_name")}</uui-table-head-cell>
+                  <uui-table-head-cell class="tabs">${this.localize.term("umbriciansLiveView_openTabs")}</uui-table-head-cell>
+                  <uui-table-head-cell class="last-seen">${this.localize.term("umbriciansLiveView_lastActive")}</uui-table-head-cell>
                   ${this.selectable
-                    ? html`<uui-table-head-cell class="delivery">Delivery</uui-table-head-cell>`
+                    ? html`<uui-table-head-cell class="delivery">${this.localize.term("umbriciansLiveView_delivery")}</uui-table-head-cell>`
                     : nothing}
                 </uui-table-head>
                 ${repeat(
@@ -86,15 +89,16 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                             <div class="user-name">
                               ${u.name}
                               ${u.isCurrentUser
-                                ? html`<uui-tag look="secondary" title="This is you, so you are left out of messages"
-                                    >You</uui-tag
+                                ? html`<uui-tag look="secondary" title=${this.localize.term("umbriciansLiveView_youTitle")}
+                                    >${this.localize.term("umbriciansLiveView_you")}</uui-tag
                                   >`
                                 : nothing}
                               ${renderOnlineVia(
+                                this.localize,
                                 list.anyOnMcp,
                                 [
-                                  { label: "Backoffice", lastSeen: u.backofficeLastSeen },
-                                  { label: "MCP", lastSeen: u.mcpLastSeen },
+                                  { label: this.localize.term("umbriciansLiveView_viaBackoffice"), lastSeen: u.backofficeLastSeen },
+                                  { label: this.localize.term("umbriciansLiveView_viaMcp"), lastSeen: u.mcpLastSeen },
                                 ],
                                 list.now,
                               )}
@@ -105,24 +109,26 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                       </uui-table-cell>
                       <uui-table-cell
                         class="tabs"
-                        title=${u.backofficeLastSeen === null ? "Only on MCP" : `${plural(u.openTabs, "backoffice tab", "backoffice tabs")} open`}>
+                        title=${u.backofficeLastSeen === null
+                          ? this.localize.term("umbriciansLiveView_onlyOnMcp")
+                          : this.localize.term("umbriciansLiveView_backofficeTabsOpen", u.openTabs)}>
                         ${u.backofficeLastSeen === null
                           ? html`<span class="muted">–</span>`
                           : html`<span class="tab-count">${u.openTabs}</span>`}
                       </uui-table-cell>
-                      <uui-table-cell class="last-seen" title=${new Date(u.lastSeen).toLocaleString()}>
-                        ${formatAgo(list.now - Date.parse(u.lastSeen))}
+                      <uui-table-cell class="last-seen" title=${this.localize.dateTime(u.lastSeen)}>
+                        ${formatAgo(this.localize, list.now - Date.parse(u.lastSeen))}
                       </uui-table-cell>
                       ${this.selectable
                         ? html`<uui-table-cell class="delivery">
                         ${!list.canSelect(u)
                           ? nothing
                           : u.isConnected
-                          ? html`<uui-tag color="positive" look="secondary" title="Receives messages instantly"
-                              >Instant</uui-tag
+                          ? html`<uui-tag color="positive" look="secondary" title=${this.localize.term("umbriciansLiveView_instantTitle")}
+                              >${this.localize.term("umbriciansLiveView_instant")}</uui-tag
                             >`
-                          : html`<uui-tag look="secondary" title="Receives messages with its next heartbeat"
-                              >Within 1 min</uui-tag
+                          : html`<uui-tag look="secondary" title=${this.localize.term("umbriciansLiveView_withinMinuteTitle")}
+                              >${this.localize.term("umbriciansLiveView_withinMinute")}</uui-tag
                             >`}
                       </uui-table-cell>`
                         : nothing}
@@ -130,7 +136,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                   `,
                 )}
               </uui-table>
-              ${renderPagination(list, "Backoffice users pages")}
+              ${renderPagination(list, this.localize.term("umbriciansLiveView_backofficeUsersPages"))}
             `}
       </uui-box>
     `;

@@ -56,22 +56,25 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
   override render() {
     const list = this.#list;
     return html`
-      <uui-box headline="Members online">
+      <uui-box headline=${this.localize.term("umbriciansLiveView_membersOnline")}>
         <div slot="header-actions" class="header-actions">
-          <span class="muted">${list.total} online</span>
+          <span class="muted">${this.localize.term("umbriciansLiveView_onlineCount", list.total)}</span>
           ${this.selectable ? renderSelectAllButton(list) : nothing}
         </div>
 
         ${list.total === 0
-          ? html`<p class="muted">No members are online right now.</p>`
+          ? html`<p class="muted">${this.localize.term("umbriciansLiveView_noMembersOnline")}</p>`
           : html`
-              ${this.selectable ? renderSelectionBar(list, { one: "member", many: "members" }) : nothing}
-              <uui-table aria-label="Members online">
+              ${this.selectable ? renderSelectionBar(list, {
+                    allOnline: "umbriciansLiveView_allOnlineMembersSelected",
+                    allOnPage: "umbriciansLiveView_allMembersOnPageSelected",
+                  }) : nothing}
+              <uui-table aria-label=${this.localize.term("umbriciansLiveView_membersOnline")}>
                 <uui-table-head>
                   ${this.selectable ? renderPageCheckbox(list) : nothing}
-                  <uui-table-head-cell>Name</uui-table-head-cell>
-                  <uui-table-head-cell class="type">Member type</uui-table-head-cell>
-                  <uui-table-head-cell class="last-seen">Last active</uui-table-head-cell>
+                  <uui-table-head-cell>${this.localize.term("general_name")}</uui-table-head-cell>
+                  <uui-table-head-cell class="type">${this.localize.term("umbriciansLiveView_memberType")}</uui-table-head-cell>
+                  <uui-table-head-cell class="last-seen">${this.localize.term("umbriciansLiveView_lastActive")}</uui-table-head-cell>
                 </uui-table-head>
                 ${repeat(
                   list.items,
@@ -86,10 +89,11 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
                             <div class="member-name">
                               ${m.name}
                               ${renderOnlineVia(
+                                this.localize,
                                 list.anyOnMcp,
                                 [
-                                  { label: "Website", lastSeen: m.websiteLastSeen },
-                                  { label: "MCP", lastSeen: m.mcpLastSeen },
+                                  { label: this.localize.term("umbriciansLiveView_viaWebsite"), lastSeen: m.websiteLastSeen },
+                                  { label: this.localize.term("umbriciansLiveView_viaMcp"), lastSeen: m.mcpLastSeen },
                                 ],
                                 list.now,
                               )}
@@ -99,14 +103,14 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
                         </div>
                       </uui-table-cell>
                       <uui-table-cell class="type">${m.memberType ?? ""}</uui-table-cell>
-                      <uui-table-cell class="last-seen" title=${new Date(m.lastSeen).toLocaleString()}>
-                        ${formatAgo(list.now - Date.parse(m.lastSeen))}
+                      <uui-table-cell class="last-seen" title=${this.localize.dateTime(m.lastSeen)}>
+                        ${formatAgo(this.localize, list.now - Date.parse(m.lastSeen))}
                       </uui-table-cell>
                     </uui-table-row>
                   `,
                 )}
               </uui-table>
-              ${renderPagination(list, "Members pages")}
+              ${renderPagination(list, this.localize.term("umbriciansLiveView_membersPages"))}
             `}
       </uui-box>
     `;
