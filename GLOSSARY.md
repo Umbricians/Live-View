@@ -92,9 +92,15 @@ leaves a member online on MCP.
 The module that decides which **channels** a request counts in, under what session key, and who it shows was seen:
 a member (for **Member presence**), a backoffice user (for **Backoffice presence**) or an **MCP caller**. It owns
 every rule about which requests count: path prefixes and exclusions, sort order and exclusive channels, static
-files, bots, and the session key sources. The tracking middleware only acts on what it decides.
+files, bots, and the session key sources. The tracking middleware only acts on what it decides. It also finds
+**unreachable channels**.
 
 ## Signed-out marker
 
 A short-lived note Member presence keeps when a member signs out, so the sign-out request itself, which still
 carries the member's identity, does not mark them online again.
+
+## Unreachable channel
+
+A channel with paths whose every path is counted first by an earlier exclusive channel, so it never counts a request.
+The request classifier finds them; the Channel paths health check reports them.

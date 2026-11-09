@@ -161,6 +161,66 @@ public class RequestClassifierTests
         Assert.Equal([new ChannelSession(Constants.Channels.Mcp, "Header:Mcp-Session-Id:s1")], request.Sessions);
     }
 
+    [Fact]
+    public void A_channel_whose_paths_an_earlier_exclusive_channel_counts_is_unreachable()
+    {
+        Channel("first", prefixes: ["/"], sortOrder: 10);
+        Channel("later", prefixes: ["/later"], sortOrder: 20);
+
+        UnreachableChannel unreachable = Assert.Single(_classifier.UnreachableChannels());
+
+        Assert.Equal("later", unreachable.Channel.Alias);
+        Assert.Equal(["first"], unreachable.CountedFirstBy.Select(c => c.Alias));
+    }
+
+    [Fact]
+    public void A_channel_with_a_lower_sort_order_is_reachable()
+    {
+        Channel("first", prefixes: ["/"], sortOrder: 20);
+        Channel("later", prefixes: ["/later"], sortOrder: 10);
+
+        Assert.Empty(_classifier.UnreachableChannels());
+    }
+
+    [Fact]
+    public void A_non_exclusive_or_disabled_earlier_channel_leaves_later_ones_reachable()
+    {
+        Channel("shared", prefixes: ["/"], sortOrder: 10, exclusive: false);
+        Channel("off", prefixes: ["/"], sortOrder: 20).Enabled = false;
+        Channel("later", prefixes: ["/later"], sortOrder: 30);
+
+        Assert.Empty(_classifier.UnreachableChannels());
+    }
+
+    [Fact]
+    public void An_exclusion_in_the_earlier_channel_leaves_paths_it_lets_through_reachable()
+    {
+        Channel("first", prefixes: ["/"], sortOrder: 10, exclude: ["/umbraco"]);
+        Channel("inside", prefixes: ["/umbraco/x"], sortOrder: 20);
+        Channel("everything", prefixes: ["/"], sortOrder: 30);
+
+        Assert.Empty(_classifier.UnreachableChannels());
+    }
+
+    [Fact]
+    public void A_channel_fed_from_code_is_never_unreachable()
+    {
+        Channel("first", prefixes: ["/"], sortOrder: 10);
+        Channel("code", prefixes: [], sortOrder: 20);
+
+        Assert.Empty(_classifier.UnreachableChannels());
+    }
+
+    [Fact]
+    public void An_unreachable_channels_paths_count_in_the_earlier_channel()
+    {
+        Channel("first", prefixes: ["/"], sortOrder: 10);
+        Channel("later", prefixes: ["/later"], sortOrder: 20);
+
+        Assert.Equal(["later"], _classifier.UnreachableChannels().Select(u => u.Channel.Alias));
+        Assert.Equal(["first"], Channels(Get("/later/page")));
+    }
+
     private LiveViewChannelOptions Channel(
         string alias,
         string[] prefixes,

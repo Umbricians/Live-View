@@ -64,6 +64,59 @@ internal sealed partial class RequestClassifier
         return new RequestClassification(request, sessions, signedIn, memberSeen, backofficeSeen, mcpCall);
     }
 
+    /// <summary>
+    /// Channels with paths whose every path prefix is counted first by an earlier exclusive channel, so no request
+    /// ever reaches them.
+    /// </summary>
+    public IReadOnlyList<UnreachableChannel> UnreachableChannels()
+    {
+        var unreachable = new List<UnreachableChannel>();
+        var earlier = new List<ChannelSettings>();
+        foreach (ChannelSettings channel in ChannelSettings.InOrder(_options.CurrentValue).Where(c => c.Enabled))
+        {
+            if (channel.PathPrefixes.Length > 0)
+            {
+                var coveredBy = new List<ChannelSettings>();
+                foreach (string prefix in channel.PathPrefixes)
+                {
+                    if (earlier.FirstOrDefault(e => Covers(e, prefix)) is { } covering)
+                    {
+                        coveredBy.Add(covering);
+                    }
+                }
+
+                if (coveredBy.Count == channel.PathPrefixes.Length)
+                {
+                    unreachable.Add(new UnreachableChannel(channel, coveredBy.Distinct().ToList()));
+                }
+            }
+
+            if (channel.Exclusive)
+            {
+                earlier.Add(channel);
+            }
+        }
+
+        return unreachable;
+    }
+
+    /// <summary>
+    /// Whether the channel counts every request under the prefix. An exclusion that is the prefix, sits above it or
+    /// sits inside it lets some requests through.
+    /// </summary>
+    private static bool Covers(ChannelSettings channel, string prefix)
+    {
+        string path = prefix.TrimEnd('/');
+        if (path.Length == 0)
+        {
+            path = "/";
+        }
+
+        return MatchesAny(path, channel.PathPrefixes)
+            && !channel.ExcludePathPrefixes.Any(x =>
+                MatchesAny(path, [x]) || MatchesAny(x.TrimEnd('/') is { Length: > 0 } trimmed ? trimmed : "/", [path]));
+    }
+
     private static IEnumerable<(string Channel, string[] Sources)> Match(string path, LiveViewOptions options)
     {
         bool isStaticFile = IsStaticFile(path, options.StaticFileExtensions);
@@ -177,6 +230,9 @@ internal sealed partial class RequestClassifier
 
 /// <summary>A session a request counts in: the channel, and the session key it counts under.</summary>
 internal sealed record ChannelSession(string Channel, string SessionKey);
+
+/// <summary>A channel that never counts a request, and the earlier exclusive channels that count its paths first.</summary>
+internal sealed record UnreachableChannel(ChannelSettings Channel, IReadOnlyList<ChannelSettings> CountedFirstBy);
 
 /// <summary>What the <see cref="RequestClassifier"/> made of one request.</summary>
 internal sealed class RequestClassification
