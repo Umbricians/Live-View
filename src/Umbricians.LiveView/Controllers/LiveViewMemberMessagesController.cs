@@ -18,12 +18,13 @@ namespace Umbricians.LiveView.Controllers;
 
 /// <summary>
 /// Sends messages to website members through the site's registered <see cref="IMemberMessageSender"/>s.
+/// Authorized by the Live View permissions, not by section access.
 /// </summary>
 [ApiController]
 [ApiVersion("1.0")]
 [ApiExplorerSettings(GroupName = "Live View")]
 [BackOfficeRoute("umbriciansliveview/api/v{version:apiVersion}")]
-[Authorize(Policy = AuthorizationPolicies.SectionAccessSettings)]
+[Authorize(Policy = AuthorizationPolicies.BackOfficeAccess)]
 [LiveViewPermission(Constants.Permissions.View)]
 [JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
 internal class LiveViewMemberMessagesController : ControllerBase

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Notifications;
+using Umbricians.LiveView.Metrics;
 using Umbricians.LiveView.Presence;
 
 namespace Umbricians.LiveView.Tests;
@@ -128,5 +129,25 @@ internal sealed class RecordingEventAggregator : IEventAggregator
     {
         await PublishAsync(notification);
         return notification.Cancel;
+    }
+}
+
+/// <summary>A metric provider with fixed values that counts how often it is asked for its value.</summary>
+internal sealed class StubMetricProvider(string alias, string name = "Stub", string? color = null, int sortOrder = 1000, double value = 0) : ILiveMetricProvider
+{
+    public int Calls { get; private set; }
+
+    public string Alias => alias;
+
+    public string Name => name;
+
+    public string? Color => color;
+
+    public int SortOrder => sortOrder;
+
+    public Task<double> GetValueAsync(CancellationToken cancellationToken)
+    {
+        Calls++;
+        return Task.FromResult(value);
     }
 }

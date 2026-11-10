@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "watch": "tsc && vite build --watch",
-    "build": "tsc && vite build",
-    "test": "node --test --experimental-strip-types \"src/**/*.test.ts\""
+    "build": "tsc && vite build && tsc -p tsconfig.types.json",
+    "test": "node --test --experimental-strip-types --import ./test/resolve-ts.mjs \"src/**/*.test.ts\""
   },
   "dependencies": {
     "chart.js": "^4.5.0"
