@@ -38,8 +38,8 @@ public class LiveViewComposer : IComposer
             sp.GetRequiredService<IBackofficeUserDirectory>(),
             sp.GetRequiredService<IOptionsMonitor<LiveViewOptions>>(),
             sp.GetRequiredService<TimeProvider>()));
-        builder.AddNotificationHandler<UserDeletedNotification, BackofficeUserDeletedHandler>();
-        builder.AddNotificationHandler<UserSavedNotification, BackofficeUserDisabledHandler>();
+        builder.AddNotificationAsyncHandler<UserDeletedNotification, BackofficeUserDeletedHandler>();
+        builder.AddNotificationAsyncHandler<UserSavedNotification, BackofficeUserDisabledHandler>();
         // A site's own avatar provider wins whichever composer runs first: TryAdd skips ours if it is already
         // there, and a registration after ours is the one resolved.
         builder.Services.TryAddSingleton<IMemberAvatarProvider, PropertyMemberAvatarProvider>();
@@ -57,8 +57,8 @@ public class LiveViewComposer : IComposer
             sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<ILogger<McpCallers>>()));
         builder.Services.AddSingleton<ILiveViewPresence>(sp => sp.GetRequiredService<McpCallers>());
-        builder.AddNotificationHandler<MemberLogoutSuccessNotification, MemberLogoutHandler>();
-        builder.AddNotificationHandler<MemberDeletedNotification, MemberDeletedHandler>();
+        builder.AddNotificationAsyncHandler<MemberLogoutSuccessNotification, MemberLogoutHandler>();
+        builder.AddNotificationAsyncHandler<MemberDeletedNotification, MemberDeletedHandler>();
         builder.Services.AddSingleton<BackofficeMessenger>();
         builder.Services.AddSingleton<MemberMessagingService>();
         builder.Services.TryAddSingleton<IMemberMessageInbox, MemberMessageInbox>();

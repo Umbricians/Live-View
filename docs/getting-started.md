@@ -144,7 +144,7 @@ Anything the site can count can go on the chart. Pick the approach that fits:
 
 - **Requests to certain paths:** add a channel in `appsettings.json`, as above. No code needed.
 - **Sessions your code knows about**, such as SignalR connections: declare a channel with
-  `builder.AddLiveViewChannel(...)` and call `ILiveActivityTracker.Touch` / `End` from your code.
+  `builder.AddLiveViewChannel(...)` and call `ILiveActivityTracker.TouchAsync` / `EndAsync` from your code.
 - **Any number you can work out on demand**, such as a queue length or a count from another service: implement
   `ILiveMetricProvider` and register it with `builder.AddLiveViewMetric<T>()`.
 
@@ -200,9 +200,11 @@ a message lives, and passes the cutoff times in. What a store must do:
 
 - Set names and keys are opaque strings; store them as given.
 - An entry is active while its open count is above 0 or its last-seen time is at or after the `since` that
-  `GetActive` and `CountActive` are given.
-- `Closed` on an entry that is not there does nothing.
-- Keep the calls quick: the activity store is called on every tracked request, and its methods are synchronous.
+  `GetActiveAsync` and `CountActiveAsync` are given.
+- `ClosedAsync` on an entry that is not there does nothing.
+- `CountActiveAsync` takes many sets at once (the backoffice reads every online user's tabs in one call), so answer it in one round trip.
+- A store with a cap on a set returns false from `SeenAsync` or `OpenedAsync` when it drops a new entry because the set is full. A store without a cap always returns true.
+- Keep the calls quick: the activity store is called on every tracked request, and its methods are async and are awaited each time.
 - An open count left behind by a server that stops is never closed, so a shared store should expire entries.
 
 Even with shared stores, these stay per server, and need no action:

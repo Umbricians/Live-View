@@ -54,7 +54,7 @@ internal class LiveViewClientApiController : ControllerBase
 
         if (IsValidTabId(tab))
         {
-            _presence.TabHeartbeat(userKey, tab);
+            await _presence.TabHeartbeatAsync(userKey, tab);
         }
 
         return new HeartbeatResponseModel { PendingMessages = await _messenger.GetUndeliveredAsync(userKey) };
@@ -63,11 +63,11 @@ internal class LiveViewClientApiController : ControllerBase
     /// <summary>Sent by a tab as it closes, so it stops counting straight away.</summary>
     [HttpDelete("heartbeat")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public IActionResult EndTab([FromQuery] string? tab)
+    public async Task<IActionResult> EndTab([FromQuery] string? tab)
     {
         if (_security.BackOfficeSecurity?.CurrentUser?.Key is { } userKey && IsValidTabId(tab))
         {
-            _presence.TabClosed(userKey, tab);
+            await _presence.TabClosedAsync(userKey, tab);
         }
 
         return NoContent();

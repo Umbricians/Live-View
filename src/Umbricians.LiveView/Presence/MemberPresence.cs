@@ -54,7 +54,7 @@ internal sealed class MemberPresence
     }
 
     /// <summary>Records that the signed-in member made a front-end request. Anyone else is ignored.</summary>
-    internal void Seen(ClaimsPrincipal user)
+    internal async Task SeenAsync(ClaimsPrincipal user)
     {
         if (PrincipalKey.Resolve(user, _directory.FindKey) is not { } key)
         {
@@ -72,40 +72,40 @@ internal sealed class MemberPresence
             _signedOutUntil.TryRemove(new KeyValuePair<Guid, long>(key, until));
         }
 
-        _store.Seen(ActivitySets.Members, ActivitySets.Person(key), _timeProvider.GetUtcNow());
+        await _store.SeenAsync(ActivitySets.Members, ActivitySets.Person(key), _timeProvider.GetUtcNow());
     }
 
     /// <summary>Records a finished MCP request by the member.</summary>
-    internal void McpSeen(Guid memberKey) => _mcp.Seen(memberKey);
+    internal Task McpSeenAsync(Guid memberKey) => _mcp.SeenAsync(memberKey);
 
     /// <summary>Records an open MCP request by the member, who stays online on MCP until it is disposed.</summary>
-    internal IDisposable McpOpened(Guid memberKey) => _mcp.Opened(memberKey);
+    internal Task<IAsyncDisposable> McpOpenedAsync(Guid memberKey) => _mcp.OpenedAsync(memberKey);
 
     /// <summary>
     /// Takes a member off the website straight away, and keeps them off while their sign-out request completes. Their
     /// MCP connection, signed in separately, is left alone.
     /// </summary>
-    internal void SignedOut(Guid memberKey)
+    internal Task SignedOutAsync(Guid memberKey)
     {
         _signedOutUntil[memberKey] = Now + SignedOutMarkerLifetime.Ticks;
-        _store.Remove(ActivitySets.Members, ActivitySets.Person(memberKey));
+        return _store.RemoveAsync(ActivitySets.Members, ActivitySets.Person(memberKey));
     }
 
     /// <summary>Forgets a member whose account has gone.</summary>
-    internal void Forget(Guid memberKey)
+    internal async Task ForgetAsync(Guid memberKey)
     {
-        _store.Remove(ActivitySets.Members, ActivitySets.Person(memberKey));
-        _mcp.Forget(memberKey);
+        await _store.RemoveAsync(ActivitySets.Members, ActivitySets.Person(memberKey));
+        await _mcp.ForgetAsync(memberKey);
     }
 
     /// <summary>How many members are online, on the website, MCP or both.</summary>
-    internal int CountOnline() => People().Count;
+    internal async Task<int> CountOnlineAsync() => (await PeopleAsync()).Count;
 
     /// <summary>Every online member's key, read once, e.g. to address a message to all of them.</summary>
-    internal IReadOnlyList<Guid> AllOnline() => People().Select(m => m.Key).ToList();
+    internal async Task<IReadOnlyList<Guid>> AllOnlineAsync() => (await PeopleAsync()).Select(m => m.Key).ToList();
 
     /// <summary>Whether any member online is using MCP, so the table shows how each one is online.</summary>
-    internal bool AnyOnMcp() => _mcp.Snapshot().Any();
+    internal async Task<bool> AnyOnMcpAsync() => (await _mcp.SnapshotAsync()).Count > 0;
 
     /// <summary>
     /// One page of online members, newest arrivals first, and how many are online in total. Members whose account
@@ -115,7 +115,7 @@ internal sealed class MemberPresence
     {
         while (true)
         {
-            List<OnlinePerson> online = People();
+            List<OnlinePerson> online = await PeopleAsync();
             List<OnlinePerson> page = online.Skip(skip).Take(take).ToList();
             Dictionary<Guid, MemberDetails> found = (await _directory.GetAsync(page.Select(m => m.Key).ToList()))
                 .ToDictionary(m => m.Key);
@@ -124,7 +124,11 @@ internal sealed class MemberPresence
             if (gone.Count > 0)
             {
                 // Read again without them, so neither the page nor the total includes a deleted member.
-                gone.ForEach(Forget);
+                foreach (Guid key in gone)
+                {
+                    await ForgetAsync(key);
+                }
+
                 continue;
             }
 
@@ -149,12 +153,12 @@ internal sealed class MemberPresence
     }
 
     /// <summary>Every online member, on the website, MCP or both, in arrival order.</summary>
-    private List<OnlinePerson> People() => OnlinePerson.Merge(WebsiteSnapshot(), _mcp.Snapshot());
+    private async Task<List<OnlinePerson>> PeopleAsync() => OnlinePerson.Merge(await WebsiteSnapshotAsync(), await _mcp.SnapshotAsync());
 
     /// <summary>Members online on the website.</summary>
-    private List<(Guid Key, long First, long Last)> WebsiteSnapshot()
+    private async Task<List<(Guid Key, long First, long Last)>> WebsiteSnapshotAsync()
     {
-        List<(Guid Key, long First, long Last)> online = _store.GetActive(ActivitySets.Members, _timeProvider.GetUtcNow() - Window)
+        List<(Guid Key, long First, long Last)> online = (await _store.GetActiveAsync(ActivitySets.Members, _timeProvider.GetUtcNow() - Window))
             .Select(a => (Guid.ParseExact(a.Key, "N"), a.First.UtcTicks, a.Last.UtcTicks))
             .ToList();
 

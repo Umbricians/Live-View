@@ -22,47 +22,61 @@ internal sealed class LiveActivityTracker : ILiveActivityTracker
         _timeProvider = timeProvider;
     }
 
-    public void Touch(string channel, string sessionKey)
+    public async Task TouchAsync(string channel, string sessionKey)
     {
-        DateTimeOffset now = _timeProvider.GetUtcNow();
-        string set = ActivitySets.Channel(channel);
-        PruneIfDue(channel, set, now);
-        _store.Seen(set, Hash(sessionKey), now);
-    }
-
-    public IDisposable BeginActivity(string channel, string sessionKey)
-    {
-        DateTimeOffset now = _timeProvider.GetUtcNow();
         string set = ActivitySets.Channel(channel);
         string key = Hash(sessionKey);
-        PruneIfDue(channel, set, now);
-        _store.Opened(set, key, now);
+        await WriteAsync(channel, set, now => _store.SeenAsync(set, key, now));
+    }
+
+    public async Task<IAsyncDisposable> BeginActivityAsync(string channel, string sessionKey)
+    {
+        string set = ActivitySets.Channel(channel);
+        string key = Hash(sessionKey);
+        await WriteAsync(channel, set, now => _store.OpenedAsync(set, key, now));
         return new Activity(this, set, key);
     }
 
-    public void End(string channel, string sessionKey) =>
-        _store.Remove(ActivitySets.Channel(channel), Hash(sessionKey));
+    public Task EndAsync(string channel, string sessionKey) =>
+        _store.RemoveAsync(ActivitySets.Channel(channel), Hash(sessionKey));
 
-    public int CountActive(string channel)
+    public async Task<int> CountActiveAsync(string channel)
     {
         DateTimeOffset now = _timeProvider.GetUtcNow();
-        return _store.CountActive(ActivitySets.Channel(channel), now - WindowFor(channel));
+        return (await _store.CountActiveAsync([ActivitySets.Channel(channel)], now - WindowFor(channel)))[0];
     }
 
     private TimeSpan WindowFor(string channel) => ChannelSettings.Of(_options.CurrentValue, channel).ActivityWindow;
 
-    // Prune from the write path too, so memory stays bounded when nobody is watching the dashboard.
-    private void PruneIfDue(string channel, string set, DateTimeOffset now)
+    // Prunes from the write path too, so memory stays bounded when nobody is watching the dashboard. When the store
+    // drops a new session because the channel is full, finished sessions are dropped (at most once a second) and the
+    // write is tried once more, so a new session gets in as soon as a finished one has expired.
+    private async Task WriteAsync(string channel, string set, Func<DateTimeOffset, Task<bool>> write)
     {
-        PruneState state = _pruning.GetOrAdd(set, static _ => new PruneState());
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         TimeSpan window = WindowFor(channel);
-        long sinceLastPrune = now.UtcTicks - Interlocked.Read(ref state.LastPruned);
-        bool full = Volatile.Read(ref state.LastCount) >= _options.CurrentValue.MaxSessionsPerChannel;
-        if (sinceLastPrune > window.Ticks || (full && sinceLastPrune > TimeSpan.TicksPerSecond))
+        PruneState state = _pruning.GetOrAdd(set, static _ => new PruneState());
+        if (now.UtcTicks - Interlocked.Read(ref state.LastPruned) > window.Ticks)
         {
-            Interlocked.Exchange(ref state.LastPruned, now.UtcTicks);
-            Volatile.Write(ref state.LastCount, _store.CountActive(set, now - window));
+            await PruneAsync(set, state, now, window);
         }
+
+        if (await write(now))
+        {
+            return;
+        }
+
+        if (now.UtcTicks - Interlocked.Read(ref state.LastPruned) > TimeSpan.TicksPerSecond)
+        {
+            await PruneAsync(set, state, now, window);
+            await write(now);
+        }
+    }
+
+    private async Task PruneAsync(string set, PruneState state, DateTimeOffset now, TimeSpan window)
+    {
+        Interlocked.Exchange(ref state.LastPruned, now.UtcTicks);
+        await _store.CountActiveAsync([set], now - window);
     }
 
     // Session keys may be tokens or IP addresses, so only a truncated hash is kept in memory.
@@ -73,22 +87,21 @@ internal sealed class LiveActivityTracker : ILiveActivityTracker
         return Convert.ToHexString(hash[..12]);
     }
 
-    /// <summary>When a channel's store was last asked to drop finished sessions, and how many it then held.</summary>
+    /// <summary>When a channel's store was last asked to drop finished sessions.</summary>
     private sealed class PruneState
     {
         public long LastPruned;
-        public int LastCount;
     }
 
-    private sealed class Activity(LiveActivityTracker tracker, string set, string key) : IDisposable
+    private sealed class Activity(LiveActivityTracker tracker, string set, string key) : IAsyncDisposable
     {
         private int _disposed;
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                tracker._store.Closed(set, key, tracker._timeProvider.GetUtcNow());
+                await tracker._store.ClosedAsync(set, key, tracker._timeProvider.GetUtcNow());
             }
         }
     }

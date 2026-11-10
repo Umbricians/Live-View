@@ -40,9 +40,11 @@ internal sealed class LiveMetricsService
 
     public async Task<IReadOnlyList<LiveMetricReading>> GetSnapshotAsync(CancellationToken cancellationToken)
     {
-        var channels = ChannelSettings.InOrder(_options.CurrentValue)
-            .Where(c => c.Enabled)
-            .Select(c => (Order: c.SortOrder, Reading: new LiveMetricReading(c.Alias, c.Name, c.Color, CountActive(c.Alias), null)));
+        var channels = new List<(int Order, LiveMetricReading Reading)>();
+        foreach (ChannelSettings c in ChannelSettings.InOrder(_options.CurrentValue).Where(c => c.Enabled))
+        {
+            channels.Add((c.SortOrder, new LiveMetricReading(c.Alias, c.Name, c.Color, await CountActiveAsync(c.Alias), null)));
+        }
 
         var providers = await Task.WhenAll(_providers.Select(async p =>
             (Order: p.SortOrder, Reading: await ReadAsync(p, cancellationToken))));
@@ -54,11 +56,11 @@ internal sealed class LiveMetricsService
     }
 
     // The members and backoffice users lines come from their presence modules, the same sources as their tables.
-    private int CountActive(string channel) => channel switch
+    private async Task<int> CountActiveAsync(string channel) => channel switch
     {
-        Constants.Channels.Members => _memberPresence.CountOnline(),
-        Constants.Channels.Backoffice => _backofficePresence.CountOnline(),
-        _ => _tracker.CountActive(channel),
+        Constants.Channels.Members => await _memberPresence.CountOnlineAsync(),
+        Constants.Channels.Backoffice => await _backofficePresence.CountOnlineAsync(),
+        _ => await _tracker.CountActiveAsync(channel),
     };
 
     private async Task<LiveMetricReading> ReadAsync(ILiveMetricProvider provider, CancellationToken cancellationToken)

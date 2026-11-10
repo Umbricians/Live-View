@@ -83,8 +83,8 @@ internal class LiveViewApiController : ControllerBase
         {
             Total = total,
             Items = items,
-            AnyOnMcp = _presence.AnyOnMcp(),
-            Recipients = _messenger.CountAllOnlineRecipients(currentUserKey),
+            AnyOnMcp = await _presence.AnyOnMcpAsync(),
+            Recipients = await _messenger.CountAllOnlineRecipientsAsync(currentUserKey),
         };
     }
 
@@ -110,7 +110,7 @@ internal class LiveViewApiController : ControllerBase
             })
             .ToList();
 
-        return new OnlineMembersResponseModel { Total = total, Items = items, AnyOnMcp = _memberPresence.AnyOnMcp() };
+        return new OnlineMembersResponseModel { Total = total, Items = items, AnyOnMcp = await _memberPresence.AnyOnMcpAsync() };
     }
 
     [HttpPost("messages")]

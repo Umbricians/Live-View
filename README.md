@@ -220,21 +220,21 @@ public class LiveViewComposer : IComposer
 
 public class ChatHub(ILiveActivityTracker tracker) : Hub
 {
-    public override Task OnConnectedAsync()
+    public override async Task OnConnectedAsync()
     {
-        tracker.Touch("signalr", Context.ConnectionId);
-        return base.OnConnectedAsync();
+        await tracker.TouchAsync("signalr", Context.ConnectionId);
+        await base.OnConnectedAsync();
     }
 
-    public override Task OnDisconnectedAsync(Exception? exception)
+    public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        tracker.End("signalr", Context.ConnectionId);
-        return base.OnDisconnectedAsync(exception);
+        await tracker.EndAsync("signalr", Context.ConnectionId);
+        await base.OnDisconnectedAsync(exception);
     }
 }
 ```
 
-`BeginActivity(channel, key)` returns an `IDisposable` that keeps the session active until it is disposed.
+`BeginActivityAsync(channel, key)` returns an `IAsyncDisposable` that keeps the session active until it is disposed.
 
 `AddLiveViewChannel` with a built-in alias, such as `members`, restyles that channel. For each property, a value in
 `appsettings.json` wins, then a value set with `AddLiveViewChannel`, then the built-in default, whatever order

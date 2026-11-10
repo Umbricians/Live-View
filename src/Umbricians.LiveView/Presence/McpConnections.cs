@@ -59,40 +59,41 @@ internal sealed class McpConnections
     }
 
     /// <summary>Records one MCP request that has finished.</summary>
-    public void Seen(Guid key) => _store.Seen(_set, ActivitySets.Person(key), Now);
+    public Task SeenAsync(Guid key) => _store.SeenAsync(_set, ActivitySets.Person(key), Now);
 
     /// <summary>Records an MCP request that is still open; the caller stays online until it is disposed.</summary>
-    public IDisposable Opened(Guid key)
+    public async Task<IAsyncDisposable> OpenedAsync(Guid key)
     {
-        _store.Opened(_set, ActivitySets.Person(key), Now);
+        await _store.OpenedAsync(_set, ActivitySets.Person(key), Now);
         return new Hold(this, key);
     }
 
-    public void Forget(Guid key) => _store.Remove(_set, ActivitySets.Person(key));
+    public Task ForgetAsync(Guid key) => _store.RemoveAsync(_set, ActivitySets.Person(key));
 
     /// <summary>Callers online on MCP, last seen now while a request of theirs is open.</summary>
-    public IEnumerable<(Guid Key, long First, long Last)> Snapshot()
+    public async Task<IReadOnlyList<(Guid Key, long First, long Last)>> SnapshotAsync()
     {
         DateTimeOffset now = Now;
-        return _store.GetActive(_set, now - Window)
-            .Select(a => (Guid.ParseExact(a.Key, "N"), a.First.UtcTicks, a.Open > 0 ? now.UtcTicks : a.Last.UtcTicks));
+        return (await _store.GetActiveAsync(_set, now - Window))
+            .Select(a => (Guid.ParseExact(a.Key, "N"), a.First.UtcTicks, a.Open > 0 ? now.UtcTicks : a.Last.UtcTicks))
+            .ToList();
     }
 
-    private void Closed(Guid key) => _store.Closed(_set, ActivitySets.Person(key), Now);
+    private Task ClosedAsync(Guid key) => _store.ClosedAsync(_set, ActivitySets.Person(key), Now);
 
     private DateTimeOffset Now => _timeProvider.GetUtcNow();
 
     private TimeSpan Window => ChannelSettings.Of(_options.CurrentValue, Constants.Channels.Mcp).ActivityWindow;
 
-    private sealed class Hold(McpConnections connections, Guid key) : IDisposable
+    private sealed class Hold(McpConnections connections, Guid key) : IAsyncDisposable
     {
         private int _disposed;
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                connections.Closed(key);
+                await connections.ClosedAsync(key);
             }
         }
     }

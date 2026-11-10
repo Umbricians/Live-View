@@ -13,26 +13,36 @@ namespace Umbricians.LiveView.Storage;
 /// </remarks>
 public interface ILiveViewActivityStore
 {
-    /// <summary>Records activity now: adds the entry (First and Last are <paramref name="at"/>, Open is 0) or sets its Last.</summary>
-    void Seen(string set, string key, DateTimeOffset at);
+    /// <summary>
+    /// Records activity now: adds the entry (First and Last are <paramref name="at"/>, Open is 0) or sets its Last.
+    /// Returns false only when the store dropped a new entry because the set is full; a store without a cap always returns true.
+    /// </summary>
+    Task<bool> SeenAsync(string set, string key, DateTimeOffset at);
 
-    /// <summary>Records a request that is still open: as <see cref="Seen"/>, and Open + 1. An entry is active while Open is above 0.</summary>
-    void Opened(string set, string key, DateTimeOffset at);
+    /// <summary>
+    /// Records a request that is still open: as <see cref="SeenAsync"/>, and Open + 1. An entry is active while Open is above 0.
+    /// Returns false only when the store dropped a new entry because the set is full; a store without a cap always returns true.
+    /// </summary>
+    Task<bool> OpenedAsync(string set, string key, DateTimeOffset at);
 
     /// <summary>Records an open request finishing: Last is <paramref name="at"/> and Open - 1, not below 0. Does nothing if the entry has gone.</summary>
-    void Closed(string set, string key, DateTimeOffset at);
+    Task ClosedAsync(string set, string key, DateTimeOffset at);
 
     /// <summary>Removes the entry straight away. Does nothing if it has gone.</summary>
-    void Remove(string set, string key);
+    Task RemoveAsync(string set, string key);
 
     /// <summary>
     /// The entries with Open above 0 or Last at or after <paramref name="since"/>. Entries that are neither may be
     /// discarded; callers always pass the same window for a set.
     /// </summary>
-    IReadOnlyList<LiveViewActivity> GetActive(string set, DateTimeOffset since);
+    Task<IReadOnlyList<LiveViewActivity>> GetActiveAsync(string set, DateTimeOffset since);
 
-    /// <summary>How many entries <see cref="GetActive"/> would return.</summary>
-    int CountActive(string set, DateTimeOffset since);
+    /// <summary>
+    /// How many entries <see cref="GetActiveAsync"/> would return for each of <paramref name="sets"/>: one count per
+    /// set, in the order given, and 0 for a set with nothing active. It is one call for all the sets, so answer it in
+    /// one round trip.
+    /// </summary>
+    Task<IReadOnlyList<int>> CountActiveAsync(IReadOnlyList<string> sets, DateTimeOffset since);
 }
 
 /// <summary>One entry of an <see cref="ILiveViewActivityStore"/>: when it first appeared, when it was last seen, and how many requests are open.</summary>

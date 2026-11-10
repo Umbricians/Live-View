@@ -56,64 +56,64 @@ internal sealed class BackofficePresence
     }
 
     /// <summary>Records that the signed-in backoffice user made a request. Anyone else is ignored.</summary>
-    internal void Seen(ClaimsPrincipal user)
+    internal async Task SeenAsync(ClaimsPrincipal user)
     {
         if (user.Identity?.IsAuthenticated == true && user.Identity.GetUserKey() is { } key)
         {
-            _store.Seen(ActivitySets.BackofficeUsers, ActivitySets.Person(key), Now);
+            await _store.SeenAsync(ActivitySets.BackofficeUsers, ActivitySets.Person(key), Now);
         }
     }
 
     /// <summary>Records a heartbeat from one of the user's backoffice tabs.</summary>
-    internal void TabHeartbeat(Guid userKey, string tabId)
+    internal async Task TabHeartbeatAsync(Guid userKey, string tabId)
     {
         DateTimeOffset now = Now;
-        _store.Seen(ActivitySets.BackofficeUsers, ActivitySets.Person(userKey), now);
+        await _store.SeenAsync(ActivitySets.BackofficeUsers, ActivitySets.Person(userKey), now);
 
         string tabs = ActivitySets.BackofficeTabs(userKey);
-        IReadOnlyList<LiveViewActivity> open = _store.GetActive(tabs, now - TabTimeout);
+        IReadOnlyList<LiveViewActivity> open = await _store.GetActiveAsync(tabs, now - TabTimeout);
         if (open.Count < MaxTabsPerUser || open.Any(t => t.Key == tabId))
         {
-            _store.Seen(tabs, tabId, now);
+            await _store.SeenAsync(tabs, tabId, now);
         }
     }
 
     /// <summary>Forgets a tab straight away, e.g. when it is closed.</summary>
-    internal void TabClosed(Guid userKey, string tabId) => _store.Remove(ActivitySets.BackofficeTabs(userKey), tabId);
+    internal Task TabClosedAsync(Guid userKey, string tabId) => _store.RemoveAsync(ActivitySets.BackofficeTabs(userKey), tabId);
 
     /// <summary>Records a finished MCP request by the user.</summary>
-    internal void McpSeen(Guid userKey) => _mcp.Seen(userKey);
+    internal Task McpSeenAsync(Guid userKey) => _mcp.SeenAsync(userKey);
 
     /// <summary>Records an open MCP request by the user, who stays online on MCP until it is disposed.</summary>
-    internal IDisposable McpOpened(Guid userKey) => _mcp.Opened(userKey);
+    internal Task<IAsyncDisposable> McpOpenedAsync(Guid userKey) => _mcp.OpenedAsync(userKey);
 
     /// <summary>Forgets a user whose account has gone or been disabled.</summary>
-    internal void Forget(Guid userKey)
+    internal async Task ForgetAsync(Guid userKey)
     {
         string tabs = ActivitySets.BackofficeTabs(userKey);
-        foreach (LiveViewActivity tab in _store.GetActive(tabs, DateTimeOffset.MinValue))
+        foreach (LiveViewActivity tab in await _store.GetActiveAsync(tabs, DateTimeOffset.MinValue))
         {
-            _store.Remove(tabs, tab.Key);
+            await _store.RemoveAsync(tabs, tab.Key);
         }
 
-        _store.Remove(ActivitySets.BackofficeUsers, ActivitySets.Person(userKey));
-        _mcp.Forget(userKey);
+        await _store.RemoveAsync(ActivitySets.BackofficeUsers, ActivitySets.Person(userKey));
+        await _mcp.ForgetAsync(userKey);
     }
 
     /// <summary>How many users are online, in the backoffice, on MCP or both.</summary>
-    internal int CountOnline() => People().Count;
+    internal async Task<int> CountOnlineAsync() => (await PeopleAsync()).Count;
 
     /// <summary>Every online user's key, in the backoffice or on MCP, read once.</summary>
-    internal IReadOnlyList<Guid> AllOnline() => People().Select(u => u.Key).ToList();
+    internal async Task<IReadOnlyList<Guid>> AllOnlineAsync() => (await PeopleAsync()).Select(u => u.Key).ToList();
 
     /// <summary>Whether any user online is using MCP, so the table shows how each one is online.</summary>
-    internal bool AnyOnMcp() => _mcp.Snapshot().Any();
+    internal async Task<bool> AnyOnMcpAsync() => (await _mcp.SnapshotAsync()).Count > 0;
 
     /// <summary>
     /// Every user online in the backoffice, read once, e.g. to address a message to all of them. Users only on MCP
     /// are left out, since a backoffice message is shown in a backoffice tab.
     /// </summary>
-    internal IReadOnlyList<Guid> AllInBackoffice() => Snapshot().Select(u => u.Key).ToList();
+    internal async Task<IReadOnlyList<Guid>> AllInBackofficeAsync() => (await SnapshotAsync()).Select(u => u.Key).ToList();
 
     /// <summary>
     /// One page of online users, newest arrivals first, and how many are online in total. Users whose account no
@@ -123,8 +123,8 @@ internal sealed class BackofficePresence
     {
         while (true)
         {
-            Dictionary<Guid, Row> inBackoffice = Snapshot().ToDictionary(u => u.Key);
-            List<OnlinePerson> online = People(inBackoffice);
+            Dictionary<Guid, Row> inBackoffice = (await SnapshotAsync()).ToDictionary(u => u.Key);
+            List<OnlinePerson> online = await PeopleAsync(inBackoffice);
             List<OnlinePerson> page = online.Skip(skip).Take(take).ToList();
             Dictionary<Guid, BackofficeUserDetails> found = (await _directory.GetAsync(page.Select(u => u.Key).ToList()))
                 .ToDictionary(u => u.Key);
@@ -133,7 +133,11 @@ internal sealed class BackofficePresence
             if (gone.Count > 0)
             {
                 // Read again without them, so neither the page nor the total includes a deleted or disabled user.
-                gone.ForEach(Forget);
+                foreach (Guid key in gone)
+                {
+                    await ForgetAsync(key);
+                }
+
                 continue;
             }
 
@@ -163,28 +167,34 @@ internal sealed class BackofficePresence
     }
 
     /// <summary>Every online user, in the backoffice, on MCP or both, in arrival order.</summary>
-    private List<OnlinePerson> People(IReadOnlyDictionary<Guid, Row>? inBackoffice = null) =>
+    private async Task<List<OnlinePerson>> PeopleAsync(IReadOnlyDictionary<Guid, Row>? inBackoffice = null) =>
         OnlinePerson.Merge(
-            (inBackoffice ?? Snapshot().ToDictionary(u => u.Key)).Select(u => (u.Key, u.Value.First, u.Value.Last)),
-            _mcp.Snapshot());
+            (inBackoffice ?? (await SnapshotAsync()).ToDictionary(u => u.Key)).Select(u => (u.Key, u.Value.First, u.Value.Last)),
+            await _mcp.SnapshotAsync());
 
     /// <summary>
     /// Online users in arrival order, newest first: those with an open tab, or seen within the window. Tabs past their
-    /// timeout are not counted.
+    /// timeout are not counted. The users are read once and every user's tabs are counted in one call.
     /// </summary>
-    private List<Row> Snapshot()
+    private async Task<List<Row>> SnapshotAsync()
     {
         DateTimeOffset now = Now;
         DateTimeOffset seenCutoff = now - Window;
         DateTimeOffset tabCutoff = now - TabTimeout;
+        IReadOnlyList<LiveViewActivity> users = await _store.GetActiveAsync(
+            ActivitySets.BackofficeUsers, now - (Window > TabTimeout ? Window : TabTimeout));
+        var keys = users.Select(u => Guid.ParseExact(u.Key, "N")).ToList();
+        IReadOnlyList<int> tabCounts = keys.Count == 0
+            ? []
+            : await _store.CountActiveAsync(keys.Select(ActivitySets.BackofficeTabs).ToList(), tabCutoff);
+
         var online = new List<Row>();
-        foreach (LiveViewActivity user in _store.GetActive(ActivitySets.BackofficeUsers, now - (Window > TabTimeout ? Window : TabTimeout)))
+        for (int i = 0; i < users.Count; i++)
         {
-            Guid key = Guid.ParseExact(user.Key, "N");
-            int tabs = _store.CountActive(ActivitySets.BackofficeTabs(key), tabCutoff);
-            if (tabs > 0 || user.Last >= seenCutoff)
+            LiveViewActivity user = users[i];
+            if (tabCounts[i] > 0 || user.Last >= seenCutoff)
             {
-                online.Add(new Row(key, user.First.UtcTicks, user.Last.UtcTicks, tabs));
+                online.Add(new Row(keys[i], user.First.UtcTicks, user.Last.UtcTicks, tabCounts[i]));
             }
         }
 

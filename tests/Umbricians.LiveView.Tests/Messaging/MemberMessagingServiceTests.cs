@@ -55,8 +55,8 @@ public class MemberMessagingServiceTests
     {
         Guid ann = _directory.Add(1, "Ann");
         Guid bob = _directory.Add(2, "Bob");
-        _presence.McpSeen(ann);
-        _presence.McpSeen(bob);
+        await _presence.McpSeenAsync(ann);
+        await _presence.McpSeenAsync(bob);
 
         var sent = Assert.IsType<MemberSendResult.Sent>(await SendAsync(Request(audience: "allOnline")));
 

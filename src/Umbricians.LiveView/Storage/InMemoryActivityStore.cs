@@ -15,36 +15,49 @@ internal sealed class InMemoryActivityStore : ILiveViewActivityStore
         _options = options;
     }
 
-    public void Seen(string set, string key, DateTimeOffset at) => Record(set, key, at, open: false);
+    public Task<bool> SeenAsync(string set, string key, DateTimeOffset at) => Task.FromResult(Record(set, key, at, open: false));
 
-    public void Opened(string set, string key, DateTimeOffset at) => Record(set, key, at, open: true);
+    public Task<bool> OpenedAsync(string set, string key, DateTimeOffset at) => Task.FromResult(Record(set, key, at, open: true));
 
-    public void Closed(string set, string key, DateTimeOffset at)
+    public Task ClosedAsync(string set, string key, DateTimeOffset at)
     {
         if (_sets.TryGetValue(set, out ConcurrentDictionary<string, Entry>? entries) && entries.TryGetValue(key, out Entry? entry))
         {
             entry.Last = at.UtcTicks;
             entry.Close();
         }
+
+        return Task.CompletedTask;
     }
 
-    public void Remove(string set, string key)
+    public Task RemoveAsync(string set, string key)
     {
         if (_sets.TryGetValue(set, out ConcurrentDictionary<string, Entry>? entries))
         {
             entries.TryRemove(key, out _);
         }
+
+        return Task.CompletedTask;
     }
 
-    public IReadOnlyList<LiveViewActivity> GetActive(string set, DateTimeOffset since) =>
-        Prune(set, since, out ConcurrentDictionary<string, Entry>? entries)
-            ? entries.Select(e => e.Value.ToActivity(e.Key)).ToList()
-            : [];
+    public Task<IReadOnlyList<LiveViewActivity>> GetActiveAsync(string set, DateTimeOffset since) =>
+        Task.FromResult<IReadOnlyList<LiveViewActivity>>(
+            Prune(set, since, out ConcurrentDictionary<string, Entry>? entries)
+                ? entries.Select(e => e.Value.ToActivity(e.Key)).ToList()
+                : []);
 
-    public int CountActive(string set, DateTimeOffset since) =>
-        Prune(set, since, out ConcurrentDictionary<string, Entry>? entries) ? entries.Count : 0;
+    public Task<IReadOnlyList<int>> CountActiveAsync(IReadOnlyList<string> sets, DateTimeOffset since)
+    {
+        var counts = new int[sets.Count];
+        for (int i = 0; i < counts.Length; i++)
+        {
+            counts[i] = Prune(sets[i], since, out ConcurrentDictionary<string, Entry>? entries) ? entries.Count : 0;
+        }
 
-    private void Record(string set, string key, DateTimeOffset at, bool open)
+        return Task.FromResult<IReadOnlyList<int>>(counts);
+    }
+
+    private bool Record(string set, string key, DateTimeOffset at, bool open)
     {
         while (true)
         {
@@ -54,7 +67,7 @@ internal sealed class InMemoryActivityStore : ILiveViewActivityStore
                 // At capacity, existing entries stay tracked but new ones are dropped rather than growing without bound.
                 if (entries.Count >= _options.CurrentValue.MaxSessionsPerChannel)
                 {
-                    return;
+                    return false;
                 }
 
                 entry = entries.GetOrAdd(key, static (_, ticks) => new Entry(ticks), at.UtcTicks);
@@ -69,7 +82,7 @@ internal sealed class InMemoryActivityStore : ILiveViewActivityStore
             // The set may have been removed as empty while this was added to it; if so, add to the current one.
             if (_sets.TryGetValue(set, out ConcurrentDictionary<string, Entry>? current) && current == entries)
             {
-                return;
+                return true;
             }
 
             if (open)

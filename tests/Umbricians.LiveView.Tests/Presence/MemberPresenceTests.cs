@@ -20,95 +20,95 @@ public class MemberPresenceTests
     }
 
     [Fact]
-    public void A_member_seen_by_key_is_online()
+    public async Task A_member_seen_by_key_is_online()
     {
         Guid alice = _directory.Add(1, "Alice");
 
-        _presence.Seen(SignedInWithKey(alice));
+        await _presence.SeenAsync(SignedInWithKey(alice));
 
-        Assert.Equal(1, _presence.CountOnline());
-        Assert.Equal([alice], _presence.AllOnline());
+        Assert.Equal(1, await _presence.CountOnlineAsync());
+        Assert.Equal([alice], await _presence.AllOnlineAsync());
     }
 
     [Fact]
-    public void A_member_seen_by_numeric_id_is_held_by_their_key()
+    public async Task A_member_seen_by_numeric_id_is_held_by_their_key()
     {
         Guid alice = _directory.Add(42, "Alice");
 
-        _presence.Seen(SignedInWithId("42"));
-        _presence.Seen(SignedInWithKey(alice));
+        await _presence.SeenAsync(SignedInWithId("42"));
+        await _presence.SeenAsync(SignedInWithKey(alice));
 
-        Assert.Equal([alice], _presence.AllOnline());
+        Assert.Equal([alice], await _presence.AllOnlineAsync());
     }
 
     [Fact]
-    public void Visitors_who_are_not_signed_in_or_not_members_are_ignored()
+    public async Task Visitors_who_are_not_signed_in_or_not_members_are_ignored()
     {
-        _presence.Seen(new ClaimsPrincipal(new ClaimsIdentity()));
-        _presence.Seen(SignedInWithId("999"));
-        _presence.Seen(SignedInWithId("not-an-id"));
+        await _presence.SeenAsync(new ClaimsPrincipal(new ClaimsIdentity()));
+        await _presence.SeenAsync(SignedInWithId("999"));
+        await _presence.SeenAsync(SignedInWithId("not-an-id"));
 
-        Assert.Equal(0, _presence.CountOnline());
+        Assert.Equal(0, await _presence.CountOnlineAsync());
     }
 
     [Fact]
-    public void A_member_goes_offline_once_the_activity_window_passes()
+    public async Task A_member_goes_offline_once_the_activity_window_passes()
     {
         Guid alice = _directory.Add(1, "Alice");
-        _presence.Seen(SignedInWithKey(alice));
+        await _presence.SeenAsync(SignedInWithKey(alice));
 
         _clock.Advance(TimeSpan.FromSeconds(299));
-        Assert.Equal(1, _presence.CountOnline());
+        Assert.Equal(1, await _presence.CountOnlineAsync());
 
         _clock.Advance(TimeSpan.FromSeconds(2));
-        Assert.Equal(0, _presence.CountOnline());
+        Assert.Equal(0, await _presence.CountOnlineAsync());
     }
 
     [Fact]
-    public void The_members_channel_can_set_its_own_window()
+    public async Task The_members_channel_can_set_its_own_window()
     {
         _options.Channels[Constants.Channels.Members] = new LiveViewChannelOptions { ActivityWindowSeconds = 30 };
         Guid alice = _directory.Add(1, "Alice");
-        _presence.Seen(SignedInWithKey(alice));
+        await _presence.SeenAsync(SignedInWithKey(alice));
 
         _clock.Advance(TimeSpan.FromSeconds(31));
 
-        Assert.Equal(0, _presence.CountOnline());
+        Assert.Equal(0, await _presence.CountOnlineAsync());
     }
 
     [Fact]
-    public void Signing_out_takes_a_member_offline_and_their_sign_out_request_does_not_bring_them_back()
+    public async Task Signing_out_takes_a_member_offline_and_their_sign_out_request_does_not_bring_them_back()
     {
         Guid alice = _directory.Add(1, "Alice");
-        _presence.Seen(SignedInWithKey(alice));
+        await _presence.SeenAsync(SignedInWithKey(alice));
 
-        _presence.SignedOut(alice);
-        _presence.Seen(SignedInWithKey(alice));
+        await _presence.SignedOutAsync(alice);
+        await _presence.SeenAsync(SignedInWithKey(alice));
 
-        Assert.Equal(0, _presence.CountOnline());
+        Assert.Equal(0, await _presence.CountOnlineAsync());
     }
 
     [Fact]
-    public void A_member_who_signs_back_in_after_the_marker_expires_is_online_again()
+    public async Task A_member_who_signs_back_in_after_the_marker_expires_is_online_again()
     {
         Guid alice = _directory.Add(1, "Alice");
-        _presence.SignedOut(alice);
+        await _presence.SignedOutAsync(alice);
 
         _clock.Advance(MemberPresence.SignedOutMarkerLifetime);
-        _presence.Seen(SignedInWithKey(alice));
+        await _presence.SeenAsync(SignedInWithKey(alice));
 
-        Assert.Equal(1, _presence.CountOnline());
+        Assert.Equal(1, await _presence.CountOnlineAsync());
     }
 
     [Fact]
-    public void A_forgotten_member_is_offline()
+    public async Task A_forgotten_member_is_offline()
     {
         Guid alice = _directory.Add(1, "Alice");
-        _presence.Seen(SignedInWithKey(alice));
+        await _presence.SeenAsync(SignedInWithKey(alice));
 
-        _presence.Forget(alice);
+        await _presence.ForgetAsync(alice);
 
-        Assert.Equal(0, _presence.CountOnline());
+        Assert.Equal(0, await _presence.CountOnlineAsync());
     }
 
     [Fact]
@@ -119,11 +119,11 @@ public class MemberPresenceTests
         Guid carol = _directory.Add(3, "Carol");
         foreach (Guid member in new[] { alice, bob, carol })
         {
-            _presence.Seen(SignedInWithKey(member));
+            await _presence.SeenAsync(SignedInWithKey(member));
             _clock.Advance(TimeSpan.FromSeconds(1));
         }
 
-        _presence.Seen(SignedInWithKey(alice));
+        await _presence.SeenAsync(SignedInWithKey(alice));
 
         (int total, IReadOnlyList<OnlineMember> first) = await _presence.PageAsync(0, 2);
         (_, IReadOnlyList<OnlineMember> second) = await _presence.PageAsync(2, 2);
@@ -138,7 +138,7 @@ public class MemberPresenceTests
     public async Task Rows_carry_the_members_details()
     {
         Guid alice = _directory.Add(1, "Alice", "alice@example.test", "Member");
-        _presence.Seen(SignedInWithKey(alice));
+        await _presence.SeenAsync(SignedInWithKey(alice));
 
         (_, IReadOnlyList<OnlineMember> page) = await _presence.PageAsync(0, 10);
 
@@ -154,7 +154,7 @@ public class MemberPresenceTests
         Guid carol = _directory.Add(3, "Carol");
         foreach (Guid member in new[] { alice, bob, carol })
         {
-            _presence.Seen(SignedInWithKey(member));
+            await _presence.SeenAsync(SignedInWithKey(member));
             _clock.Advance(TimeSpan.FromSeconds(1));
         }
 
@@ -164,7 +164,7 @@ public class MemberPresenceTests
 
         Assert.Equal(2, total);
         Assert.Equal(["Bob", "Alice"], page.Select(m => m.Name));
-        Assert.Equal(2, _presence.CountOnline());
+        Assert.Equal(2, await _presence.CountOnlineAsync());
     }
 
     [Fact]
@@ -172,8 +172,8 @@ public class MemberPresenceTests
     {
         Guid alice = _directory.Add(1, "Alice", avatarUrl: "/media/alice.jpg?width=64&height=64");
         Guid bob = _directory.Add(2, "Bob");
-        _presence.Seen(SignedInWithKey(alice));
-        _presence.Seen(SignedInWithKey(bob));
+        await _presence.SeenAsync(SignedInWithKey(alice));
+        await _presence.SeenAsync(SignedInWithKey(bob));
 
         (_, IReadOnlyList<OnlineMember> page) = await _presence.PageAsync(0, 10);
 

@@ -71,7 +71,13 @@ internal sealed class SharedActivityStore : ILiveViewActivityStore
     private readonly object _lock = new();
     private readonly Dictionary<(string Set, string Key), LiveViewActivity> _entries = new();
 
-    public void Seen(string set, string key, DateTimeOffset at)
+    /// <summary>The set asked for by each <see cref="GetActiveAsync"/> call.</summary>
+    public List<string> GetActiveCalls { get; } = [];
+
+    /// <summary>The sets asked for by each <see cref="CountActiveAsync"/> call, one list per call.</summary>
+    public List<IReadOnlyList<string>> CountActiveCalls { get; } = [];
+
+    public Task<bool> SeenAsync(string set, string key, DateTimeOffset at)
     {
         lock (_lock)
         {
@@ -79,9 +85,11 @@ internal sealed class SharedActivityStore : ILiveViewActivityStore
                 ? entry with { Last = at }
                 : new LiveViewActivity(key, at, at, 0);
         }
+
+        return Task.FromResult(true);
     }
 
-    public void Opened(string set, string key, DateTimeOffset at)
+    public Task<bool> OpenedAsync(string set, string key, DateTimeOffset at)
     {
         lock (_lock)
         {
@@ -90,9 +98,11 @@ internal sealed class SharedActivityStore : ILiveViewActivityStore
                 : new LiveViewActivity(key, at, at, 0);
             _entries[(set, key)] = entry with { Last = at, Open = entry.Open + 1 };
         }
+
+        return Task.FromResult(true);
     }
 
-    public void Closed(string set, string key, DateTimeOffset at)
+    public Task ClosedAsync(string set, string key, DateTimeOffset at)
     {
         lock (_lock)
         {
@@ -101,25 +111,40 @@ internal sealed class SharedActivityStore : ILiveViewActivityStore
                 _entries[(set, key)] = entry with { Last = at, Open = Math.Max(0, entry.Open - 1) };
             }
         }
+
+        return Task.CompletedTask;
     }
 
-    public void Remove(string set, string key)
+    public Task RemoveAsync(string set, string key)
     {
         lock (_lock)
         {
             _entries.Remove((set, key));
         }
+
+        return Task.CompletedTask;
     }
 
-    public IReadOnlyList<LiveViewActivity> GetActive(string set, DateTimeOffset since)
+    public Task<IReadOnlyList<LiveViewActivity>> GetActiveAsync(string set, DateTimeOffset since)
     {
         lock (_lock)
         {
-            return _entries.Where(e => e.Key.Set == set && (e.Value.Open > 0 || e.Value.Last >= since)).Select(e => e.Value).ToList();
+            GetActiveCalls.Add(set);
+            return Task.FromResult(Active(set, since));
         }
     }
 
-    public int CountActive(string set, DateTimeOffset since) => GetActive(set, since).Count;
+    public Task<IReadOnlyList<int>> CountActiveAsync(IReadOnlyList<string> sets, DateTimeOffset since)
+    {
+        lock (_lock)
+        {
+            CountActiveCalls.Add(sets);
+            return Task.FromResult<IReadOnlyList<int>>(sets.Select(s => Active(s, since).Count).ToList());
+        }
+    }
+
+    private IReadOnlyList<LiveViewActivity> Active(string set, DateTimeOffset since) =>
+        _entries.Where(e => e.Key.Set == set && (e.Value.Open > 0 || e.Value.Last >= since)).Select(e => e.Value).ToList();
 }
 
 /// <summary>A message store written the way a site would write one to share between servers.</summary>

@@ -65,7 +65,8 @@ internal sealed class BackofficeMessenger
     /// How many users a message to everyone online would reach right now: everyone in the backoffice but the sender.
     /// Users only on MCP are left out, since the message is shown in a backoffice tab.
     /// </summary>
-    internal int CountAllOnlineRecipients(Guid? senderKey) => _presence.AllInBackoffice().Count(k => k != senderKey);
+    internal async Task<int> CountAllOnlineRecipientsAsync(Guid? senderKey) =>
+        (await _presence.AllInBackofficeAsync()).Count(k => k != senderKey);
 
     /// <summary>Checks the message, works out its recipients and delivers it, or says why it can't be sent.</summary>
     internal async Task<BackofficeSendResult> SendAsync(BackofficeMessageRequest request, BackofficeSender sender)
@@ -76,7 +77,7 @@ internal sealed class BackofficeMessenger
         }
 
         // "All online" is resolved here rather than in the browser, which only ever holds one page of users.
-        Guid[] recipients = (request.AllOnline ? _presence.AllInBackoffice() : request.UserKeys ?? [])
+        Guid[] recipients = (request.AllOnline ? await _presence.AllInBackofficeAsync() : request.UserKeys ?? [])
             .Where(k => k != sender.Key)
             .Distinct()
             .ToArray();

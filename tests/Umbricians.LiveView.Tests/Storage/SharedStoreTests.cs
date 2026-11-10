@@ -26,26 +26,44 @@ public class SharedStoreTests
     private readonly InMemoryMemberDirectory _members = new();
 
     [Fact]
-    public void A_session_tracked_on_one_server_is_counted_on_another()
+    public async Task A_session_tracked_on_one_server_is_counted_on_another()
     {
         var a = new LiveActivityTracker(_activity, _options, _clock);
         var b = new LiveActivityTracker(_activity, _options, _clock);
 
-        a.Touch("web", "session-1");
+        await a.TouchAsync("web", "session-1");
 
-        Assert.Equal(1, b.CountActive("web"));
+        Assert.Equal(1, await b.CountActiveAsync("web"));
 
-        a.End("web", "session-1");
-        Assert.Equal(0, b.CountActive("web"));
+        await a.EndAsync("web", "session-1");
+        Assert.Equal(0, await b.CountActiveAsync("web"));
 
-        IDisposable open = a.BeginActivity("web", "session-2");
+        IAsyncDisposable open = await a.BeginActivityAsync("web", "session-2");
         _clock.Advance(TimeSpan.FromMinutes(30));
-        Assert.Equal(1, b.CountActive("web"));
+        Assert.Equal(1, await b.CountActiveAsync("web"));
 
-        open.Dispose();
-        Assert.Equal(1, b.CountActive("web"));
+        await open.DisposeAsync();
+        Assert.Equal(1, await b.CountActiveAsync("web"));
         _clock.Advance(TimeSpan.FromMinutes(30));
-        Assert.Equal(0, b.CountActive("web"));
+        Assert.Equal(0, await b.CountActiveAsync("web"));
+    }
+
+    [Fact]
+    public async Task The_tabs_of_every_online_user_are_counted_in_one_store_call()
+    {
+        BackofficePresence presence = NewBackoffice();
+        foreach (string name in new[] { "Alice", "Bob", "Carol" })
+        {
+            await presence.TabHeartbeatAsync(_users.Add(name), "tab-1");
+        }
+
+        _activity.GetActiveCalls.Clear();
+        _activity.CountActiveCalls.Clear();
+
+        Assert.Equal(3, await presence.CountOnlineAsync());
+
+        Assert.Equal(1, _activity.GetActiveCalls.Count(set => set == ActivitySets.BackofficeUsers));
+        Assert.Equal(3, _activity.CountActiveCalls.Single().Count);
     }
 
     [Fact]
@@ -55,39 +73,39 @@ public class SharedStoreTests
         BackofficePresence b = NewBackoffice();
         Guid alice = _users.Add("Alice");
 
-        a.TabHeartbeat(alice, "tab-1");
+        await a.TabHeartbeatAsync(alice, "tab-1");
 
-        Assert.Equal(1, b.CountOnline());
+        Assert.Equal(1, await b.CountOnlineAsync());
         (_, IReadOnlyList<OnlineBackofficeUser> page) = await b.PageAsync(0, 10);
         Assert.Equal(1, page.Single().OpenTabs);
 
-        b.TabClosed(alice, "tab-1");
+        await b.TabClosedAsync(alice, "tab-1");
         (_, page) = await a.PageAsync(0, 10);
         Assert.Equal(0, page.Single().OpenTabs);
-        Assert.Equal([alice], a.AllInBackoffice());
+        Assert.Equal([alice], await a.AllInBackofficeAsync());
 
-        a.Forget(alice);
-        Assert.Equal(0, b.CountOnline());
+        await a.ForgetAsync(alice);
+        Assert.Equal(0, await b.CountOnlineAsync());
     }
 
     [Fact]
-    public void A_member_seen_on_one_server_is_online_on_another_and_signing_out_on_either_takes_them_off()
+    public async Task A_member_seen_on_one_server_is_online_on_another_and_signing_out_on_either_takes_them_off()
     {
         MemberPresence a = NewMembers();
         MemberPresence b = NewMembers();
         Guid alice = _members.Add(1, "Alice");
 
-        a.Seen(SignedInWithKey(alice));
+        await a.SeenAsync(SignedInWithKey(alice));
 
-        Assert.Equal([alice], b.AllOnline());
+        Assert.Equal([alice], await b.AllOnlineAsync());
 
-        b.SignedOut(alice);
-        Assert.Equal(0, a.CountOnline());
+        await b.SignedOutAsync(alice);
+        Assert.Equal(0, await a.CountOnlineAsync());
 
         _clock.Advance(MemberPresence.SignedOutMarkerLifetime + TimeSpan.FromSeconds(1));
-        a.Seen(SignedInWithKey(alice));
-        a.SignedOut(alice);
-        Assert.Equal(0, b.CountOnline());
+        await a.SeenAsync(SignedInWithKey(alice));
+        await a.SignedOutAsync(alice);
+        Assert.Equal(0, await b.CountOnlineAsync());
     }
 
     [Fact]
@@ -99,13 +117,13 @@ public class SharedStoreTests
 
         await a.McpCallerSeenAsync(alice);
 
-        Assert.Equal(1, backofficeB.CountOnline());
+        Assert.Equal(1, await backofficeB.CountOnlineAsync());
         (_, IReadOnlyList<OnlineBackofficeUser> page) = await backofficeB.PageAsync(0, 10);
         OnlineBackofficeUser row = page.Single();
         Assert.Equal(alice, row.Key);
         Assert.NotNull(row.McpLastSeen);
         Assert.Null(row.BackofficeLastSeen);
-        Assert.True(backofficeA.AnyOnMcp());
+        Assert.True(await backofficeA.AnyOnMcpAsync());
     }
 
     [Fact]
@@ -130,7 +148,7 @@ public class SharedStoreTests
     }
 
     [Fact]
-    public void A_sites_store_is_used_whichever_order_it_is_registered_in()
+    public async Task A_sites_store_is_used_whichever_order_it_is_registered_in()
     {
         var before = new ServiceCollection();
         var siteActivity = new SharedActivityStore();
@@ -154,8 +172,8 @@ public class SharedStoreTests
             Assert.Same(siteMessages, provider.GetRequiredService<IBackofficeMessageStore>());
 
             // The tracker keeps its sessions in the site's store.
-            provider.GetRequiredService<ILiveActivityTracker>().Touch("web", "session-1");
-            Assert.Equal(1, siteActivity.CountActive(ActivitySets.Channel("web"), DateTimeOffset.MinValue));
+            await provider.GetRequiredService<ILiveActivityTracker>().TouchAsync("web", "session-1");
+            Assert.Equal(1, (await siteActivity.CountActiveAsync([ActivitySets.Channel("web")], DateTimeOffset.MinValue))[0]);
         }
     }
 

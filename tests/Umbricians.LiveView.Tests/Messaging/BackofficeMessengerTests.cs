@@ -60,11 +60,11 @@ public class BackofficeMessengerTests
         Guid alice = _directory.Add("Alice");
         Guid bob = _directory.Add("Bob");
         Guid notSelected = _directory.Add("Carol");
-        _presence.Seen(SignedIn(_me));
-        _presence.Seen(SignedIn(alice));
+        await _presence.SeenAsync(SignedIn(_me));
+        await _presence.SeenAsync(SignedIn(alice));
         BackofficeMessageRequest request = Request(userKeys: [notSelected], allOnline: true);
 
-        _presence.Seen(SignedIn(bob));
+        await _presence.SeenAsync(SignedIn(bob));
         BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(request, Me));
 
         Assert.Equal(2, sent.Recipients);
@@ -74,11 +74,11 @@ public class BackofficeMessengerTests
     [Fact]
     public async Task The_all_online_count_matches_who_a_message_to_everyone_online_reaches()
     {
-        _presence.Seen(SignedIn(_me));
-        _presence.Seen(SignedIn(_directory.Add("Alice")));
-        _presence.Seen(SignedIn(_directory.Add("Bob")));
+        await _presence.SeenAsync(SignedIn(_me));
+        await _presence.SeenAsync(SignedIn(_directory.Add("Alice")));
+        await _presence.SeenAsync(SignedIn(_directory.Add("Bob")));
 
-        int counted = _messenger.CountAllOnlineRecipients(_me);
+        int counted = await _messenger.CountAllOnlineRecipientsAsync(_me);
         BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(Request(allOnline: true), Me));
 
         Assert.Equal(2, counted);
@@ -86,24 +86,24 @@ public class BackofficeMessengerTests
     }
 
     [Fact]
-    public void The_all_online_count_includes_everyone_when_the_sender_is_not_online()
+    public async Task The_all_online_count_includes_everyone_when_the_sender_is_not_online()
     {
-        _presence.Seen(SignedIn(_directory.Add("Alice")));
+        await _presence.SeenAsync(SignedIn(_directory.Add("Alice")));
 
-        Assert.Equal(1, _messenger.CountAllOnlineRecipients(_me));
-        Assert.Equal(1, _messenger.CountAllOnlineRecipients(null));
+        Assert.Equal(1, await _messenger.CountAllOnlineRecipientsAsync(_me));
+        Assert.Equal(1, await _messenger.CountAllOnlineRecipientsAsync(null));
     }
 
     [Fact]
     public async Task Selected_users_who_have_gone_offline_are_still_sent_to()
     {
         Guid alice = _directory.Add("Alice");
-        _presence.Seen(SignedIn(alice));
+        await _presence.SeenAsync(SignedIn(alice));
         _clock.Advance(TimeSpan.FromHours(1));
 
         BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(Request(userKeys: [alice]), Me));
 
-        Assert.Equal(0, _presence.CountOnline());
+        Assert.Equal(0, await _presence.CountOnlineAsync());
         Assert.Equal([sent.Message.Key], await _messenger.GetUndeliveredAsync(alice));
     }
 
@@ -179,7 +179,7 @@ public class BackofficeMessengerTests
     [Fact]
     public async Task A_message_with_nobody_but_the_sender_to_go_to_is_rejected_and_not_delivered()
     {
-        _presence.Seen(SignedIn(_me));
+        await _presence.SeenAsync(SignedIn(_me));
 
         BackofficeSendResult selected = await _messenger.SendAsync(Request(userKeys: [_me]), Me);
         BackofficeSendResult allOnline = await _messenger.SendAsync(Request(allOnline: true), Me);
