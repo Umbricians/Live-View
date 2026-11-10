@@ -50,8 +50,8 @@ public class DashboardSettingsTests
 
         Assert.That(Describe(controller.GetMethod(nameof(DashboardController.DashboardSettings))!), Is.EqualTo(Describe(controller.GetMethod(nameof(DashboardController.Snapshot))!)));
 
-        Assert.That(controller.GetCustomAttributes<AuthorizeAttribute>(), Has.Some.Matches<AuthorizeAttribute>(a => a.Policy == AuthorizationPolicies.BackOfficeAccess));
-        Assert.That(controller.GetCustomAttributes<LiveViewPermissionAttribute>(), Has.Some.Matches<LiveViewPermissionAttribute>(a => a.Arguments!.SequenceEqual([Constants.Permissions.View])));
+        Assert.That(controller.GetCustomAttributes<AuthorizeAttribute>(), Has.Some.Matches<AuthorizeAttribute>(a => a?.Policy == AuthorizationPolicies.BackOfficeAccess));
+        Assert.That(controller.GetCustomAttributes<LiveViewPermissionAttribute>(), Has.Some.Matches<LiveViewPermissionAttribute>(a => a?.Arguments?.SequenceEqual([Constants.Permissions.View]) == true));
     }
 
     private static List<string> Describe(MethodInfo method) =>
