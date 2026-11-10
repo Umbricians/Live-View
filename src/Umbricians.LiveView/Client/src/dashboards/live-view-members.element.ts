@@ -12,7 +12,7 @@ import {
   renderSelectAllButton,
   renderSelectionBar,
 } from "./online-list.js";
-import { UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT } from "./live-view-dashboard.context-token.js";
+import { LIVE_VIEW_DASHBOARD_CONTEXT } from "./live-view-dashboard.context.js";
 
 /**
  * Lists members online, on the website or MCP, one page at a time, newest arrivals first. When anyone is on MCP,
@@ -30,7 +30,7 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
   /** Shows the selection checkboxes; only useful when the site can deliver member messages. */
   @state() private _selectable = false;
 
-  #context?: typeof UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT.TYPE;
+  #context?: typeof LIVE_VIEW_DASHBOARD_CONTEXT.TYPE;
 
   // Every member online can be messaged.
   #list = new OnlineList<OnlineMember>(
@@ -44,7 +44,7 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
 
   constructor() {
     super();
-    this.consumeContext(UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT, (context) => {
+    this.consumeContext(LIVE_VIEW_DASHBOARD_CONTEXT, (context) => {
       this.#context = context;
       this.observe(context?.interval, (interval) => (this.interval = interval ?? 5));
       this.observe(context?.paused, (paused) => (this.paused = paused ?? true));

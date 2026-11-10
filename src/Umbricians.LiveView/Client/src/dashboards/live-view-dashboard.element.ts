@@ -7,8 +7,9 @@ import { UMBRICIANS_SEND_MESSAGE_MODAL } from "../modals/send-message.modal-toke
 import { UMBRICIANS_SEND_MEMBER_MESSAGE_MODAL } from "../modals/send-member-message.modal-token.js";
 import type { MemberMessaging } from "../api/live-view.resource.js";
 import { LIVE_VIEW_PANEL_TYPE } from "./constants.js";
-import { INTERVALS, UmbriciansLiveViewDashboardContext } from "./live-view-dashboard.context.js";
-import type { OnlineTableSelection } from "./online-list.js";
+import { LiveViewDashboardContext } from "./live-view-dashboard.context.js";
+import type { OnlineTableSelection } from "./online-selection.js";
+import { INTERVALS } from "./refresh-interval.js";
 // Loaded with the dashboard so the built-in panels appear together.
 import "./live-view-activity.element.js";
 import "./live-view-users.element.js";
@@ -37,12 +38,12 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
   @state() private _usersSelection?: OnlineTableSelection;
   @state() private _membersSelection?: OnlineTableSelection;
 
-  #context: UmbriciansLiveViewDashboardContext;
+  #context: LiveViewDashboardContext;
   #notifications?: typeof UMB_NOTIFICATION_CONTEXT.TYPE;
 
   constructor() {
     super();
-    this.#context = new UmbriciansLiveViewDashboardContext(this);
+    this.#context = new LiveViewDashboardContext(this);
     this.consumeContext(UMB_NOTIFICATION_CONTEXT, (context) => (this.#notifications = context));
 
     const context = this.#context;

@@ -1,10 +1,12 @@
 import { UmbContextBase } from "@umbraco-cms/backoffice/class-api";
 import type { UmbControllerHost } from "@umbraco-cms/backoffice/controller-api";
 import { UMB_CURRENT_USER_CONTEXT } from "@umbraco-cms/backoffice/current-user";
+import { UmbContextToken } from "@umbraco-cms/backoffice/context-api";
 import {
   UmbBasicState,
   UmbBooleanState,
   UmbNumberState,
+  mergeObservables,
   type Observable,
 } from "@umbraco-cms/backoffice/observable-api";
 import {
@@ -12,19 +14,28 @@ import {
   LIVE_VIEW_PERMISSION_MESSAGE_USERS,
 } from "../permissions/constants.js";
 import { fetchMemberMessaging, fetchSnapshot, type LiveViewSnapshot, type MemberMessaging } from "../api/live-view.resource.js";
-import { UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT } from "./live-view-dashboard.context-token.js";
-import type { OnlineTableSelection } from "./online-list.js";
+import {
+  UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT,
+  type UmbriciansLiveViewDashboardContext,
+} from "./live-view-dashboard.context-token.js";
+import { memberMessagingAvailable } from "./member-messaging.js";
+import type { OnlineTableSelection } from "./online-selection.js";
 import { addReading } from "./readings.js";
+import { DEFAULT_INTERVAL, toInterval } from "./refresh-interval.js";
 
-export const INTERVALS = [2, 5, 10, 15, 30];
-const DEFAULT_INTERVAL = 5;
 const STORAGE_KEY = "umbricians.liveView.interval";
+
+/** The same context as the public token, typed with everything the built-in panels and the footer use. Matched by alias. */
+export const LIVE_VIEW_DASHBOARD_CONTEXT = new UmbContextToken<LiveViewDashboardContext>(
+  UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT.contextAlias,
+);
 
 /**
  * What the Live View dashboard shares with its panels: the refresh interval and paused state every panel follows,
- * the snapshot polling, and what the footer's message actions need from the online tables.
+ * the snapshot polling, and what the footer's message actions need from the online tables. Sites' panels see only
+ * the interval and paused state (`UmbriciansLiveViewDashboardContext`).
  */
-export class UmbriciansLiveViewDashboardContext extends UmbContextBase {
+export class LiveViewDashboardContext extends UmbContextBase implements UmbriciansLiveViewDashboardContext {
   readonly #interval = new UmbNumberState<number>(readStoredInterval());
   /** The refresh interval in seconds. */
   readonly interval: Observable<number> = this.#interval.asObservable();
@@ -45,11 +56,14 @@ export class UmbriciansLiveViewDashboardContext extends UmbContextBase {
   readonly #canMessageUsers = new UmbBooleanState<boolean>(false);
   readonly canMessageUsers: Observable<boolean> = this.#canMessageUsers.asObservable();
 
-  readonly #canMessageMembers = new UmbBooleanState<boolean>(false);
-  readonly canMessageMembers: Observable<boolean> = this.#canMessageMembers.asObservable();
-
   readonly #memberMessaging = new UmbBasicState<MemberMessaging | undefined>(undefined);
   readonly memberMessaging: Observable<MemberMessaging | undefined> = this.#memberMessaging.asObservable();
+
+  readonly #mayMessageMembers = new UmbBooleanState<boolean>(false);
+  readonly canMessageMembers: Observable<boolean> = mergeObservables(
+    [this.#mayMessageMembers.asObservable(), this.memberMessaging],
+    ([permitted, messaging]) => memberMessagingAvailable(permitted, messaging),
+  );
 
   readonly #usersSelection = new UmbBasicState<OnlineTableSelection | undefined>(undefined);
   readonly usersSelection: Observable<OnlineTableSelection | undefined> = this.#usersSelection.asObservable();
@@ -57,17 +71,15 @@ export class UmbriciansLiveViewDashboardContext extends UmbContextBase {
   readonly #membersSelection = new UmbBasicState<OnlineTableSelection | undefined>(undefined);
   readonly membersSelection: Observable<OnlineTableSelection | undefined> = this.#membersSelection.asObservable();
 
-  #mayMessageMembers = false;
   #timer?: number;
   #abort?: AbortController;
 
   constructor(host: UmbControllerHost) {
-    super(host, UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT);
+    super(host, LIVE_VIEW_DASHBOARD_CONTEXT);
     this.consumeContext(UMB_CURRENT_USER_CONTEXT, (context) => {
       this.observe(context?.fallbackPermissions, (permissions) => {
         this.#canMessageUsers.setValue(permissions?.includes(LIVE_VIEW_PERMISSION_MESSAGE_USERS) ?? false);
-        this.#mayMessageMembers = permissions?.includes(LIVE_VIEW_PERMISSION_MESSAGE_MEMBERS) ?? false;
-        this.#updateCanMessageMembers();
+        this.#mayMessageMembers.setValue(permissions?.includes(LIVE_VIEW_PERMISSION_MESSAGE_MEMBERS) ?? false);
       });
     });
   }
@@ -77,8 +89,7 @@ export class UmbriciansLiveViewDashboardContext extends UmbContextBase {
     this.#schedule(0);
     fetchMemberMessaging()
       .then((messaging) => this.#memberMessaging.setValue(messaging))
-      .catch(() => this.#memberMessaging.setValue(undefined))
-      .finally(() => this.#updateCanMessageMembers());
+      .catch(() => this.#memberMessaging.setValue(undefined));
   }
 
   override hostDisconnected() {
@@ -87,7 +98,7 @@ export class UmbriciansLiveViewDashboardContext extends UmbContextBase {
   }
 
   setRefreshInterval(seconds: number) {
-    this.#interval.setValue(seconds || DEFAULT_INTERVAL);
+    this.#interval.setValue(toInterval(seconds));
     try {
       localStorage.setItem(STORAGE_KEY, String(this.#interval.getValue()));
     } catch {
@@ -114,13 +125,6 @@ export class UmbriciansLiveViewDashboardContext extends UmbContextBase {
 
   setMembersSelection(selection: OnlineTableSelection | undefined) {
     this.#membersSelection.setValue(selection);
-  }
-
-  /** Members can be messaged only with the permission and at least one delivery method set up by a developer. */
-  #updateCanMessageMembers() {
-    this.#canMessageMembers.setValue(
-      this.#mayMessageMembers && (this.#memberMessaging.getValue()?.senders.length ?? 0) > 0,
-    );
   }
 
   #schedule(delayMs: number) {
@@ -152,8 +156,7 @@ export class UmbriciansLiveViewDashboardContext extends UmbContextBase {
 
 function readStoredInterval() {
   try {
-    const stored = Number(localStorage.getItem(STORAGE_KEY));
-    return INTERVALS.includes(stored) ? stored : DEFAULT_INTERVAL;
+    return toInterval(localStorage.getItem(STORAGE_KEY));
   } catch {
     return DEFAULT_INTERVAL;
   }

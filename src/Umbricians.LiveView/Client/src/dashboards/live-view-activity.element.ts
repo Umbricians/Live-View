@@ -13,7 +13,7 @@ import {
 } from "chart.js";
 import { color } from "chart.js/helpers";
 import type { LiveMetricReading, LiveViewSnapshot } from "../api/live-view.resource.js";
-import { UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT } from "./live-view-dashboard.context-token.js";
+import { LIVE_VIEW_DASHBOARD_CONTEXT } from "./live-view-dashboard.context.js";
 import { MAX_READINGS, readingsAfter } from "./readings.js";
 
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend);
@@ -41,7 +41,7 @@ export class UmbriciansLiveViewActivityElement extends UmbElementMixin(LitElemen
 
   constructor() {
     super();
-    this.consumeContext(UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT, (context) => {
+    this.consumeContext(LIVE_VIEW_DASHBOARD_CONTEXT, (context) => {
       this.observe(context?.snapshot, (snapshot) => (this._metrics = snapshot?.metrics ?? []));
       this.observe(context?.readings, (readings) => {
         this.#readings = readings ?? [];

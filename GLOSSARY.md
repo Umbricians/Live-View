@@ -33,7 +33,8 @@ reads a channel's settings reads them here.
 ## Dashboard context
 
 What the dashboard shares with its panels. Every panel follows its refresh interval and paused state; the package's own
-panels also share the readings and what the footer's message actions need from the online tables' selections.
+panels also share the readings and what the footer's message actions need from the online tables' selections. Sites'
+panels see only the refresh interval and paused state.
 
 ## Dashboard panel
 

@@ -391,8 +391,8 @@ it (150 places it between the two tables):
 }
 ```
 
-The element consumes the dashboard context from `@umbricians/live-view` and follows its refresh interval (in seconds)
-and paused state, so the panel refreshes and pauses with the chart. This one fetches a count from the site's own
+The element consumes the dashboard context from `@umbricians/live-view`. The context gives a panel two observables,
+`interval` (the refresh interval in seconds) and `paused`, so the panel refreshes and pauses with the chart. This one fetches a count from the site's own
 endpoint:
 
 ```js
@@ -458,8 +458,8 @@ To replace a panel, register yours with `overwrites` set to its alias. To show o
 with `extensionRegistry.appendCondition(alias, condition)`. "Message users…" and "Message members…" show only while
 their panel is shown.
 
-For a TypeScript site, the package ships declarations for `@umbricians/live-view` (the context token and the
-`ManifestLiveViewPanel` manifest interface). They sit in `App_Plugins/UmbriciansLiveView/types/index.d.ts` among the
+For a TypeScript site, the package ships declarations for `@umbricians/live-view` (the context token, the
+`UmbriciansLiveViewDashboardContext` interface and the `ManifestLiveViewPanel` manifest interface). They sit in `App_Plugins/UmbriciansLiveView/types/index.d.ts` among the
 package's static web assets; point a `paths` entry in the site's `tsconfig.json` at that file:
 
 ```json

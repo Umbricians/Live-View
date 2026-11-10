@@ -2,7 +2,13 @@ import { css, html, nothing } from "@umbraco-cms/backoffice/external/lit";
 import type { ReactiveController, ReactiveControllerHost } from "@umbraco-cms/backoffice/external/lit";
 import type { UUIBooleanInputEvent, UUIPaginationElement } from "@umbraco-cms/backoffice/external/uui";
 import { PAGE_SIZE, plural } from "../utils/format.js";
-import { Selection, type Person, type SelectionSummary } from "./online-selection.js";
+import {
+  Selection,
+  selectionChanged,
+  type OnlineTableSelection,
+  type Person,
+  type SelectionSummary,
+} from "./online-selection.js";
 
 /** One page of people online, and how many are online in all. */
 export interface OnlinePage<T> {
@@ -11,15 +17,6 @@ export interface OnlinePage<T> {
   anyOnMcp: boolean;
   /** How many people online can be messaged, which "Select all online" reaches. */
   recipients: number;
-}
-
-/** What the dashboard's footer needs from an online table to message whoever is picked in it. */
-export interface OnlineTableSelection {
-  readonly summary: SelectionSummary;
-  /** How many people are online in the table. */
-  readonly onlineCount: number;
-  /** Clears the selection, e.g. after a message has been sent. */
-  clear(): void;
 }
 
 /** A table that lists people online: refreshed on its own timer, paused with the chart. */
@@ -100,8 +97,7 @@ export class OnlineList<T extends Person> implements ReactiveController {
     if (this.#host.paused || !this.#host.isConnected) return;
 
     const abort = (this.#abort = new AbortController());
-    const before = this.summary;
-    const beforeTotal = this.total;
+    const before = this.tableSelection;
     try {
       const result = await this.#fetchPage((this.page - 1) * PAGE_SIZE, PAGE_SIZE, abort.signal);
       if (abort.signal.aborted) return;
@@ -120,7 +116,7 @@ export class OnlineList<T extends Person> implements ReactiveController {
       }
 
       this.#host.requestUpdate();
-      if (this.#reachChanged(before) || this.total !== beforeTotal) this.#changed();
+      if (selectionChanged(before, this.tableSelection)) this.#changed();
     } catch {
       if (abort.signal.aborted) return;
       // The chart shows connection errors; keep the last list.
@@ -146,11 +142,6 @@ export class OnlineList<T extends Person> implements ReactiveController {
     this.selection = selection;
     this.#host.requestUpdate();
     this.#changed();
-  }
-
-  #reachChanged(before: SelectionSummary) {
-    const after = this.summary;
-    return after.allOnline !== before.allOnline || after.count !== before.count;
   }
 
   #changed() {

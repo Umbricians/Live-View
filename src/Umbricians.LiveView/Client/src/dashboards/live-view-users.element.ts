@@ -14,7 +14,7 @@ import {
   renderSelectAllButton,
   renderSelectionBar,
 } from "./online-list.js";
-import { UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT } from "./live-view-dashboard.context-token.js";
+import { LIVE_VIEW_DASHBOARD_CONTEXT } from "./live-view-dashboard.context.js";
 
 /**
  * Lists backoffice users who currently have the backoffice open, one page at a time, with a selection the
@@ -32,7 +32,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
   /** Shows the selection checkboxes and delivery column; only for users allowed to message backoffice users. */
   @state() private _selectable = false;
 
-  #context?: typeof UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT.TYPE;
+  #context?: typeof LIVE_VIEW_DASHBOARD_CONTEXT.TYPE;
 
   #list = new OnlineList<OnlineBackofficeUser>(
     this,
@@ -43,7 +43,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
 
   constructor() {
     super();
-    this.consumeContext(UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT, (context) => {
+    this.consumeContext(LIVE_VIEW_DASHBOARD_CONTEXT, (context) => {
       this.#context = context;
       this.observe(context?.interval, (interval) => (this.interval = interval ?? 5));
       this.observe(context?.paused, (paused) => (this.paused = paused ?? true));
