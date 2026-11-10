@@ -2,8 +2,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Umbraco.Cms.Core.DependencyInjection;
 using Umbricians.LiveView.Composers;
 using Umbricians.LiveView.Configuration;
+using Umbricians.LiveView.Extensions;
 
 namespace Umbricians.LiveView.Tests.Configuration;
 
@@ -94,6 +96,38 @@ public class LiveViewOptionsValidationTests
     }
 
     [Fact]
+    public void A_channel_declared_in_code_falls_back_to_the_window_code_gave_it()
+    {
+        LiveViewOptions options = Build(
+            new() { ["Channels:shop:ActivityWindowSeconds"] = "0" },
+            builder => builder.AddLiveViewChannel("shop", "Shop", c => c.ActivityWindowSeconds = 120));
+
+        Assert.Equal(120, options.Channels["shop"].ActivityWindowSeconds);
+        Assert.Single(_logger.Warnings, w => w.Contains("Channels:shop:ActivityWindowSeconds") && w.Contains("120"));
+    }
+
+    // Code takes precedence over the built-in defaults, so restyling the api channel in code moves its fallback too.
+    [Fact]
+    public void A_built_in_channel_given_a_window_in_code_falls_back_to_that_window()
+    {
+        LiveViewOptions options = Build(
+            new() { ["Channels:api:ActivityWindowSeconds"] = "-1" },
+            builder => builder.AddLiveViewChannel("api", "API calls", c => c.ActivityWindowSeconds = 90));
+
+        Assert.Equal(90, options.Channels["api"].ActivityWindowSeconds);
+    }
+
+    [Fact]
+    public void A_window_of_zero_from_code_falls_back_past_it()
+    {
+        LiveViewOptions options = Build(
+            code: builder => builder.AddLiveViewChannel("api", "API calls", c => c.ActivityWindowSeconds = 0));
+
+        Assert.Equal(60, options.Channels["api"].ActivityWindowSeconds);
+        Assert.Single(_logger.Warnings, w => w.Contains("Channels:api:ActivityWindowSeconds"));
+    }
+
+    [Fact]
     public void Any_other_channels_window_that_is_not_positive_falls_back_to_the_site_wide_one()
     {
         LiveViewOptions options = Build(new()
@@ -155,7 +189,7 @@ public class LiveViewOptionsValidationTests
             .ToDictionary(p => p.Item1, p => p.Item2);
 
     /// <summary>Builds the options through the composer's own registration, from settings relative to the Live View section.</summary>
-    private LiveViewOptions Build(Dictionary<string, string?>? settings = null)
+    private LiveViewOptions Build(Dictionary<string, string?>? settings = null, Action<IUmbracoBuilder>? code = null)
     {
         IConfigurationRoot config = new ConfigurationBuilder()
             .AddInMemoryCollection((settings ?? []).ToDictionary(p => $"{Constants.ConfigurationSection}:{p.Key}", p => p.Value))
@@ -164,6 +198,7 @@ public class LiveViewOptionsValidationTests
         var services = new ServiceCollection();
         services.AddSingleton<ILogger<LiveViewOptionsValidation>>(_logger);
         services.AddLiveView(config);
+        code?.Invoke(ChannelPrecedenceTests.ServicesOnlyBuilder.Create(services));
 
         using ServiceProvider provider = services.BuildServiceProvider();
         return provider.GetRequiredService<IOptions<LiveViewOptions>>().Value;

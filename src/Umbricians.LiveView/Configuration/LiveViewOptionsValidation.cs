@@ -11,7 +11,9 @@ namespace Umbricians.LiveView.Configuration;
 /// each, so a mistake in appsettings never stops the site or empties the dashboard. Failing at startup was considered
 /// and rejected: a dashboard setting shouldn't be able to take a whole site down (#38).
 /// </summary>
-internal sealed class LiveViewOptionsValidation(ILogger<LiveViewOptionsValidation> logger)
+internal sealed class LiveViewOptionsValidation(
+    IEnumerable<LiveViewChannelRegistration> registrations,
+    ILogger<LiveViewOptionsValidation> logger)
     : IPostConfigureOptions<LiveViewOptions>
 {
     private const string Section = Constants.ConfigurationSection;
@@ -31,15 +33,13 @@ internal sealed class LiveViewOptionsValidation(ILogger<LiveViewOptionsValidatio
             options.ActivityWindowSeconds = defaults.ActivityWindowSeconds;
         }
 
-        // Runs after the channel defaults are filled in, so a channel with no window of its own already has its
-        // built-in one; only a configured window can be wrong.
+        // Runs after the channel defaults are filled in, so a channel with no window of its own already has the one
+        // code or the built-in defaults give it; only a configured window can be wrong.
         foreach ((string alias, LiveViewChannelOptions channel) in options.Channels)
         {
             if (channel.ActivityWindowSeconds <= 0)
             {
-                int? fallback = LiveViewOptionsDefaults.BuiltInChannels.TryGetValue(alias, out LiveViewChannelOptions? builtIn)
-                    ? builtIn.ActivityWindowSeconds
-                    : null;
+                int? fallback = DefaultWindow(alias);
                 WarnNotPositive(
                     $"{Section}:Channels:{alias}:ActivityWindowSeconds",
                     channel.ActivityWindowSeconds,
@@ -109,6 +109,19 @@ internal sealed class LiveViewOptionsValidation(ILogger<LiveViewOptionsValidatio
             dashboard.MaxReadings = LiveViewDashboardOptions.DefaultMaxReadings;
         }
     }
+
+    /// <summary>
+    /// The window a channel has when appsettings leaves it out, in the same order of precedence as
+    /// <see cref="LiveViewOptionsDefaults"/>: channels declared in code, then the built-in ones. Null means the
+    /// site-wide window.
+    /// </summary>
+    private int? DefaultWindow(string alias) =>
+        registrations
+            .Where(r => string.Equals(r.Alias, alias, StringComparison.OrdinalIgnoreCase))
+            .Select(r => r.Defaults)
+            .Append(LiveViewOptionsDefaults.BuiltInChannels.GetValueOrDefault(alias))
+            .Select(defaults => defaults?.ActivityWindowSeconds)
+            .FirstOrDefault(window => window > 0);
 
     private static int FirstChoice(LiveViewDashboardOptions dashboard) =>
         dashboard.RefreshIntervals.Contains(LiveViewDashboardOptions.PreferredRefreshInterval)

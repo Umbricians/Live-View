@@ -294,8 +294,8 @@ A value that can't work never stops the site. It is replaced by its default, wit
 setting:
 
 - a number that isn't positive: `ActivityWindowSeconds`, `MaxSessionsPerChannel`, `BackofficeMessageLifetimeMinutes`,
-  `Dashboard:RefreshIntervals` or `Dashboard:MaxReadings`. A channel's `ActivityWindowSeconds` falls back to its
-  built-in window, or to the site-wide `ActivityWindowSeconds` for a channel of your own;
+  `Dashboard:RefreshIntervals` or `Dashboard:MaxReadings`. A channel's `ActivityWindowSeconds` falls back to the
+  window `AddLiveViewChannel` gave it, then its built-in window, then the site-wide `ActivityWindowSeconds`;
 - a `Dashboard:DefaultRefreshInterval` that isn't one of the `RefreshIntervals`;
 - a `MessageTimeZone` the server doesn't know, which is ignored, so midnight is each sender's own.
 
