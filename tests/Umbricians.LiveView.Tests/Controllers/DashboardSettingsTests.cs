@@ -77,7 +77,7 @@ public class DashboardSettingsTests
             .Build();
         var services = new ServiceCollection();
         services.AddLogging();
-        LiveViewComposer.AddOptions(services, config);
+        services.AddLiveView(config);
         IOptionsMonitor<LiveViewOptions> options = services.BuildServiceProvider().GetRequiredService<IOptionsMonitor<LiveViewOptions>>();
 
         var store = new InMemoryActivityStore(options);

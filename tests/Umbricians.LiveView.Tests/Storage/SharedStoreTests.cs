@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -155,10 +156,10 @@ public class SharedStoreTests
         var siteMessages = new SharedBackofficeMessageStore();
         before.AddSingleton<ILiveViewActivityStore>(siteActivity);
         before.AddSingleton<IBackofficeMessageStore>(siteMessages);
-        LiveViewComposer.AddStores(before);
+        before.AddLiveView(new ConfigurationBuilder().Build());
 
         var after = new ServiceCollection();
-        LiveViewComposer.AddStores(after);
+        after.AddLiveView(new ConfigurationBuilder().Build());
         after.AddSingleton<ILiveViewActivityStore>(siteActivity);
         after.AddSingleton<IBackofficeMessageStore>(siteMessages);
 

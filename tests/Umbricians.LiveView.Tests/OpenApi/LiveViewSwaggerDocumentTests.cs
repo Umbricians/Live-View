@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
@@ -18,7 +19,7 @@ public class LiveViewSwaggerDocumentTests
     public void The_composer_adds_the_package_document_with_its_security_filter()
     {
         var services = new ServiceCollection();
-        LiveViewComposer.AddManagementApi(services);
+        services.AddLiveView(new ConfigurationBuilder().Build());
 
         SwaggerGenOptions options = services.BuildServiceProvider().GetRequiredService<IOptions<SwaggerGenOptions>>().Value;
 

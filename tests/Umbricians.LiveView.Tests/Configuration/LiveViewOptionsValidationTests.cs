@@ -108,7 +108,7 @@ public class LiveViewOptionsValidationTests
 
         var services = new ServiceCollection();
         services.AddSingleton<ILogger<LiveViewOptionsValidation>>(_logger);
-        LiveViewComposer.AddOptions(services, config);
+        services.AddLiveView(config);
 
         using ServiceProvider provider = services.BuildServiceProvider();
         return provider.GetRequiredService<IOptions<LiveViewOptions>>().Value;
