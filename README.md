@@ -44,8 +44,9 @@ online, or every member of the site, using whichever of the site's delivery meth
 
 **Relevant for** sets when the message stops being shown: **15 minutes**, **1 hour**, **Midnight tonight**,
 **24 hours**, **7 days**, or **Custom…**, which takes hours and minutes, from 1 minute up to 30 days. The line below
-it shows the exact time, for example "Stops being shown Sun, Nov 1, 12:00 AM Denver time (in 3 h 48 min)". Midnight
-is in the [`MessageTimeZone`](#configuration) if the site sets one, otherwise in your own browser's time zone.
+it shows the exact time in your language and culture, for example "Stops being shown Sun, Nov 1, 12:00 AM Denver
+time (in 3 h 48 min)". Midnight is in the [`MessageTimeZone`](#configuration) if the site sets one, otherwise in your
+own browser's time zone.
 
 ![The Message members slide-out with Relevant for set to Midnight tonight and the time it stops being shown](docs/images/live-view-message-members.png)
 
@@ -178,6 +179,43 @@ can be turned off through Umbraco's `Umbraco:CMS:HealthChecks:DisabledChecks`.
 - **Channel paths**: a channel whose paths an earlier exclusive channel counts first.
 
 See [Before you go live](docs/getting-started.md#before-you-go-live).
+
+## Languages
+
+The dashboard, dialogs and permissions follow each backoffice user's language, and show dates, times and numbers
+in their culture. Live View ships English, and a term a language does not have falls back to English.
+
+To add a language or reword one, add an `App_Plugins/MySite/umbraco-package.json` with a `localization` extension:
+
+```json
+{
+  "name": "MySite Live View Danish",
+  "extensions": [
+    {
+      "type": "localization",
+      "alias": "MySite.Localization.LiveView.Da",
+      "name": "MySite Live View Danish",
+      "meta": { "culture": "da" },
+      "js": "/App_Plugins/MySite/live-view.da.js"
+    }
+  ]
+}
+```
+
+The JavaScript module lists the terms, under `umbriciansLiveView`:
+
+```js
+export default {
+  umbriciansLiveView: {
+    refreshInterval: "Opdateringsinterval",
+    onlineCount: (count) => `${count} online`,
+  },
+};
+```
+
+Terms with a count are functions of it; plain wording can instead go in `meta.localizations` in the JSON. To
+reword English, use `culture: "en"` and a `weight` below 100. [The English terms](src/Umbricians.LiveView/Client/src/localization/en.ts)
+are the full list.
 
 ## Configuration
 

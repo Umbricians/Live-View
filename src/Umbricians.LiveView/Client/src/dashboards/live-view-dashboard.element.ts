@@ -13,7 +13,7 @@ import type { OnlineTableSelection } from "./online-selection.js";
 import "./live-view-activity.element.js";
 import "./live-view-users.element.js";
 import "./live-view-members.element.js";
-import { plural } from "../utils/format.js";
+import { describeError } from "../api/request-error.js";
 
 /**
  * The dashboard: a header with the refresh controls, the panels, and a footer with the message actions. What the
@@ -26,7 +26,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
   @state() private _interval = 5;
   @state() private _paused = false;
   @state() private _lastUpdated?: Date;
-  @state() private _error?: string;
+  @state() private _error?: unknown;
 
   /** The current user's Live View messaging permissions, from their user groups. */
   @state() private _canMessageUsers = false;
@@ -81,14 +81,18 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
       });
       const failed = result.results.filter((r) => r.error);
       const summary = result.results
-        .map((r) =>
-          r.error
-            ? `${r.name}: ${r.error.toLowerCase()}`
-            : `${r.name}: ${r.delivered === null ? "sent" : plural(r.delivered, "member", "members")}${r.note ? ` (${r.note})` : ""}`,
-        )
+        .map((r) => {
+          if (r.error) return this.localize.term("umbriciansLiveView_senderFailed", r.name, r.error);
+          const text =
+            r.delivered === null
+              ? this.localize.term("umbriciansLiveView_senderSent", r.name)
+              : this.localize.term("umbriciansLiveView_senderDelivered", r.name, r.delivered);
+          return r.note ? this.localize.term("umbriciansLiveView_senderNote", text, r.note) : text;
+        })
         .join(" · ");
       this.#notifications?.peek(failed.length ? "warning" : "positive", {
-        data: { headline: failed.length ? "Message partly sent" : "Message sent to members", message: summary },
+        data: { headline: failed.length ? this.localize.term("umbriciansLiveView_messagePartlySent") : this.localize.term("umbriciansLiveView_messageSentToMembers"),
+          message: summary, },
       });
       members.clear();
     } catch {
@@ -106,7 +110,8 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
         data: { selection, onlineCount: users.recipients },
       });
       this.#notifications?.peek("positive", {
-        data: { headline: "Message sent", message: `Sent to ${sentTo} ${sentTo === 1 ? "user" : "users"}.` },
+        data: { headline: this.localize.term("umbriciansLiveView_messageSent"),
+          message: this.localize.term("umbriciansLiveView_sentToUsers", sentTo), },
       });
       users.clear();
     } catch {
@@ -124,37 +129,39 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
     const selected = users?.summary.count ?? 0;
     const selectedMembers = members?.summary.count ?? 0;
     const hint = canMessageUsers && canMessageMembers
-      ? "Select users or members to message them"
+      ? this.localize.term("umbriciansLiveView_selectUsersOrMembers")
       : canMessageUsers
-        ? "Select users to send them a message"
+        ? this.localize.term("umbriciansLiveView_selectUsers")
         : canMessageMembers
-          ? "Select members to send them a message"
+          ? this.localize.term("umbriciansLiveView_selectMembers")
           : "";
 
     return html`
       <umb-body-layout header-transparent>
         <div slot="header" class="toolbar">
           <div class="status">
-            <span class="live-dot ${this._paused || this._error ? "off" : ""}"></span>
-            ${this._error
-              ? html`<span class="error">${this._error}</span>`
+            <span class="live-dot ${this._paused || this._error !== undefined ? "off" : ""}"></span>
+            ${this._error !== undefined
+              ? html`<span class="error">${describeError(this.localize, this._error)}</span>`
               : this._lastUpdated
-                ? html`<span class="muted">Updated ${this._lastUpdated.toLocaleTimeString()}</span>`
-                : html`<span class="muted">Connecting…</span>`}
+                ? html`<span class="muted"
+                    >${this.localize.term("umbriciansLiveView_updatedAt", this.localize.date(this._lastUpdated, { timeStyle: "medium" }))}</span
+                  >`
+                : html`<span class="muted">${this.localize.term("umbriciansLiveView_connecting")}</span>`}
           </div>
           <div class="controls">
             <uui-select
-              label="Refresh interval"
-              .options=${(this._settings?.refreshIntervals ?? []).map((s) => ({ name: `Every ${s}s`, value: String(s), selected: s === this._interval }))}
+              label=${this.localize.term("umbriciansLiveView_refreshInterval")}
+              .options=${(this._settings?.refreshIntervals ?? []).map((s) => ({ name: this.localize.term("umbriciansLiveView_everySeconds", s), value: String(s), selected: s === this._interval }))}
               @change=${this.#onIntervalChange}></uui-select>
             <uui-button
               look="secondary"
               compact
-              label=${this._paused ? "Resume" : "Pause"}
+              label=${this._paused ? this.localize.term("umbriciansLiveView_resume") : this.localize.term("umbriciansLiveView_pause")}
               @click=${() => this.#context.togglePaused()}>
               <uui-icon name=${this._paused ? "icon-play" : "icon-pause"}></uui-icon>
             </uui-button>
-            <uui-button look="secondary" compact label="Clear chart" @click=${() => this.#context.clearReadings()}>
+            <uui-button look="secondary" compact label=${this.localize.term("umbriciansLiveView_clearChart")} @click=${() => this.#context.clearReadings()}>
               <uui-icon name="icon-trash"></uui-icon>
             </uui-button>
           </div>
@@ -171,8 +178,8 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
               ${selected === 0 && selectedMembers === 0
                 ? hint
                 : [
-                    selected ? `${plural(selected, "user", "users")} selected` : "",
-                    selectedMembers ? `${plural(selectedMembers, "member", "members")} selected` : "",
+                    selected ? this.localize.term("umbriciansLiveView_usersSelected", selected) : "",
+                    selectedMembers ? this.localize.term("umbriciansLiveView_membersSelected", selectedMembers) : "",
                   ]
                     .filter(Boolean)
                     .join(" · ")}
@@ -182,7 +189,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
           ? html`<uui-button
               slot="actions"
               look="secondary"
-              label="Message members…"
+              label=${this.localize.term("umbriciansLiveView_messageMembersButton")}
               @click=${this.#openSendMemberMessage}></uui-button>`
           : ""}
         ${canMessageUsers
@@ -190,7 +197,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
               slot="actions"
               look="primary"
               color="positive"
-              label="Message users…"
+              label=${this.localize.term("umbriciansLiveView_messageUsersButton")}
               @click=${this.#openSendMessage}></uui-button>`
           : ""}
       </umb-body-layout>

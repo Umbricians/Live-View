@@ -1,7 +1,8 @@
 import { css, html, nothing } from "@umbraco-cms/backoffice/external/lit";
 import type { ReactiveController, ReactiveControllerHost } from "@umbraco-cms/backoffice/external/lit";
+import type { UmbLocalizationController } from "@umbraco-cms/backoffice/localization-api";
 import type { UUIBooleanInputEvent, UUIPaginationElement } from "@umbraco-cms/backoffice/external/uui";
-import { PAGE_SIZE, plural } from "../utils/format.js";
+import { PAGE_SIZE } from "../utils/format.js";
 import {
   Selection,
   selectionChanged,
@@ -20,7 +21,8 @@ export interface OnlinePage<T> {
 }
 
 /** A table that lists people online: refreshed on its own timer, paused with the chart. */
-type Host = ReactiveControllerHost & HTMLElement & { interval: number; paused: boolean };
+type Host = ReactiveControllerHost &
+  HTMLElement & { interval: number; paused: boolean; localize: UmbLocalizationController };
 
 /**
  * One online table's list: the page shown, refreshed every `interval` seconds while not paused, and who is picked in
@@ -60,6 +62,11 @@ export class OnlineList<T extends Person> implements ReactiveController {
   hostDisconnected() {
     window.clearTimeout(this.#timer);
     this.#abort?.abort();
+  }
+
+  /** The host's localization, which the render helpers below word their text with. */
+  get localize() {
+    return this.#host.localize;
   }
 
   /** Who the selection reaches. */
@@ -155,29 +162,38 @@ export function renderSelectAllButton<T extends Person>(list: OnlineList<T>) {
   return html`<uui-button
     look="secondary"
     compact
-    label=${list.selection.allOnline ? "Clear selection" : `Select all ${list.recipients} online`}
+    label=${list.selection.allOnline
+      ? list.localize.term("buttons_clearSelection")
+      : list.localize.term("umbriciansLiveView_selectAllOnline", list.recipients)}
     @click=${list.selection.allOnline ? list.clearSelection : list.selectAllOnline}></uui-button>`;
 }
 
 /**
  * The bar above the table saying everyone online is picked, or offering to pick them once the whole page is.
- * `nouns` names the people: "user" and "users", say.
+ * `terms` are the keys of the two sentences, which name the people: users or members, say.
  */
-export function renderSelectionBar<T extends Person>(list: OnlineList<T>, nouns: { one: string; many: string }) {
+export function renderSelectionBar<T extends Person>(
+  list: OnlineList<T>,
+  terms: { allOnline: string; allOnPage: string },
+) {
   const pickable = list.pickable;
   if (list.selection.allOnline) {
     return html`<div class="selection-bar">
-      All ${plural(list.recipients, `online ${nouns.one} is`, `online ${nouns.many} are`)} selected.
-      <uui-button look="placeholder" compact label="Clear selection" @click=${list.clearSelection}></uui-button>
+      ${list.localize.term(terms.allOnline, list.recipients)}
+      <uui-button
+        look="placeholder"
+        compact
+        label=${list.localize.term("buttons_clearSelection")}
+        @click=${list.clearSelection}></uui-button>
     </div>`;
   }
   if (list.selection.pageState(pickable) === "all" && list.recipients > pickable.length) {
     return html`<div class="selection-bar">
-      All ${plural(pickable.length, nouns.one, nouns.many)} on this page selected.
+      ${list.localize.term(terms.allOnPage, pickable.length)}
       <uui-button
         look="placeholder"
         compact
-        label=${`Select all ${list.recipients} online`}
+        label=${list.localize.term("umbriciansLiveView_selectAllOnline", list.recipients)}
         @click=${list.selectAllOnline}></uui-button>
     </div>`;
   }
@@ -191,7 +207,7 @@ export function renderPageCheckbox<T extends Person>(list: OnlineList<T>) {
   return html`<uui-table-head-cell class="select">
     <!-- An empty slotted span replaces the visible label; the label attribute still names it. -->
     <uui-checkbox
-      label="Select everyone on this page"
+      label=${list.localize.term("umbriciansLiveView_selectPage")}
       ?disabled=${pickable.length === 0}
       .checked=${state === "all"}
       .indeterminate=${state === "some"}
@@ -206,7 +222,7 @@ export function renderRowCheckbox<T extends Person>(list: OnlineList<T>, item: T
   return html`<uui-table-cell class="select">
     ${list.canSelect(item)
       ? html`<uui-checkbox
-          label="Select ${item.name}"
+          label=${list.localize.term("umbriciansLiveView_selectPerson", item.name)}
           .checked=${list.selection.isSelected(item.key)}
           @change=${(e: UUIBooleanInputEvent) => list.toggle(item, e.target.checked)}
           ><span></span

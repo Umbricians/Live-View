@@ -1,16 +1,17 @@
 import { html } from "@umbraco-cms/backoffice/external/lit";
 import type { UUISelectEvent } from "@umbraco-cms/backoffice/external/uui";
+import type { UmbLocalizationController } from "@umbraco-cms/backoffice/localization-api";
 import type { MessageColor } from "../api/live-view.resource.js";
 
 /** The server turns down anything longer (MessageContent), so the fields stop typing at the same lengths. */
 export const MAX_HEADLINE_LENGTH = 200;
 export const MAX_MESSAGE_LENGTH = 2000;
 
-const TYPES: Array<{ name: string; value: MessageColor }> = [
-  { name: "Information", value: "default" },
-  { name: "Warning", value: "warning" },
-  { name: "Urgent", value: "danger" },
-  { name: "Good news", value: "positive" },
+const TYPES: Array<{ term: string; value: MessageColor }> = [
+  { term: "umbriciansLiveView_typeInformation", value: "default" },
+  { term: "umbriciansLiveView_typeWarning", value: "warning" },
+  { term: "umbriciansLiveView_typeUrgent", value: "danger" },
+  { term: "umbriciansLiveView_typeGoodNews", value: "positive" },
 ];
 
 /** What every message says, to backoffice users or members alike. */
@@ -40,6 +41,7 @@ export const sendColor = (text: MessageText) => (text.color === "danger" ? "dang
  * `onChange` gets the whole text back after each edit.
  */
 export function renderMessageFields(
+  localize: UmbLocalizationController,
   text: MessageText,
   onChange: (text: MessageText) => void,
   placeholders: { headline: string; message: string },
@@ -47,10 +49,10 @@ export function renderMessageFields(
 ) {
   return html`
     <uui-form-layout-item>
-      <uui-label slot="label" for="headline" required>Headline</uui-label>
+      <uui-label slot="label" for="headline" required>${localize.term("umbriciansLiveView_headline")}</uui-label>
       <uui-input
         id="headline"
-        label="Headline"
+        label=${localize.term("umbriciansLiveView_headline")}
         placeholder=${placeholders.headline}
         maxlength=${MAX_HEADLINE_LENGTH}
         .value=${text.headline}
@@ -58,19 +60,19 @@ export function renderMessageFields(
     </uui-form-layout-item>
 
     <uui-form-layout-item>
-      <uui-label slot="label" for="type">Type</uui-label>
+      <uui-label slot="label" for="type">${localize.term("umbriciansLiveView_type")}</uui-label>
       <uui-select
         id="type"
-        label="Type"
-        .options=${TYPES.map((t) => ({ ...t, selected: t.value === text.color }))}
+        label=${localize.term("umbriciansLiveView_type")}
+        .options=${TYPES.map((t) => ({ name: localize.term(t.term), value: t.value, selected: t.value === text.color }))}
         @change=${(e: UUISelectEvent) => onChange({ ...text, color: e.target.value as MessageColor })}></uui-select>
     </uui-form-layout-item>
 
     <uui-form-layout-item>
-      <uui-label slot="label" for="message">Message</uui-label>
+      <uui-label slot="label" for="message">${localize.term("umbriciansLiveView_message")}</uui-label>
       <uui-textarea
         id="message"
-        label="Message"
+        label=${localize.term("umbriciansLiveView_message")}
         placeholder=${placeholders.message}
         maxlength=${MAX_MESSAGE_LENGTH}
         rows=${rows}

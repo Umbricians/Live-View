@@ -1,4 +1,5 @@
 import { umbHttpClient } from "@umbraco-cms/backoffice/http-client";
+import { LiveViewRequestError } from "./request-error.js";
 
 export interface LiveMetricReading {
   alias: string;
@@ -88,7 +89,7 @@ async function request<T>(
     url: BASE_URL + path,
     // Tells the client to apply the backoffice authentication to this call.
     security: [{ type: "http", scheme: "bearer" }],
-    // The client throws the error body as it is by default; returning it lets every failure become an Error below.
+    // The client throws the error body as it is by default; returning it lets every failure become a LiveViewRequestError below.
     throwOnError: false,
     ...options,
   });
@@ -96,7 +97,7 @@ async function request<T>(
   if (error !== undefined || !response?.ok) {
     // A message that can't be sent says why in the ProblemDetails detail, which the dashboard shows as it is.
     const detail = (error as { detail?: unknown } | undefined)?.detail;
-    throw new Error(typeof detail === "string" && detail ? detail : `Live View request failed (${response?.status ?? "no response"})`);
+    throw new LiveViewRequestError(response?.status, typeof detail === "string" && detail ? detail : undefined);
   }
   return data as T;
 }

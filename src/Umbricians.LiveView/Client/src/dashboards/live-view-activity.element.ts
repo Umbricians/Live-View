@@ -74,6 +74,7 @@ export class UmbriciansLiveViewActivityElement extends UmbElementMixin(LitElemen
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
         elements: { point: { radius: 0, hoverRadius: 4 }, line: { cubicInterpolationMode: "monotone", borderWidth: 2 } },
+        locale: this.localize.lang(),
         scales: {
           x: { ticks: { color: text, maxTicksLimit: 8, maxRotation: 0 }, grid: { color: grid } },
           y: { beginAtZero: true, ticks: { color: text, precision: 0 }, grid: { color: grid } },
@@ -152,7 +153,7 @@ export class UmbriciansLiveViewActivityElement extends UmbElementMixin(LitElemen
       });
     }
 
-    labels.push(timestamp.toLocaleTimeString());
+    labels.push(this.localize.date(timestamp, { timeStyle: "medium" }));
     for (const dataset of datasets) {
       dataset.data.push(metrics.find((m) => m.alias === dataset.alias)?.value ?? null);
     }
@@ -186,7 +187,7 @@ export class UmbriciansLiveViewActivityElement extends UmbElementMixin(LitElemen
 
   override render() {
     return html`
-      <uui-box headline="Live activity">
+      <uui-box headline=${this.localize.term("umbriciansLiveView_liveActivity")}>
         <div class="tiles">
           ${repeat(
             this._metrics,
@@ -199,9 +200,11 @@ export class UmbriciansLiveViewActivityElement extends UmbElementMixin(LitElemen
                   class="tile"
                   style="--tile-color: ${this.#colorFor(m, i)}"
                   aria-pressed=${shown ? "true" : "false"}
-                  title=${[m.error, `${shown ? "Hide" : "Show"} ${m.name} on the chart`].filter(Boolean).join("\n")}
+                  title=${[m.error, this.localize.term(shown ? "umbriciansLiveView_hideLine" : "umbriciansLiveView_showLine", m.name)]
+                    .filter(Boolean)
+                    .join("\n")}
                   @click=${() => this.#toggleLine(m.alias)}>
-                  <div class="tile-value">${m.value === null ? "–" : formatValue(m.value)}</div>
+                  <div class="tile-value">${m.value === null ? "–" : this.localize.number(m.value, { maximumFractionDigits: 2 })}</div>
                   <div class="tile-label">${m.name}</div>
                 </button>
               `;
@@ -210,10 +213,7 @@ export class UmbriciansLiveViewActivityElement extends UmbElementMixin(LitElemen
         </div>
 
         <div class="chart"><canvas></canvas></div>
-        <p class="muted note">
-          A live snapshot only: nothing is stored, and the chart keeps the last ${this._maxReadings} readings while this
-          page is open.
-        </p>
+        <p class="muted note">${this.localize.term("umbriciansLiveView_snapshotNote", this._maxReadings)}</p>
       </uui-box>
     `;
   }
@@ -298,10 +298,6 @@ export class UmbriciansLiveViewActivityElement extends UmbElementMixin(LitElemen
 /** A legend colour at the same 40% opacity as a switched-off tile. */
 function faded<T>(value: T): T {
   return typeof value === "string" ? (color(value).alpha(0.4).rgbString() as T) : value;
-}
-
-function formatValue(value: number) {
-  return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 export default UmbriciansLiveViewActivityElement;

@@ -27,30 +27,18 @@ export function nextMidnight(now: Date, timeZone?: string): Date {
   return new Date(instant);
 }
 
-/** "Fri 31 Oct, 23:59" in a time zone (the browser's own when none is given). */
-export function formatAt(at: Date, timeZone?: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    timeZone,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(at);
+/** "Denver" for a configured zone such as "America/Denver"; undefined when there is none. */
+export function timeZoneCity(timeZone?: string) {
+  return timeZone ? timeZone.split("/").pop()!.replace(/_/g, " ") : undefined;
 }
 
-/** "Denver time" for a configured zone, or "your time". */
-export function timeZoneLabel(timeZone?: string) {
-  return timeZone ? `${timeZone.split("/").pop()!.replace(/_/g, " ")} time` : "your time";
-}
-
-/** "3 days 4 h", "5 h 12 min" or "12 min". */
-export function formatDuration(ms: number) {
+/** A duration split into its two largest units: days and hours, hours and minutes, or minutes alone. Never negative. */
+export function durationParts(ms: number): Array<{ value: number; unit: "day" | "hour" | "minute" }> {
   const minutes = Math.max(0, Math.round(ms / 60_000));
   const days = Math.floor(minutes / (60 * 24));
   const hours = Math.floor((minutes % (60 * 24)) / 60);
   const rest = minutes % 60;
-  if (days > 0) return hours > 0 ? `${days} ${days === 1 ? "day" : "days"} ${hours} h` : `${days} ${days === 1 ? "day" : "days"}`;
-  if (hours > 0) return rest > 0 ? `${hours} h ${rest} min` : `${hours} h`;
-  return `${rest} min`;
+  if (days > 0) return hours > 0 ? [{ value: days, unit: "day" }, { value: hours, unit: "hour" }] : [{ value: days, unit: "day" }];
+  if (hours > 0) return rest > 0 ? [{ value: hours, unit: "hour" }, { value: rest, unit: "minute" }] : [{ value: hours, unit: "hour" }];
+  return [{ value: rest, unit: "minute" }];
 }

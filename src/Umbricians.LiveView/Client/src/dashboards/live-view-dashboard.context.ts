@@ -2,6 +2,7 @@ import { UmbContextBase } from "@umbraco-cms/backoffice/class-api";
 import type { UmbControllerHost } from "@umbraco-cms/backoffice/controller-api";
 import { UMB_CURRENT_USER_CONTEXT } from "@umbraco-cms/backoffice/current-user";
 import { UmbContextToken } from "@umbraco-cms/backoffice/context-api";
+import { UmbLocalizationController } from "@umbraco-cms/backoffice/localization-api";
 import {
   UmbBasicState,
   UmbBooleanState,
@@ -70,8 +71,9 @@ export class LiveViewDashboardContext extends UmbContextBase implements Umbricia
   readonly #readings = new UmbBasicState<ReadonlyArray<LiveViewSnapshot>>([]);
   readonly readings: Observable<ReadonlyArray<LiveViewSnapshot>> = this.#readings.asObservable();
 
-  readonly #error = new UmbBasicState<string | undefined>(undefined);
-  readonly error: Observable<string | undefined> = this.#error.asObservable();
+  readonly #error = new UmbBasicState<unknown>(undefined);
+  /** Why the last poll failed, as thrown; undefined while polling works. The dashboard words it for the user. */
+  readonly error: Observable<unknown> = this.#error.asObservable();
 
   readonly #canMessageUsers = new UmbBooleanState<boolean>(false);
   readonly canMessageUsers: Observable<boolean> = this.#canMessageUsers.asObservable();
@@ -95,9 +97,11 @@ export class LiveViewDashboardContext extends UmbContextBase implements Umbricia
   #abort?: AbortController;
   #connected = false;
   #notifications?: typeof UMB_NOTIFICATION_CONTEXT.TYPE;
+  readonly #localize: UmbLocalizationController;
 
   constructor(host: UmbControllerHost) {
     super(host, LIVE_VIEW_DASHBOARD_CONTEXT);
+    this.#localize = new UmbLocalizationController(host);
     this.consumeContext(UMB_NOTIFICATION_CONTEXT, (context) => (this.#notifications = context));
     this.consumeContext(UMB_CURRENT_USER_CONTEXT, (context) => {
       this.observe(context?.fallbackPermissions, (permissions) => {
@@ -139,9 +143,8 @@ export class LiveViewDashboardContext extends UmbContextBase implements Umbricia
     if (failed) {
       this.#notifications?.peek("warning", {
         data: {
-          headline: "Dashboard settings not loaded",
-          message:
-            "Live View couldn't read this site's dashboard settings, so it is using the built-in refresh choices and chart length.",
+          headline: this.#localize.term("umbriciansLiveView_settingsNotLoaded"),
+          message: this.#localize.term("umbriciansLiveView_settingsNotLoadedMessage"),
         },
       });
     }
@@ -202,7 +205,7 @@ export class LiveViewDashboardContext extends UmbContextBase implements Umbricia
       this.#error.setValue(undefined);
     } catch (error) {
       if (this.#abort.signal.aborted) return;
-      this.#error.setValue(error instanceof Error ? error.message : String(error));
+      this.#error.setValue(error);
     }
     // Scheduled after the response, so slow responses never stack up.
     this.#schedule(this.#interval.getValue() * 1000);

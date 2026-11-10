@@ -7,7 +7,7 @@ export const LIVE_VIEW_DASHBOARD_ALIAS = "Umbricians.LiveView.Dashboard";
 export const LIVE_VIEW_DASHBOARD_KIND = "umbriciansLiveView";
 
 const meta = {
-  label: "Live View",
+  label: "#umbriciansLiveView_dashboardName",
   pathname: "live-view",
 };
 

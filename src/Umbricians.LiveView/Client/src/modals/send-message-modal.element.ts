@@ -6,7 +6,7 @@ import "@umbraco-cms/backoffice/user-group";
 import type { UmbUserGroupInputElement } from "@umbraco-cms/backoffice/user-group";
 import type { UUIRadioGroupEvent } from "@umbraco-cms/backoffice/external/uui";
 import { fetchUserGroupRecipients, sendMessage, type BackofficeAudience } from "../api/live-view.resource.js";
-import { plural } from "../utils/format.js";
+import { describeError } from "../api/request-error.js";
 import { hasHeadline, newMessage, renderMessageFields, sendColor, trimmed } from "./message-fields.js";
 import type {
   UmbriciansSendMessageModalData,
@@ -83,7 +83,7 @@ export class UmbriciansLiveViewSendMessageModalElement extends UmbModalBaseEleme
     } catch (error) {
       if (abort.signal.aborted) return;
       this._userGroupCount = 0;
-      this._userGroupError = error instanceof Error ? error.message : String(error);
+      this._userGroupError = describeError(this.localize, error);
     }
   }
 
@@ -114,7 +114,7 @@ export class UmbriciansLiveViewSendMessageModalElement extends UmbModalBaseEleme
       this._submitModal();
     } catch (error) {
       this.#notifications?.peek("danger", {
-        data: { headline: "Message not sent", message: error instanceof Error ? error.message : String(error) },
+        data: { headline: this.localize.term("umbriciansLiveView_messageNotSent"), message: describeError(this.localize, error) },
       });
     } finally {
       this._sending = false;
@@ -145,7 +145,7 @@ export class UmbriciansLiveViewSendMessageModalElement extends UmbModalBaseEleme
         : this._userGroupError
           ? html`<p class="error">${this._userGroupError}</p>`
           : html`<p class="muted">
-              ${count === undefined ? "Counting…" : `Reaches ${plural(count, "user", "users")} online right now`}
+              ${count === undefined ? this.localize.term("umbriciansLiveView_countingUsers") : this.localize.term("umbriciansLiveView_reachesUsersOnline", count)}
             </p>`}
     `;
   }
@@ -158,30 +158,34 @@ export class UmbriciansLiveViewSendMessageModalElement extends UmbModalBaseEleme
     const groupCount = this._userGroupCount;
 
     return html`
-      <umb-body-layout headline="Send message">
-        <uui-box headline="Send to">
+      <umb-body-layout headline=${this.localize.term("umbriciansLiveView_sendMessage")}>
+        <uui-box headline=${this.localize.term("umbriciansLiveView_sendTo")}>
           <uui-radio-group
-            label="Send to"
+            label=${this.localize.term("umbriciansLiveView_sendTo")}
             .value=${this._audience}
             @change=${(e: UUIRadioGroupEvent) => (this._audience = e.target.value as BackofficeAudience)}>
             ${this.#renderAudience(
               "selected",
-              `Selected users (${selectedCount})`,
-              selectedCount === 0 ? "Tick users in the table to send to just them." : "The users ticked in the table.",
+              this.localize.term("umbriciansLiveView_selectedUsers", selectedCount),
+              selectedCount === 0
+                ? this.localize.term("umbriciansLiveView_selectedUsersNoneHint")
+                : this.localize.term("umbriciansLiveView_selectedUsersHint"),
               selectedCount === 0,
             )}
             ${this.#renderAudience(
               "allOnline",
-              `Everyone online (${onlineCount})`,
-              "Everyone else with the backoffice open when you send, on every page of the table, including anyone who signs in after you open this.",
+              this.localize.term("umbriciansLiveView_everyoneOnline", onlineCount),
+              this.localize.term("umbriciansLiveView_everyoneOnlineUsersHint"),
               onlineCount === 0,
             )}
             ${this.#renderAudience(
               "userGroups",
-              this._userGroupKeys.length > 0 && groupCount !== undefined ? `User groups (${groupCount})` : "User groups",
+              this._userGroupKeys.length > 0 && groupCount !== undefined
+                ? this.localize.term("umbriciansLiveView_userGroupsCount", groupCount)
+                : this.localize.term("umbriciansLiveView_userGroups"),
               this._canPickUserGroups
-                ? "Everyone else with the backoffice open when you send who is in any of the groups you choose."
-                : "Choosing user groups needs access to the Users section.",
+                ? this.localize.term("umbriciansLiveView_userGroupsHint")
+                : this.localize.term("umbriciansLiveView_userGroupsNeedUsersSection"),
               !this._canPickUserGroups,
             )}
           </uui-radio-group>
@@ -198,26 +202,24 @@ export class UmbriciansLiveViewSendMessageModalElement extends UmbModalBaseEleme
           ${this._audience === "userGroups" ? this.#renderUserGroups() : nothing}
         </uui-box>
 
-        <uui-box headline="Message">
+        <uui-box headline=${this.localize.term("umbriciansLiveView_message")}>
           <form @submit=${this.#send}>
-            <p class="muted">
-              Shown in their backoffice as a notification that stays on screen until dismissed, signed with your name.
-            </p>
+            <p class="muted">${this.localize.term("umbriciansLiveView_backofficeMessageNote")}</p>
 
-            ${renderMessageFields(this._text, (text) => (this._text = text), {
-              headline: "e.g. Upgrade in 10 minutes",
-              message: "Please save your work and log out. The site will be unavailable for about 15 minutes.",
+            ${renderMessageFields(this.localize, this._text, (text) => (this._text = text), {
+              headline: this.localize.term("umbriciansLiveView_userHeadlinePlaceholder"),
+              message: this.localize.term("umbriciansLiveView_userMessagePlaceholder"),
             }, 6)}
           </form>
         </uui-box>
 
         <umb-footer-layout slot="footer">
-          <uui-button slot="actions" look="secondary" label="Close" @click=${this._rejectModal}></uui-button>
+          <uui-button slot="actions" look="secondary" label=${this.localize.term("general_close")} @click=${this._rejectModal}></uui-button>
           <uui-button
             slot="actions"
             look="primary"
             color=${sendColor(this._text)}
-            label=${`Send to ${plural(this.#recipientCount(this._audience), "user", "users")}`}
+            label=${this.localize.term("umbriciansLiveView_sendToUsers", this.#recipientCount(this._audience))}
             .state=${this._sending ? "waiting" : undefined}
             ?disabled=${!this.#canSend}
             @click=${this.#send}></uui-button>
