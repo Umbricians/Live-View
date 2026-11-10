@@ -1,11 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using Asp.Versioning;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Umbraco.Cms.Api.Common.Filters;
 using Umbraco.Cms.Core.Security;
-using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Web.Common.Routing;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Presence;
@@ -16,19 +13,16 @@ namespace Umbricians.LiveView.Controllers;
 /// Called by every backoffice, whatever sections the user can access: keeps the user listed as online and
 /// hands over messages sent to them.
 /// </summary>
-[ApiController]
 [ApiVersion("1.0")]
 [ApiExplorerSettings(GroupName = "Live View")]
 [BackOfficeRoute("umbriciansliveview/api/v{version:apiVersion}")]
-[Authorize(Policy = AuthorizationPolicies.BackOfficeAccess)]
-[JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
-internal class LiveViewClientApiController : ControllerBase
+internal class BackofficeClientController : LiveViewControllerBase
 {
     private readonly BackofficeMessenger _messenger;
     private readonly BackofficePresence _presence;
     private readonly IBackOfficeSecurityAccessor _security;
 
-    public LiveViewClientApiController(
+    public BackofficeClientController(
         BackofficeMessenger messenger,
         BackofficePresence presence,
         IBackOfficeSecurityAccessor security)

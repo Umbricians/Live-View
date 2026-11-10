@@ -13,6 +13,7 @@ using Umbricians.LiveView.Controllers;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Metrics;
+using Umbricians.LiveView.OpenApi;
 using Umbricians.LiveView.Presence;
 using Umbricians.LiveView.Storage;
 using Umbricians.LiveView.Tracking;
@@ -35,6 +36,7 @@ public class LiveViewComposer : IComposer
 
         builder.Services.AddMvcCore().ConfigureApplicationPartManager(parts =>
             parts.FeatureProviders.Add(new LiveViewControllerFeatureProvider()));
+        builder.Services.ConfigureOptions<LiveViewSwaggerGenOptions>();
         builder.Services.TryAddSingleton(TimeProvider.System);
         AddStores(builder.Services);
         builder.Services.AddSingleton<RequestClassifier>();
