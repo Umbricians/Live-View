@@ -16,6 +16,8 @@ criteria the pull request is checked against.
 
 ## Building and testing
 
+The client builds on Node 26, the version CI uses.
+
 Run the steps the `build` check runs before opening a pull request:
 
 ```bash
