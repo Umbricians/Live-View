@@ -105,8 +105,8 @@ receive messages. See [Permissions](docs/getting-started.md#permissions) for det
 
 Middleware offers each request to the channels in order and counts it in every channel it matches, stopping at the
 first *exclusive* one (channels are exclusive unless `Exclusive` is `false`). A request matches a channel when it
-falls under one of the channel's path prefixes and none of its excluded ones, and, when the channel has them, is for
-one of its `Hosts` and passes its request predicate. For each channel, it works out a session key from the channel's
+falls under one of the channel's path prefixes (when it has any) and none of its excluded ones, is for one of its
+`Hosts` (when it lists any), and passes its request predicate (when it has one). For each channel, it works out a session key from the channel's
 session key sources and keeps the session active for the length of the request and for the channel's
 *activity window* after it. Session keys are hashed before they are held in memory, and no cookies are set.
 
@@ -192,7 +192,8 @@ Everything is optional. Override only what you need in `appsettings.json`:
 Built-in channels keep their defaults for any property you leave out. Session key sources are `Header:<name>`,
 `Cookie:<name>`, `Authorization`, `User` (the authenticated backoffice user or member) and `Client`, or the alias of a
 [session key source of your own](#your-own-session-key-sources). `Hosts` limits a channel to requests for those host
-names, ignoring port: `brand-a.com`, or `*.brand-a.com` for its subdomains. Set
+names, ignoring port: `brand-a.com`, or `*.brand-a.com` for its subdomains. With `Hosts` and no `PathPrefixes`, a
+channel counts every path on those hosts. When `Hosts` is empty, any host matches. Set
 `"Exclusive": false` on a channel whose requests should also count in later channels. The built-in `members`
 channel always counts the signed-in member and always lets members count as web visitors too, so `SessionKeys` and
 `Exclusive` don't apply to it; its other settings do. The built-in `backoffice` channel always counts the signed-in
@@ -218,7 +219,6 @@ its own line, give each channel its `Hosts`:
   "Name": "Brand A",
   "SortOrder": 95,
   "Hosts": [ "brand-a.com", "*.brand-a.com" ],
-  "PathPrefixes": [ "/" ],
   "ExcludePathPrefixes": [ "/umbraco", "/App_Plugins", "/media", "/api", "/mcp" ],
   "IgnoreStaticFiles": true
 }

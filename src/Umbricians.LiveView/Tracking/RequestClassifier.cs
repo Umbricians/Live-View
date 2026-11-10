@@ -102,11 +102,12 @@ internal sealed partial class RequestClassifier
     }
 
     /// <summary>
-    /// A channel counts requests when it has path prefixes, a request predicate, or both; a request must then pass each
-    /// of them, fall outside its excluded prefixes, and be for one of its hosts if it lists any.
+    /// A channel counts requests when it has path prefixes, hosts, a request predicate, or any mix of them. A request
+    /// must then fall under one of its path prefixes (when it has any) and outside its excluded ones, be for one of its
+    /// hosts (when it lists any), and pass its predicate (when it has one).
     /// </summary>
     private static bool Matches(ChannelSettings channel, HttpRequest request, string path) =>
-        (channel.PathPrefixes.Length > 0 || channel.RequestPredicate is not null)
+        (channel.PathPrefixes.Length > 0 || channel.Hosts.Length > 0 || channel.RequestPredicate is not null)
         && (channel.PathPrefixes.Length == 0 || MatchesAny(path, channel.PathPrefixes))
         && !MatchesAny(path, channel.ExcludePathPrefixes)
         && (channel.Hosts.Length == 0 || MatchesHost(request.Host, channel.Hosts))

@@ -40,9 +40,10 @@ public static class LiveViewBuilderExtensions
     }
 
     /// <summary>
-    /// Declares a tracked channel. Give it <see cref="LiveViewChannelOptions.PathPrefixes"/>, a
-    /// <see cref="LiveViewChannelOptions.RequestPredicate"/>, or both, to have requests counted automatically, or
-    /// neither and feed it from code with <see cref="Tracking.ILiveActivityTracker"/>. Values set in appsettings still take precedence. Use the alias
+    /// Declares a tracked channel. Give it <see cref="LiveViewChannelOptions.PathPrefixes"/>,
+    /// <see cref="LiveViewChannelOptions.Hosts"/>, a <see cref="LiveViewChannelOptions.RequestPredicate"/>, or any mix
+    /// of them, to have requests counted automatically, or none of them and feed it from code with
+    /// <see cref="Tracking.ILiveActivityTracker"/>. Values set in appsettings still take precedence. Use the alias
     /// of a built-in channel to restyle it: values set here take precedence over its built-in defaults.
     /// </summary>
     public static IUmbracoBuilder AddLiveViewChannel(

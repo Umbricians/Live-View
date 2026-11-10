@@ -64,7 +64,7 @@ public class LiveViewChannelOptions
 
     /// <summary>
     /// Path prefixes this channel tracks, matched on whole segments (<c>/api</c> matches <c>/api/x</c>, not <c>/apix</c>).
-    /// A channel with neither prefixes nor a <see cref="RequestPredicate"/> is only fed from code through <see cref="Tracking.ILiveActivityTracker"/>.
+    /// A channel with no prefixes, no <see cref="Hosts"/> and no <see cref="RequestPredicate"/> is only fed from code through <see cref="Tracking.ILiveActivityTracker"/>.
     /// </summary>
     public string[]? PathPrefixes { get; set; }
 
@@ -73,13 +73,14 @@ public class LiveViewChannelOptions
 
     /// <summary>
     /// Host names this channel tracks, such as <c>brand-a.com</c>, or <c>*.brand-a.com</c> for any of its subdomains (not
-    /// <c>brand-a.com</c> itself). Matched without regard to case or port. When empty, requests to any host match.
+    /// <c>brand-a.com</c> itself). Matched without regard to case or port. When empty, requests to any host match. A channel with hosts but no path prefixes counts every path on those
+    /// hosts, apart from its excluded prefixes.
     /// </summary>
     public string[]? Hosts { get; set; }
 
     /// <summary>
     /// Set from code with <see cref="Extensions.LiveViewBuilderExtensions.AddLiveViewChannel"/>: a test a request must
-    /// pass to count in this channel, together with its paths and hosts, or instead of <see cref="PathPrefixes"/>. It runs
+    /// pass to count in this channel, together with its paths and hosts, or on its own. It runs
     /// before authentication, so the signed-in user isn't known yet, and on every request offered to the channel, so keep
     /// it quick.
     /// </summary>

@@ -187,6 +187,27 @@ public class RequestClassifierTests
     }
 
     [Fact]
+    public void A_channel_with_only_hosts_counts_every_path_on_those_hosts()
+    {
+        Channel("brand-a", prefixes: []).Hosts = ["brand-a.com"];
+
+        Assert.Equal(["brand-a"], Channels(Get("/page", "brand-a.com")));
+        Assert.Equal(["brand-a"], Channels(Get("/", "brand-a.com")));
+        Assert.Empty(Channels(Get("/page", "brand-b.com")));
+    }
+
+    [Fact]
+    public void A_hosts_only_channel_still_honours_its_excluded_prefixes()
+    {
+        LiveViewChannelOptions channel = Channel("brand-a", prefixes: []);
+        channel.Hosts = ["brand-a.com"];
+        channel.ExcludePathPrefixes = ["/media"];
+
+        Assert.Empty(Channels(Get("/media/x.jpg", "brand-a.com")));
+        Assert.Equal(["brand-a"], Channels(Get("/page", "brand-a.com")));
+    }
+
+    [Fact]
     public void Each_site_counts_in_its_own_channel_and_the_rest_in_web()
     {
         Channel("brand-a", prefixes: ["/"], sortOrder: 10).Hosts = ["brand-a.com"];
@@ -223,7 +244,7 @@ public class RequestClassifierTests
     }
 
     [Fact]
-    public void A_channel_with_neither_paths_nor_a_predicate_counts_no_requests()
+    public void A_channel_with_no_paths_hosts_or_predicate_counts_no_requests()
     {
         Channel("signalr", prefixes: []);
 
