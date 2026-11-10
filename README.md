@@ -98,8 +98,10 @@ Live View adds three permissions to Umbraco's user groups, under **Users → Use
 | **Message members** | Select website members and send them a message, once a developer has [set up a delivery method](docs/member-messaging.md). |
 
 The **Administrators** group gets all three automatically when the package is installed or upgraded; other groups
-get none until you switch them on. The dashboard also needs access to the Settings section. Every backoffice user can
-receive messages. See [Permissions](docs/getting-started.md#permissions) for details.
+get none until you switch them on. The dashboard is in the Settings section, so a group also needs access to Settings to open it there. The API checks
+only these permissions, so a site can
+[show the dashboard in another section](docs/getting-started.md#showing-the-dashboard-in-another-section) with a
+manifest alone. Every backoffice user can receive messages. See [Permissions](docs/getting-started.md#permissions) for details.
 
 ## How sessions are counted
 
@@ -366,10 +368,12 @@ All under `/umbraco/umbriciansliveview/api/v1/`.
 
 | Endpoint | Who can call it |
 |---|---|
-| `GET snapshot`, `GET backoffice-users`, `GET members`, `GET member-messaging` | Settings section and **View Live View** |
-| `POST messages` | as above, plus **Message backoffice users** |
-| `POST member-messages` | as above, plus **Message members** |
-| `GET heartbeat`, `GET messages/{key}` | any backoffice user (recipients only for a message) |
+| `GET snapshot`, `GET backoffice-users`, `GET members`, `GET member-messaging` | **View Live View** |
+| `POST messages` | **View Live View** and **Message backoffice users** |
+| `POST member-messages` | **View Live View** and **Message members** |
+| `GET heartbeat`, `DELETE heartbeat`, `GET messages/{key}` | any backoffice user (recipients only for a message) |
+
+Every endpoint needs a signed-in backoffice user. None checks section access.
 
 `GET snapshot` returns:
 

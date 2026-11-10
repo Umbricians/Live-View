@@ -5,6 +5,7 @@ This guide takes you from installing Umbricians Live View to a dashboard showing
 - [Requirements](#requirements)
 - [1. Install the package](#1-install-the-package)
 - [2. Open the dashboard](#2-open-the-dashboard)
+- [Showing the dashboard in another section](#showing-the-dashboard-in-another-section)
 - [Permissions](#permissions)
 - [3. What you are looking at](#3-what-you-are-looking-at)
 - [4. Configure what is counted](#4-configure-what-is-counted)
@@ -32,8 +33,55 @@ itself when the site starts.
 Restart the site, sign in to the backoffice and go to **Settings → Live View**. If there are more dashboards than fit,
 it is under the **…** menu at the end of the dashboard tabs.
 
-To see it, a user needs access to the **Settings** section and the **View Live View** permission (see below). The
-**Administrators** group gets every Live View permission automatically when the package is installed.
+To see it, a user needs access to the **Settings** section (unless your site shows it somewhere else, below) and the
+**View Live View** permission (see below). The **Administrators** group gets every Live View permission automatically
+when the package is installed.
+
+### Showing the dashboard in another section
+
+Where the dashboard appears is up to its manifest, and what a user can do with it is up to the Live View
+permissions. The API checks only the permissions, so the dashboard works in any section a manifest puts it in.
+
+**Also show it in Content.** Add a manifest to your site, for example `App_Plugins/MySite/umbraco-package.json`:
+
+```json
+{
+  "name": "My Site",
+  "extensions": [
+    {
+      "type": "dashboard",
+      "kind": "umbriciansLiveView",
+      "alias": "MySite.Dashboard.LiveView",
+      "name": "Live View in Content",
+      "conditions": [
+        { "alias": "Umb.Condition.SectionAlias", "match": "Umb.Section.Content" },
+        { "alias": "Umbricians.LiveView.Condition.Permission", "permission": "Umbricians.LiveView.View" }
+      ]
+    }
+  ]
+}
+```
+
+The `umbriciansLiveView` kind brings the dashboard element, its label, path and weight. Set `meta` or `weight` in your
+manifest to change them. Conditions are not inherited, so keep the permission condition: without it, users who lack
+**View Live View** see a tab whose data the server refuses (403).
+
+**Show it only there.** Add an entry point to the same file:
+
+```json
+{
+  "type": "backofficeEntryPoint",
+  "alias": "MySite.EntryPoint.LiveView",
+  "name": "My Site Live View",
+  "js": "/App_Plugins/MySite/live-view.js"
+}
+```
+
+and put this in `App_Plugins/MySite/live-view.js`, which removes the dashboard from Settings:
+
+```js
+export const onInit = (_host, extensionRegistry) => extensionRegistry.exclude("Umbricians.LiveView.Dashboard");
+```
 
 ## Permissions
 
@@ -50,9 +98,11 @@ Live View**, below Umbraco's own permissions:
   permissions, so the dashboard keeps working. This happens once; any changes you make afterwards are kept.
 - **Other groups get none** until you switch them on.
 - **Both messaging permissions need View Live View as well**, because the buttons are on the dashboard. The dashboard
-  also needs access to the Settings section, where it lives.
+  is in the Settings section, so a group needs access to Settings to open it there, unless your site
+  [shows it elsewhere](#showing-the-dashboard-in-another-section).
 - **Receiving messages needs no permission.** Every backoffice user can receive notifications sent from Live View.
-- **The server checks them too.** Without a permission, the matching API calls are refused (403), not just hidden.
+- **The server checks them, and only them.** Without a permission the matching API calls are refused (403), not just
+  hidden. Section access isn't checked.
 
 For example, to let a support team watch the site during a release and warn editors, give their group the Settings
 section, **View Live View** and **Message backoffice users**.
@@ -197,7 +247,8 @@ messages should reach them: a banner, a live pop-up, email or something else. Se
 
 ## Troubleshooting
 
-**The Live View tab is missing.** Check the user's groups have access to the **Settings** section and the
+**The Live View tab is missing.** Check the user's groups have access to the **Settings** section (or the section
+your site shows it in) and the
 **View Live View** permission, and that the site was restarted after installing. Look under the **…** menu if the
 dashboard tabs are crowded. Permission changes apply after the user reloads the backoffice.
 
