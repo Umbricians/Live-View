@@ -22,11 +22,15 @@ Run the steps the `build` check runs before opening a pull request:
 cd src/Umbricians.LiveView/Client && npm ci && npm test && npm run build && cd -
 dotnet build Umbricians.LiveView.slnx -c Release
 dotnet test Umbricians.LiveView.slnx -c Release --no-build
+node build/smoke-test.mjs demo/Umbricians.LiveView.Demo /App_Plugins/UmbriciansLiveView/umbricians-live-view.js umbricians-live-view
 dotnet pack src/Umbricians.LiveView -c Release -o artifacts
 ```
 
 The solution includes the demo site, so `dotnet build` builds it too. Pack with a build, as above: the dashboard
 bundle must be built first, and packing stops with an error if it is missing.
+
+In Git Bash on Windows, the bundle path argument gets rewritten into a Windows path, so run the smoke test there as
+`MSYS_NO_PATHCONV=1 node build/smoke-test.mjs …`. PowerShell and CI are unaffected.
 
 ## Pull requests
 
