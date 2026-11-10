@@ -15,7 +15,7 @@ namespace Umbricians.LiveView.Tests.OpenApi;
 /// <summary>The package's own document in the backoffice's Swagger UI, and the token "Try it out" sends.</summary>
 public class LiveViewSwaggerDocumentTests
 {
-    [Fact]
+    [Test]
     public void The_composer_adds_the_package_document_with_its_security_filter()
     {
         var services = new ServiceCollection();
@@ -23,18 +23,18 @@ public class LiveViewSwaggerDocumentTests
 
         SwaggerGenOptions options = services.BuildServiceProvider().GetRequiredService<IOptions<SwaggerGenOptions>>().Value;
 
-        Assert.Contains(Constants.ApiName, options.SwaggerGeneratorOptions.SwaggerDocs.Keys);
-        Assert.Contains(options.OperationFilterDescriptors, f => f.Type == typeof(LiveViewSecurityRequirementsOperationFilter));
+        Assert.That(options.SwaggerGeneratorOptions.SwaggerDocs.Keys, Does.Contain(Constants.ApiName));
+        Assert.That(options.OperationFilterDescriptors.Select(f => f.Type), Has.Member(typeof(LiveViewSecurityRequirementsOperationFilter)));
     }
 
-    [Fact]
+    [Test]
     public void Operations_in_the_package_document_send_the_backoffice_users_token()
     {
         var operation = new OpenApiOperation();
 
         new LiveViewSecurityRequirementsOperationFilter().Apply(operation, Context(nameof(DashboardController.Snapshot)));
 
-        Assert.Contains(operation.Security ?? [], requirement => requirement.Keys.Any(scheme => scheme.Reference.Id == "Backoffice-User"));
+        Assert.That(operation.Security ?? [], Has.Some.Matches<OpenApiSecurityRequirement>(requirement => requirement.Keys.Any(scheme => scheme.Reference.Id == "Backoffice-User")));
     }
 
     private static OperationFilterContext Context(string action)

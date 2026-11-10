@@ -8,86 +8,91 @@ namespace Umbricians.LiveView.Tests.Tracking;
 /// <summary>Which channels a request counts in, and what it says about who was seen.</summary>
 public class RequestClassifierTests
 {
-    private readonly LiveViewOptions _options = new();
-    private readonly RequestClassifier _classifier;
+    private LiveViewOptions _options;
+    private RequestClassifier _classifier;
 
-    public RequestClassifierTests() => _classifier = new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options), [], []);
+    [SetUp]
+    public void SetUp()
+    {
+        _options = new LiveViewOptions();
+        _classifier = new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options), [], []);
+    }
 
-    [Theory]
-    [InlineData("/api", true)]
-    [InlineData("/api/products", true)]
-    [InlineData("/API/Products", true)]
-    [InlineData("/apix", false)]
-    [InlineData("/", false)]
+    [TestCase("/api", true)]
+    [TestCase("/api/products", true)]
+    [TestCase("/API/Products", true)]
+    [TestCase("/apix", false)]
+    [TestCase("/", false)]
     public void Prefixes_match_whole_path_segments(string path, bool counted)
     {
         Channel("api", prefixes: ["/api/"]);
 
-        Assert.Equal(counted ? ["api"] : [], Channels(Get(path)));
+        IEnumerable<string> expected = counted ? ["api"] : [];
+
+        Assert.That(Channels(Get(path)), Is.EqualTo(expected));
     }
 
-    [Fact]
+    [Test]
     public void An_excluded_prefix_is_not_counted()
     {
         Channel("web", prefixes: ["/"], exclude: ["/umbraco"]);
 
-        Assert.Empty(Channels(Get("/umbraco/section")));
-        Assert.Equal(["web"], Channels(Get("/about")));
+        Assert.That(Channels(Get("/umbraco/section")), Is.Empty);
+        Assert.That(Channels(Get("/about")), Is.EqualTo(["web"]));
     }
 
-    [Fact]
+    [Test]
     public void Channels_are_offered_in_sort_order_up_to_the_first_exclusive_one()
     {
         Channel("web", prefixes: ["/"], sortOrder: 30);
         Channel("shared", prefixes: ["/"], sortOrder: 10, exclusive: false);
         Channel("first", prefixes: ["/"], sortOrder: 20);
 
-        Assert.Equal(["shared", "first"], Channels(Get("/page")));
+        Assert.That(Channels(Get("/page")), Is.EqualTo(["shared", "first"]));
     }
 
-    [Fact]
+    [Test]
     public void A_disabled_channel_is_skipped()
     {
         Channel("off", prefixes: ["/"], sortOrder: 10).Enabled = false;
         Channel("web", prefixes: ["/"], sortOrder: 20);
 
-        Assert.Equal(["web"], Channels(Get("/page")));
+        Assert.That(Channels(Get("/page")), Is.EqualTo(["web"]));
     }
 
-    [Fact]
+    [Test]
     public void A_static_file_is_left_out_of_channels_that_ignore_them_but_still_stops_there()
     {
         Channel("pages", prefixes: ["/"], sortOrder: 10).IgnoreStaticFiles = true;
         Channel("later", prefixes: ["/"], sortOrder: 20);
         Channel("assets", prefixes: ["/assets"], sortOrder: 5).IgnoreStaticFiles = false;
 
-        Assert.Empty(Channels(Get("/site.CSS")));
-        Assert.Equal(["assets"], Channels(Get("/assets/site.css")));
+        Assert.That(Channels(Get("/site.CSS")), Is.Empty);
+        Assert.That(Channels(Get("/assets/site.css")), Is.EqualTo(["assets"]));
     }
 
-    [Fact]
+    [Test]
     public void Path_settings_under_a_metric_providers_alias_are_ignored()
     {
         Channel("queue", prefixes: ["/"], sortOrder: 10);
         Channel("web", prefixes: ["/"], sortOrder: 20);
         var classifier = new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options), [], [new StubMetricProvider("queue")]);
 
-        Assert.Equal(["web"], classifier.Classify(Get("/page").Request).Sessions.Select(s => s.Channel));
+        Assert.That(classifier.Classify(Get("/page").Request).Sessions.Select(s => s.Channel), Is.EqualTo(["web"]));
     }
 
-    [Theory]
-    [InlineData("Googlebot/2.1")]
-    [InlineData("Mozilla/5.0 (compatible; UptimeMonitor)")]
+    [TestCase("Googlebot/2.1")]
+    [TestCase("Mozilla/5.0 (compatible; UptimeMonitor)")]
     public void Bots_are_not_counted(string userAgent)
     {
         Channel("web", prefixes: ["/"]);
         DefaultHttpContext context = Get("/page");
         context.Request.Headers.UserAgent = userAgent;
 
-        Assert.False(_classifier.Classify(context.Request).IsTracked);
+        Assert.That(_classifier.Classify(context.Request).IsTracked, Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Bots_are_counted_when_the_site_asks_for_them()
     {
         _options.IgnoreBots = false;
@@ -95,98 +100,97 @@ public class RequestClassifierTests
         DefaultHttpContext context = Get("/page");
         context.Request.Headers.UserAgent = "Googlebot/2.1";
 
-        Assert.Equal(["web"], Channels(context));
+        Assert.That(Channels(context), Is.EqualTo(["web"]));
     }
 
-    [Fact]
+    [Test]
     public void A_site_can_add_its_own_crawler_patterns()
     {
         _options.BotUserAgents = ["StatusCake"];
         Channel("web", prefixes: ["/"]);
 
-        Assert.False(_classifier.Classify(WithUserAgent("Mozilla/5.0 (compatible; statuscake)").Request).IsTracked);
+        Assert.That(_classifier.Classify(WithUserAgent("Mozilla/5.0 (compatible; statuscake)").Request).IsTracked, Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Built_in_crawler_patterns_still_apply_alongside_the_sites_own()
     {
         _options.BotUserAgents = ["StatusCake"];
         Channel("web", prefixes: ["/"]);
 
-        Assert.False(_classifier.Classify(WithUserAgent("Googlebot/2.1").Request).IsTracked);
+        Assert.That(_classifier.Classify(WithUserAgent("Googlebot/2.1").Request).IsTracked, Is.False);
     }
 
-    [Fact]
+    [Test]
     public void A_browser_matching_no_pattern_is_counted()
     {
         _options.BotUserAgents = ["StatusCake"];
         Channel("web", prefixes: ["/"]);
 
-        Assert.Equal(["web"], Channels(WithUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/130.0")));
+        Assert.That(Channels(WithUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/130.0")), Is.EqualTo(["web"]));
     }
 
-    [Fact]
+    [Test]
     public void Blank_crawler_patterns_match_nothing()
     {
         _options.BotUserAgents = ["", "  "];
         Channel("web", prefixes: ["/"]);
 
-        Assert.Equal(["web"], Channels(WithUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/130.0")));
+        Assert.That(Channels(WithUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/130.0")), Is.EqualTo(["web"]));
     }
 
-    [Fact]
+    [Test]
     public void The_sites_crawler_patterns_are_ignored_while_bots_are_counted()
     {
         _options.IgnoreBots = false;
         _options.BotUserAgents = ["StatusCake"];
         Channel("web", prefixes: ["/"]);
 
-        Assert.Equal(["web"], Channels(WithUserAgent("StatusCake")));
+        Assert.That(Channels(WithUserAgent("StatusCake")), Is.EqualTo(["web"]));
     }
 
-    [Theory]
-    [InlineData("OPTIONS")]
-    [InlineData("HEAD")]
+    [TestCase("OPTIONS")]
+    [TestCase("HEAD")]
     public void Preflight_and_head_requests_are_not_counted(string method)
     {
         Channel("web", prefixes: ["/"]);
         DefaultHttpContext context = Get("/page");
         context.Request.Method = method;
 
-        Assert.False(_classifier.Classify(context.Request).IsTracked);
+        Assert.That(_classifier.Classify(context.Request).IsTracked, Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Nothing_is_counted_while_tracking_is_off()
     {
         _options.TrackingEnabled = false;
         Channel("web", prefixes: ["/"]);
 
-        Assert.False(_classifier.Classify(Get("/page").Request).IsTracked);
+        Assert.That(_classifier.Classify(Get("/page").Request).IsTracked, Is.False);
     }
 
-    [Fact]
+    [Test]
     public void A_channel_without_a_session_key_is_not_counted()
     {
         Channel("api", prefixes: ["/"], keys: ["Header:Api-Key", "Unknown"]);
 
         RequestClassification request = _classifier.Classify(Get("/page").Request);
 
-        Assert.Empty(request.Sessions);
-        Assert.False(request.IsTracked);
+        Assert.That(request.Sessions, Is.Empty);
+        Assert.That(request.IsTracked, Is.False);
     }
 
-    [Fact]
+    [Test]
     public void A_later_source_is_used_when_an_earlier_one_is_empty()
     {
         Channel("api", prefixes: ["/"], keys: ["Header:Api-Key", "Client"]);
         DefaultHttpContext context = Get("/page");
         context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.7");
 
-        Assert.Equal(["Client:203.0.113.7|"], _classifier.Classify(context.Request).Sessions.Select(s => s.SessionKey));
+        Assert.That(_classifier.Classify(context.Request).Sessions.Select(s => s.SessionKey), Is.EqualTo(["Client:203.0.113.7|"]));
     }
 
-    [Fact]
+    [Test]
     public void Member_and_backoffice_requests_say_who_was_seen_rather_than_opening_sessions()
     {
         Channel(Constants.Channels.Backoffice, prefixes: ["/umbraco"], sortOrder: 10, keys: ["User"]);
@@ -196,15 +200,15 @@ public class RequestClassifierTests
         RequestClassification backoffice = _classifier.Classify(Get("/umbraco/section").Request);
         RequestClassification page = _classifier.Classify(Get("/page").Request);
 
-        Assert.True(backoffice.BackofficeSeen);
-        Assert.False(backoffice.MemberSeen);
-        Assert.Empty(backoffice.Sessions);
-        Assert.True(page.MemberSeen);
-        Assert.False(page.BackofficeSeen);
-        Assert.Equal(["web"], page.Sessions.Select(s => s.Channel));
+        Assert.That(backoffice.BackofficeSeen, Is.True);
+        Assert.That(backoffice.MemberSeen, Is.False);
+        Assert.That(backoffice.Sessions, Is.Empty);
+        Assert.That(page.MemberSeen, Is.True);
+        Assert.That(page.BackofficeSeen, Is.False);
+        Assert.That(page.Sessions.Select(s => s.Channel), Is.EqualTo(["web"]));
     }
 
-    [Fact]
+    [Test]
     public void An_mcp_request_is_marked_as_one_and_still_counts_its_session()
     {
         Channel(Constants.Channels.Mcp, prefixes: ["/mcp"], keys: ["Header:Mcp-Session-Id"]);
@@ -213,91 +217,93 @@ public class RequestClassifierTests
 
         RequestClassification request = _classifier.Classify(context.Request);
 
-        Assert.True(request.McpCall);
-        Assert.Equal([new ChannelSession(Constants.Channels.Mcp, "Header:Mcp-Session-Id:s1")], request.Sessions);
+        Assert.That(request.McpCall, Is.True);
+        Assert.That(request.Sessions, Is.EqualTo([new ChannelSession(Constants.Channels.Mcp, "Header:Mcp-Session-Id:s1")]));
     }
 
-    [Fact]
+    [Test]
     public void A_channel_whose_paths_an_earlier_exclusive_channel_counts_is_unreachable()
     {
         Channel("first", prefixes: ["/"], sortOrder: 10);
         Channel("later", prefixes: ["/later"], sortOrder: 20);
 
-        UnreachableChannel unreachable = Assert.Single(_classifier.UnreachableChannels());
+        IReadOnlyList<UnreachableChannel> unreachableChannels = _classifier.UnreachableChannels();
+        Assert.That(unreachableChannels, Has.Exactly(1).Items);
+        UnreachableChannel unreachable = unreachableChannels.Single();
 
-        Assert.Equal("later", unreachable.Channel.Alias);
-        Assert.Equal(["first"], unreachable.CountedFirstBy.Select(c => c.Alias));
+        Assert.That(unreachable.Channel.Alias, Is.EqualTo("later"));
+        Assert.That(unreachable.CountedFirstBy.Select(c => c.Alias), Is.EqualTo(["first"]));
     }
 
-    [Fact]
+    [Test]
     public void A_channel_with_a_lower_sort_order_is_reachable()
     {
         Channel("first", prefixes: ["/"], sortOrder: 20);
         Channel("later", prefixes: ["/later"], sortOrder: 10);
 
-        Assert.Empty(_classifier.UnreachableChannels());
+        Assert.That(_classifier.UnreachableChannels(), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void A_non_exclusive_or_disabled_earlier_channel_leaves_later_ones_reachable()
     {
         Channel("shared", prefixes: ["/"], sortOrder: 10, exclusive: false);
         Channel("off", prefixes: ["/"], sortOrder: 20).Enabled = false;
         Channel("later", prefixes: ["/later"], sortOrder: 30);
 
-        Assert.Empty(_classifier.UnreachableChannels());
+        Assert.That(_classifier.UnreachableChannels(), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void An_exclusion_in_the_earlier_channel_leaves_paths_it_lets_through_reachable()
     {
         Channel("first", prefixes: ["/"], sortOrder: 10, exclude: ["/umbraco"]);
         Channel("inside", prefixes: ["/umbraco/x"], sortOrder: 20);
         Channel("everything", prefixes: ["/"], sortOrder: 30);
 
-        Assert.Empty(_classifier.UnreachableChannels());
+        Assert.That(_classifier.UnreachableChannels(), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void A_channel_fed_from_code_is_never_unreachable()
     {
         Channel("first", prefixes: ["/"], sortOrder: 10);
         Channel("code", prefixes: [], sortOrder: 20);
 
-        Assert.Empty(_classifier.UnreachableChannels());
+        Assert.That(_classifier.UnreachableChannels(), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void An_unreachable_channels_paths_count_in_the_earlier_channel()
     {
         Channel("first", prefixes: ["/"], sortOrder: 10);
         Channel("later", prefixes: ["/later"], sortOrder: 20);
 
-        Assert.Equal(["later"], _classifier.UnreachableChannels().Select(u => u.Channel.Alias));
-        Assert.Equal(["first"], Channels(Get("/later/page")));
+        Assert.That(_classifier.UnreachableChannels().Select(u => u.Channel.Alias), Is.EqualTo(["later"]));
+        Assert.That(Channels(Get("/later/page")), Is.EqualTo(["first"]));
     }
 
-    [Fact]
+    [Test]
     public void A_later_channel_limited_to_hosts_or_a_predicate_is_not_reported_as_unreachable()
     {
         Channel("first", prefixes: ["/"], sortOrder: 10);
         Channel("brand-b", prefixes: ["/shop"], sortOrder: 20).Hosts = ["brand-b.com"];
         Channel("checkout", prefixes: ["/cart"], sortOrder: 30).RequestPredicate = _ => true;
 
-        Assert.Empty(_classifier.UnreachableChannels());
+        Assert.That(_classifier.UnreachableChannels(), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void An_earlier_exclusive_channel_limited_to_hosts_or_a_predicate_does_not_cover_later_paths()
     {
         Channel("brand-a", prefixes: ["/"], sortOrder: 10).Hosts = ["brand-a.com"];
         Channel("picky", prefixes: ["/"], sortOrder: 20).RequestPredicate = _ => false;
         Channel("later", prefixes: ["/later"], sortOrder: 30);
 
-        Assert.Empty(_classifier.UnreachableChannels());
+        Assert.That(_classifier.UnreachableChannels(), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void A_channel_a_provider_replaces_is_not_considered_for_unreachability()
     {
         var classifier = new RequestClassifier(
@@ -305,66 +311,68 @@ public class RequestClassifierTests
         Channel("first", prefixes: ["/"], sortOrder: 10);
         Channel("later", prefixes: ["/later"], sortOrder: 20);
 
-        Assert.Empty(classifier.UnreachableChannels());
+        Assert.That(classifier.UnreachableChannels(), Is.Empty);
     }
 
-    [Theory]
-    [InlineData("brand-a.com", true)]
-    [InlineData("BRAND-A.com", true)]
-    [InlineData("brand-a.com:8080", true)]
-    [InlineData("www.brand-a.com", false)]
-    [InlineData("brand-b.com", false)]
-    [InlineData("", false)]
+    [TestCase("brand-a.com", true)]
+    [TestCase("BRAND-A.com", true)]
+    [TestCase("brand-a.com:8080", true)]
+    [TestCase("www.brand-a.com", false)]
+    [TestCase("brand-b.com", false)]
+    [TestCase("", false)]
     public void A_host_channel_counts_only_its_hosts(string host, bool counted)
     {
         Channel("brand-a", prefixes: ["/"]).Hosts = ["brand-a.com"];
 
-        Assert.Equal(counted ? ["brand-a"] : [], Channels(Get("/page", host)));
+        IEnumerable<string> expected = counted ? ["brand-a"] : [];
+
+        Assert.That(Channels(Get("/page", host)), Is.EqualTo(expected));
     }
 
-    [Theory]
-    [InlineData("shop.brand-a.com", true)]
-    [InlineData("brand-a.com", false)]
-    [InlineData("shop.brand-b.com", false)]
+    [TestCase("shop.brand-a.com", true)]
+    [TestCase("brand-a.com", false)]
+    [TestCase("shop.brand-b.com", false)]
     public void A_wildcard_host_matches_subdomains_only(string host, bool counted)
     {
         Channel("brand-a", prefixes: ["/"]).Hosts = ["*.brand-a.com"];
 
-        Assert.Equal(counted ? ["brand-a"] : [], Channels(Get("/page", host)));
+        IEnumerable<string> expected = counted ? ["brand-a"] : [];
+
+        Assert.That(Channels(Get("/page", host)), Is.EqualTo(expected));
     }
 
-    [Fact]
+    [Test]
     public void A_channel_with_only_hosts_counts_every_path_on_those_hosts()
     {
         Channel("brand-a", prefixes: []).Hosts = ["brand-a.com"];
 
-        Assert.Equal(["brand-a"], Channels(Get("/page", "brand-a.com")));
-        Assert.Equal(["brand-a"], Channels(Get("/", "brand-a.com")));
-        Assert.Empty(Channels(Get("/page", "brand-b.com")));
+        Assert.That(Channels(Get("/page", "brand-a.com")), Is.EqualTo(["brand-a"]));
+        Assert.That(Channels(Get("/", "brand-a.com")), Is.EqualTo(["brand-a"]));
+        Assert.That(Channels(Get("/page", "brand-b.com")), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void A_hosts_only_channel_still_honours_its_excluded_prefixes()
     {
         LiveViewChannelOptions channel = Channel("brand-a", prefixes: []);
         channel.Hosts = ["brand-a.com"];
         channel.ExcludePathPrefixes = ["/media"];
 
-        Assert.Empty(Channels(Get("/media/x.jpg", "brand-a.com")));
-        Assert.Equal(["brand-a"], Channels(Get("/page", "brand-a.com")));
+        Assert.That(Channels(Get("/media/x.jpg", "brand-a.com")), Is.Empty);
+        Assert.That(Channels(Get("/page", "brand-a.com")), Is.EqualTo(["brand-a"]));
     }
 
-    [Fact]
+    [Test]
     public void Each_site_counts_in_its_own_channel_and_the_rest_in_web()
     {
         Channel("brand-a", prefixes: ["/"], sortOrder: 10).Hosts = ["brand-a.com"];
         Channel("web", prefixes: ["/"], sortOrder: 20);
 
-        Assert.Equal(["brand-a"], Channels(Get("/page", "brand-a.com")));
-        Assert.Equal(["web"], Channels(Get("/page", "brand-b.com")));
+        Assert.That(Channels(Get("/page", "brand-a.com")), Is.EqualTo(["brand-a"]));
+        Assert.That(Channels(Get("/page", "brand-b.com")), Is.EqualTo(["web"]));
     }
 
-    [Fact]
+    [Test]
     public void A_request_predicate_narrows_a_channels_paths()
     {
         Channel("checkout", prefixes: ["/shop"]).RequestPredicate = c => c.Request.Query.ContainsKey("basket");
@@ -374,28 +382,28 @@ public class RequestClassifierTests
         DefaultHttpContext otherPath = Get("/about");
         otherPath.Request.QueryString = new QueryString("?basket=1");
 
-        Assert.Equal(["checkout"], Channels(withBasket));
-        Assert.Empty(Channels(Get("/shop")));
-        Assert.Empty(Channels(otherPath));
+        Assert.That(Channels(withBasket), Is.EqualTo(["checkout"]));
+        Assert.That(Channels(Get("/shop")), Is.Empty);
+        Assert.That(Channels(otherPath), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void A_channel_with_only_a_request_predicate_counts_any_path_it_accepts()
     {
         Channel("app", prefixes: []).RequestPredicate = c => c.Request.Headers.ContainsKey("X-App-Version");
         DefaultHttpContext withHeader = Get("/anything");
         withHeader.Request.Headers["X-App-Version"] = "2";
 
-        Assert.Equal(["app"], Channels(withHeader));
-        Assert.Empty(Channels(Get("/anything")));
+        Assert.That(Channels(withHeader), Is.EqualTo(["app"]));
+        Assert.That(Channels(Get("/anything")), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void A_channel_with_no_paths_hosts_or_predicate_counts_no_requests()
     {
         Channel("signalr", prefixes: []);
 
-        Assert.False(_classifier.Classify(Get("/anything").Request).IsTracked);
+        Assert.That(_classifier.Classify(Get("/anything").Request).IsTracked, Is.False);
     }
 
     private LiveViewChannelOptions Channel(

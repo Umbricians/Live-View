@@ -250,7 +250,12 @@ internal sealed class RecordingEventAggregator : IEventAggregator
     /// <summary>Runs after each notification is recorded, like a handler: set <c>Cancel</c> on a cancelable one to stop it.</summary>
     public Action<INotification>? OnPublish { get; set; }
 
-    public T Single<T>() where T : INotification => Assert.Single(Published.OfType<T>());
+    public T Single<T>() where T : INotification
+    {
+        List<T> published = Published.OfType<T>().ToList();
+        Assert.That(published, Has.Exactly(1).Items);
+        return published[0];
+    }
 
     public Task PublishAsync<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
         where TNotification : INotification

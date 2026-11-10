@@ -12,22 +12,31 @@ namespace Umbricians.LiveView.Tests.Metrics;
 /// <summary>The lines of a snapshot, including those of metric providers, which take their settings by alias.</summary>
 public class LiveMetricsServiceTests
 {
-    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
-    private readonly LiveViewOptions _options = new();
-    private readonly StubMetricProvider _queue = new("queue", "Queue length", "#8b5cf6", value: 7);
+    private FakeTimeProvider _clock;
+    private LiveViewOptions _options;
+    private StubMetricProvider _queue;
 
-    [Fact]
+    [SetUp]
+    public void SetUp()
+    {
+        _clock = new FakeTimeProvider(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
+        _options = new LiveViewOptions();
+        _queue = new StubMetricProvider("queue", "Queue length", "#8b5cf6", value: 7);
+    }
+
+    [Test]
     public async Task A_provider_line_shows_the_providers_own_values_when_nothing_is_configured()
     {
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot();
 
-        LiveMetricReading queue = Assert.Single(snapshot, r => r.Alias == "queue");
-        Assert.Equal("Queue length", queue.Name);
-        Assert.Equal("#8b5cf6", queue.Color);
-        Assert.Equal(7, queue.Value);
+        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r.Alias == "queue"));
+        LiveMetricReading queue = snapshot.Single(r => r.Alias == "queue");
+        Assert.That(queue.Name, Is.EqualTo("Queue length"));
+        Assert.That(queue.Color, Is.EqualTo("#8b5cf6"));
+        Assert.That(queue.Value, Is.EqualTo(7));
     }
 
-    [Fact]
+    [Test]
     public async Task Name_colour_and_sort_order_under_the_providers_alias_replace_its_own()
     {
         _options.Channels["web"] = new LiveViewChannelOptions { SortOrder = 100 };
@@ -35,14 +44,15 @@ public class LiveMetricsServiceTests
 
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot();
 
-        Assert.Equal(["queue", "web"], snapshot.Select(r => r.Alias).Where(a => a is "queue" or "web"));
-        LiveMetricReading queue = Assert.Single(snapshot, r => r.Alias == "queue");
-        Assert.Equal("Queued work", queue.Name);
-        Assert.Equal("#000", queue.Color);
-        Assert.Equal(7, queue.Value);
+        Assert.That(snapshot.Select(r => r.Alias).Where(a => a is "queue" or "web"), Is.EqualTo(["queue", "web"]));
+        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r.Alias == "queue"));
+        LiveMetricReading queue = snapshot.Single(r => r.Alias == "queue");
+        Assert.That(queue.Name, Is.EqualTo("Queued work"));
+        Assert.That(queue.Color, Is.EqualTo("#000"));
+        Assert.That(queue.Value, Is.EqualTo(7));
     }
 
-    [Fact]
+    [Test]
     public async Task Values_left_out_keep_the_providers_own()
     {
         _options.Channels["web"] = new LiveViewChannelOptions { SortOrder = 100 };
@@ -50,36 +60,38 @@ public class LiveMetricsServiceTests
 
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot();
 
-        Assert.Equal(["web", "queue"], snapshot.Select(r => r.Alias).Where(a => a is "queue" or "web"));
-        LiveMetricReading queue = Assert.Single(snapshot, r => r.Alias == "queue");
-        Assert.Equal("Queue length", queue.Name);
-        Assert.Equal("#000", queue.Color);
+        Assert.That(snapshot.Select(r => r.Alias).Where(a => a is "queue" or "web"), Is.EqualTo(["web", "queue"]));
+        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r.Alias == "queue"));
+        LiveMetricReading queue = snapshot.Single(r => r.Alias == "queue");
+        Assert.That(queue.Name, Is.EqualTo("Queue length"));
+        Assert.That(queue.Color, Is.EqualTo("#000"));
     }
 
-    [Fact]
+    [Test]
     public async Task A_switched_off_provider_line_is_dropped_and_the_provider_is_not_called()
     {
         _options.Channels["queue"] = new LiveViewChannelOptions { Enabled = false };
 
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot();
 
-        Assert.DoesNotContain(snapshot, r => r.Alias == "queue");
-        Assert.Equal(0, _queue.Calls);
+        Assert.That(snapshot, Has.None.Matches<LiveMetricReading>(r => r.Alias == "queue"));
+        Assert.That(_queue.Calls, Is.Zero);
     }
 
-    [Fact]
+    [Test]
     public async Task Settings_under_a_providers_alias_add_no_channel_line()
     {
         _options.Channels["QUEUE"] = new LiveViewChannelOptions { Name = "Queued work", PathPrefixes = ["/"] };
 
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot();
 
-        LiveMetricReading line = Assert.Single(snapshot, r => r.Alias.Equals("queue", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal("queue", line.Alias);
-        Assert.Equal("Queued work", line.Name);
+        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r.Alias.Equals("queue", StringComparison.OrdinalIgnoreCase)));
+        LiveMetricReading line = snapshot.Single(r => r.Alias.Equals("queue", StringComparison.OrdinalIgnoreCase));
+        Assert.That(line.Alias, Is.EqualTo("queue"));
+        Assert.That(line.Name, Is.EqualTo("Queued work"));
     }
 
-    [Fact]
+    [Test]
     public async Task A_provider_aliased_like_a_built_in_channel_replaces_it()
     {
         var api = new StubMetricProvider("api", "Queue depth", value: 4);
@@ -88,7 +100,7 @@ public class LiveMetricsServiceTests
         await AssertReplacedByProvider(api, "/api/products");
     }
 
-    [Fact]
+    [Test]
     public async Task A_provider_aliased_like_a_channel_declared_in_code_replaces_it()
     {
         var shop = new StubMetricProvider("shop", "Basket size", value: 4);
@@ -108,13 +120,14 @@ public class LiveMetricsServiceTests
         context.Request.Path = path;
         context.Connection.RemoteIpAddress = System.Net.IPAddress.Loopback;
 
-        Assert.DoesNotContain(provider.Alias, classifier.Classify(context.Request).Sessions.Select(s => s.Channel));
+        Assert.That(classifier.Classify(context.Request).Sessions.Select(s => s.Channel), Does.Not.Contain(provider.Alias));
 
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot(provider);
 
-        LiveMetricReading line = Assert.Single(snapshot, r => r.Alias == provider.Alias);
-        Assert.Equal(4, line.Value);
-        Assert.Equal(1, provider.Calls);
+        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r.Alias == provider.Alias));
+        LiveMetricReading line = snapshot.Single(r => r.Alias == provider.Alias);
+        Assert.That(line.Value, Is.EqualTo(4));
+        Assert.That(provider.Calls, Is.EqualTo(1));
     }
 
     private Task<IReadOnlyList<LiveMetricReading>> Snapshot(params ILiveMetricProvider[] providers)

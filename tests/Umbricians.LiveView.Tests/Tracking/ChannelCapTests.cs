@@ -7,19 +7,22 @@ namespace Umbricians.LiveView.Tests.Tracking;
 
 public class ChannelCapTests
 {
-    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
-    private readonly StaticOptionsMonitor<LiveViewOptions> _options = new(
-        new LiveViewOptions { ActivityWindowSeconds = 60, MaxSessionsPerChannel = 2 });
-    private readonly CountingStore _store;
-    private readonly LiveActivityTracker _tracker;
+    private FakeTimeProvider _clock;
+    private StaticOptionsMonitor<LiveViewOptions> _options;
+    private CountingStore _store;
+    private LiveActivityTracker _tracker;
 
-    public ChannelCapTests()
+    [SetUp]
+    public void SetUp()
     {
+        _clock = new FakeTimeProvider(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
+        _options = new StaticOptionsMonitor<LiveViewOptions>(
+            new LiveViewOptions { ActivityWindowSeconds = 60, MaxSessionsPerChannel = 2 });
         _store = new CountingStore(new InMemoryActivityStore(_options));
         _tracker = new LiveActivityTracker(_store, _options, _clock);
     }
 
-    [Fact]
+    [Test]
     public async Task A_new_session_gets_in_as_soon_as_a_finished_one_has_expired()
     {
         await _tracker.TouchAsync("custom", "a");
@@ -32,12 +35,12 @@ public class ChannelCapTests
         _clock.Advance(TimeSpan.FromSeconds(59));
         await _tracker.TouchAsync("custom", "d");
 
-        Assert.Equal(2, await _tracker.CountActiveAsync("custom"));
+        Assert.That(await _tracker.CountActiveAsync("custom"), Is.EqualTo(2));
         await _tracker.EndAsync("custom", "d");
-        Assert.Equal(1, await _tracker.CountActiveAsync("custom"));
+        Assert.That(await _tracker.CountActiveAsync("custom"), Is.EqualTo(1));
     }
 
-    [Fact]
+    [Test]
     public async Task A_full_channel_is_pruned_at_most_once_a_second()
     {
         await _tracker.TouchAsync("custom", "a");
@@ -46,17 +49,17 @@ public class ChannelCapTests
 
         await _tracker.TouchAsync("custom", "c");
         await _tracker.TouchAsync("custom", "d");
-        Assert.Equal(afterFirstPrune, _store.Counts);
+        Assert.That(_store.Counts, Is.EqualTo(afterFirstPrune));
 
         _clock.Advance(TimeSpan.FromSeconds(2));
         await _tracker.TouchAsync("custom", "e");
-        Assert.Equal(afterFirstPrune + 1, _store.Counts);
+        Assert.That(_store.Counts, Is.EqualTo(afterFirstPrune + 1));
 
         await _tracker.TouchAsync("custom", "f");
-        Assert.Equal(afterFirstPrune + 1, _store.Counts);
+        Assert.That(_store.Counts, Is.EqualTo(afterFirstPrune + 1));
     }
 
-    [Fact]
+    [Test]
     public async Task A_store_without_a_cap_is_not_pruned_for_a_full_channel()
     {
         var uncapped = new SharedActivityStore();
@@ -67,8 +70,8 @@ public class ChannelCapTests
         _clock.Advance(TimeSpan.FromSeconds(5));
         await tracker.TouchAsync("custom", "c");
 
-        Assert.Single(uncapped.CountActiveCalls);
-        Assert.Equal(3, await tracker.CountActiveAsync("custom"));
+        Assert.That(uncapped.CountActiveCalls, Has.Exactly(1).Items);
+        Assert.That(await tracker.CountActiveAsync("custom"), Is.EqualTo(3));
     }
 
     private sealed class CountingStore(ILiveViewActivityStore inner) : ILiveViewActivityStore

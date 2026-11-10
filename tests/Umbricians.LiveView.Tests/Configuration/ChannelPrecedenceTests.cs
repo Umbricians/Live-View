@@ -16,22 +16,20 @@ public class ChannelPrecedenceTests
 {
     private const string Members = Constants.Channels.Members;
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
+    [TestCase(true)]
+    [TestCase(false)]
     public void Code_beats_built_in_defaults(bool packageFirst)
     {
         LiveViewOptions options = Build(packageFirst, appsettings: [], builder =>
             builder.AddLiveViewChannel(Members, "Signed-in members", c => c.Color = "#000"));
 
         LiveViewChannelOptions members = options.Channels[Members];
-        Assert.Equal("Signed-in members", members.Name);
-        Assert.Equal("#000", members.Color);
+        Assert.That(members.Name, Is.EqualTo("Signed-in members"));
+        Assert.That(members.Color, Is.EqualTo("#000"));
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
+    [TestCase(true)]
+    [TestCase(false)]
     public void Appsettings_beat_code_and_built_in_defaults(bool packageFirst)
     {
         LiveViewOptions options = Build(
@@ -44,13 +42,12 @@ public class ChannelPrecedenceTests
             builder => builder.AddLiveViewChannel(Members, "From code", c => c.SortOrder = 7));
 
         LiveViewChannelOptions members = options.Channels[Members];
-        Assert.Equal("From appsettings", members.Name);
-        Assert.Equal(5, members.SortOrder);
+        Assert.That(members.Name, Is.EqualTo("From appsettings"));
+        Assert.That(members.SortOrder, Is.EqualTo(5));
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
+    [TestCase(true)]
+    [TestCase(false)]
     public void Built_in_defaults_fill_what_is_left(bool packageFirst)
     {
         LiveViewOptions options = Build(
@@ -60,32 +57,28 @@ public class ChannelPrecedenceTests
 
         LiveViewChannelOptions members = options.Channels[Members];
         LiveViewChannelOptions builtIn = LiveViewOptionsDefaults.BuiltInChannels[Members];
-        Assert.Equal(builtIn.PathPrefixes, members.PathPrefixes);
-        Assert.Equal(builtIn.SessionKeys, members.SessionKeys);
-        Assert.Equal(builtIn.Exclusive, members.Exclusive);
-        Assert.Equal(builtIn.IgnoreStaticFiles, members.IgnoreStaticFiles);
-        Assert.Equal(
-            LiveViewOptionsDefaults.BuiltInChannels[Constants.Channels.Web].Name,
-            options.Channels[Constants.Channels.Web].Name);
+        Assert.That(members.PathPrefixes, Is.EqualTo(builtIn.PathPrefixes));
+        Assert.That(members.SessionKeys, Is.EqualTo(builtIn.SessionKeys));
+        Assert.That(members.Exclusive, Is.EqualTo(builtIn.Exclusive));
+        Assert.That(members.IgnoreStaticFiles, Is.EqualTo(builtIn.IgnoreStaticFiles));
+        Assert.That(options.Channels[Constants.Channels.Web].Name, Is.EqualTo(LiveViewOptionsDefaults.BuiltInChannels[Constants.Channels.Web].Name));
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
+    [TestCase(true)]
+    [TestCase(false)]
     public void A_channel_declared_in_code_is_added(bool packageFirst)
     {
         LiveViewOptions options = Build(packageFirst, appsettings: [], builder =>
             builder.AddLiveViewChannel("signalr", "SignalR clients", c => c.Color = "#0ea5e9"));
 
         LiveViewChannelOptions signalr = options.Channels["signalr"];
-        Assert.Equal("SignalR clients", signalr.Name);
-        Assert.Equal("#0ea5e9", signalr.Color);
-        Assert.Null(signalr.PathPrefixes);
+        Assert.That(signalr.Name, Is.EqualTo("SignalR clients"));
+        Assert.That(signalr.Color, Is.EqualTo("#0ea5e9"));
+        Assert.That(signalr.PathPrefixes, Is.Null);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
+    [TestCase(true)]
+    [TestCase(false)]
     public void A_request_predicate_set_in_code_is_kept_beside_hosts_from_appsettings(bool packageFirst)
     {
         Func<Microsoft.AspNetCore.Http.HttpContext, bool> predicate = _ => true;
@@ -96,11 +89,11 @@ public class ChannelPrecedenceTests
             builder => builder.AddLiveViewChannel("app", "App", c => c.RequestPredicate = predicate));
 
         LiveViewChannelOptions app = options.Channels["app"];
-        Assert.Same(predicate, app.RequestPredicate);
-        Assert.Equal(["brand-a.com"], app.Hosts!);
+        Assert.That(app.RequestPredicate, Is.SameAs(predicate));
+        Assert.That(app.Hosts!, Is.EqualTo(["brand-a.com"]));
     }
 
-    [Fact]
+    [Test]
     public void The_first_code_declaration_of_a_channel_wins()
     {
         LiveViewOptions options = Build(packageFirst: true, appsettings: [], builder =>
@@ -110,9 +103,9 @@ public class ChannelPrecedenceTests
         });
 
         LiveViewChannelOptions signalr = options.Channels["signalr"];
-        Assert.Equal("First", signalr.Name);
-        Assert.Equal("#111", signalr.Color);
-        Assert.Equal(3, signalr.SortOrder);
+        Assert.That(signalr.Name, Is.EqualTo("First"));
+        Assert.That(signalr.Color, Is.EqualTo("#111"));
+        Assert.That(signalr.SortOrder, Is.EqualTo(3));
     }
 
     /// <summary>
