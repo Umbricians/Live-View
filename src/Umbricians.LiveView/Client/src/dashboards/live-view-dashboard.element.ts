@@ -158,8 +158,23 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
 
   /** Reads the site's dashboard settings, then starts polling at the remembered interval if it is still offered. */
   async #start() {
-    const settings = await fetchDashboardSettings().catch(() => FALLBACK_SETTINGS);
+    let settings = FALLBACK_SETTINGS;
+    let failed = false;
+    try {
+      settings = await fetchDashboardSettings();
+    } catch {
+      failed = true;
+    }
     if (!this.isConnected) return;
+    if (failed) {
+      this.#notifications?.peek("warning", {
+        data: {
+          headline: "Dashboard settings not loaded",
+          message:
+            "Live View couldn't read this site's dashboard settings, so it is using the built-in refresh choices and chart length.",
+        },
+      });
+    }
     this._settings = settings;
     this._interval = offeredInterval(readStoredInterval(), settings.refreshIntervals, settings.defaultRefreshInterval);
     this.#schedule(0);
@@ -167,7 +182,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
 
   #schedule(delayMs: number) {
     window.clearTimeout(this.#timer);
-    if (this._paused) return;
+    if (this._paused || !this._settings) return;
     this.#timer = window.setTimeout(() => this.#poll(), delayMs);
   }
 

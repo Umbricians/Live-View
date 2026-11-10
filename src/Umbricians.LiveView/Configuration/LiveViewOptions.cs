@@ -44,7 +44,7 @@ public class LiveViewOptions
 
     /// <summary>
     /// Text that marks a User-Agent as a crawler, matched anywhere in it without regard to case, on top of the
-    /// built-in patterns. Only applies while <see cref="IgnoreBots"/> is on.
+    /// built-in patterns. Surrounding spaces and blank entries are ignored. Only applies while <see cref="IgnoreBots"/> is on.
     /// </summary>
     public string[] BotUserAgents { get; set; } = [];
 
@@ -106,7 +106,7 @@ public class LiveViewDashboardOptions
     internal const int PreferredRefreshInterval = 5;
     internal const int DefaultMaxReadings = 120;
 
-    /// <summary>The refresh intervals offered on the dashboard, in seconds. When empty, 2, 5, 10, 15 and 30.</summary>
+    /// <summary>The refresh intervals offered on the dashboard, in seconds, shortest first and each once. When empty, 2, 5, 10, 15 and 30.</summary>
     public int[] RefreshIntervals { get; set; } = [];
 
     /// <summary>

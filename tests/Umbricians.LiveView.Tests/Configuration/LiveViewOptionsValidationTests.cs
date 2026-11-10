@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Umbricians.LiveView.Composers;
 using Umbricians.LiveView.Configuration;
 
 namespace Umbricians.LiveView.Tests.Configuration;
@@ -98,7 +99,7 @@ public class LiveViewOptionsValidationTests
         seconds.Select((s, i) => ($"Dashboard:RefreshIntervals:{i}", (string?)s.ToString()))
             .ToDictionary(p => p.Item1, p => p.Item2);
 
-    /// <summary>Builds the options the way the composer does, from settings relative to the Live View section.</summary>
+    /// <summary>Builds the options through the composer's own registration, from settings relative to the Live View section.</summary>
     private LiveViewOptions Build(Dictionary<string, string?>? settings = null)
     {
         IConfigurationRoot config = new ConfigurationBuilder()
@@ -107,8 +108,7 @@ public class LiveViewOptionsValidationTests
 
         var services = new ServiceCollection();
         services.AddSingleton<ILogger<LiveViewOptionsValidation>>(_logger);
-        services.AddOptions<LiveViewOptions>().Bind(config.GetSection(Constants.ConfigurationSection));
-        LiveViewOptionsValidation.AddTo(services);
+        LiveViewComposer.AddOptions(services, config);
 
         using ServiceProvider provider = services.BuildServiceProvider();
         return provider.GetRequiredService<IOptions<LiveViewOptions>>().Value;

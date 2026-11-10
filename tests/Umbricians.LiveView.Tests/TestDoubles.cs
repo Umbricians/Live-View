@@ -1,5 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Umbraco.Cms.Core.Models.ServerEvents;
+using Umbraco.Cms.Core.Security;
+using Umbraco.Cms.Core.ServerEvents;
 using Umbricians.LiveView.Presence;
 
 namespace Umbricians.LiveView.Tests;
@@ -76,4 +79,21 @@ internal sealed class RecordingLogger<T> : ILogger<T>
 
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
         Entries.Add((logLevel, formatter(state, exception)));
+}
+
+internal sealed class NullServerEventRouter : IServerEventRouter
+{
+    public Task NotifyUserAsync(ServerEvent serverEvent, Guid userKey) => Task.CompletedTask;
+
+    public Task RouteEventAsync(ServerEvent serverEvent) => Task.CompletedTask;
+
+    public Task RouteEventAsync(ServerEvent serverEvent, ServerEventRoutingContext routingContext) => Task.CompletedTask;
+
+    public Task BroadcastEventAsync(ServerEvent serverEvent) => Task.CompletedTask;
+}
+
+/// <summary>A backoffice security accessor with nobody signed in.</summary>
+internal sealed class NoBackOfficeSecurityAccessor : IBackOfficeSecurityAccessor
+{
+    public IBackOfficeSecurity? BackOfficeSecurity => null;
 }

@@ -126,12 +126,12 @@ endpoint, keyed on a client id header.
 | `TrackingEnabled` | `true` | Turns request counting off entirely. Custom lines from code still show. |
 | `ActivityWindowSeconds` | `300` | How long a session counts as active after its last request. Each channel can override it. |
 | `IgnoreBots` | `true` | Ignores requests whose User-Agent looks like a crawler, including any `BotUserAgents`. |
-| `BotUserAgents` | none | Text matched anywhere in the User-Agent, ignoring case, to treat as a crawler on top of the built-in patterns. |
+| `BotUserAgents` | none | Text matched anywhere in the User-Agent, ignoring case, to treat as a crawler on top of the built-in patterns. Surrounding spaces and blank entries are ignored. |
 | `MaxSessionsPerChannel` | `100000` | A safety limit on sessions held in memory per line. |
 | `MemberAvatarProperty` | none | The alias of a member image property (media picker, image cropper or upload) to show as each member's picture. For other sources, see [Member avatars](../README.md#5-member-avatars). |
 | `MessageTimeZone` | the sender's own | The time zone "midnight tonight" means when messaging members, as an IANA id such as `America/Denver` (a Windows id works too). |
 | `BackofficeMessageLifetimeMinutes` | `15` | How long a backoffice message is kept for recipients to fetch. |
-| `Dashboard:RefreshIntervals` | `2, 5, 10, 15, 30` | The refresh intervals offered on the dashboard, in seconds. |
+| `Dashboard:RefreshIntervals` | `2, 5, 10, 15, 30` | The refresh intervals offered on the dashboard, in seconds, shortest first and each once. |
 | `Dashboard:DefaultRefreshInterval` | `5` | The interval a browser uses until someone picks another; one of the intervals offered. When 5 isn't offered, the shortest. |
 | `Dashboard:MaxReadings` | `120` | How many readings the chart keeps while the dashboard is open. |
 
