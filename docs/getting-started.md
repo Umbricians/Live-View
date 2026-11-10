@@ -243,6 +243,9 @@ are marked **You** in the list and can't select yourself, and "everyone online" 
 messages should reach them: a banner, a live pop-up, email or something else. See
 [Messaging members](member-messaging.md).
 
+Every message sent is written to Umbraco's audit log, and a site can stop one with a notification handler: see
+[Before and after a message is sent](../README.md#7-before-and-after-a-message-is-sent).
+
 ## Load-balanced sites
 
 By default each server keeps its own counts, online lists and sent backoffice messages in memory, so each server
@@ -274,9 +277,6 @@ Even with shared stores, these stay per server, and need no action:
 - Member sign-out markers.
 
 No distributed store ships with the package.
-
-Every message sent is written to Umbraco's audit log, and a site can stop one with a notification handler: see
-[Before and after a message is sent](../README.md#7-before-and-after-a-message-is-sent).
 
 ## Before you go live
 
