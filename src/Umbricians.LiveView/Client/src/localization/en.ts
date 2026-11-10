@@ -19,6 +19,9 @@ export default {
     clearChart: "Clear chart",
     updatedAt: (time: string) => `Updated ${time}`,
     connecting: "Connecting…",
+    settingsNotLoaded: "Dashboard settings not loaded",
+    settingsNotLoadedMessage:
+      "Live View couldn't read this site's dashboard settings, so it is using the built-in refresh choices and chart length.",
     requestFailed: (status?: number) => `Live View request failed (${status ?? "no response"})`,
     liveActivity: "Live activity",
     showLine: (name: string) => `Show ${name} on the chart`,
@@ -90,11 +93,18 @@ export default {
 
     // User dialog
     sendMessage: "Send message",
-    send: "Send",
-    toEveryoneOnline: "To everyone online",
-    toUsers: (count: number) => `To ${count} ${count === 1 ? "user" : "users"}`,
-    everyoneOnlineUsersNote: (count: number) =>
-      `Everyone else with the backoffice open when you send (${count} ${count === 1 ? "user" : "users"} right now), including anyone who has signed in since you opened this.`,
+    sendToUsers: (count: number) => `Send to ${count} ${count === 1 ? "user" : "users"}`,
+    selectedUsers: (count: number) => `Selected users (${count})`,
+    selectedUsersNoneHint: "Tick users in the table to send to just them.",
+    selectedUsersHint: "The users ticked in the table.",
+    everyoneOnlineUsersHint:
+      "Everyone else with the backoffice open when you send, on every page of the table, including anyone who signs in after you open this.",
+    userGroups: "User groups",
+    userGroupsCount: (count: number) => `User groups (${count})`,
+    userGroupsHint: "Everyone else with the backoffice open when you send who is in any of the groups you choose.",
+    userGroupsNeedUsersSection: "Choosing user groups needs access to the Users section.",
+    countingUsers: "Counting…",
+    reachesUsersOnline: (count: number) => `Reaches ${count} ${count === 1 ? "user" : "users"} online right now`,
     backofficeMessageNote:
       "Shown in their backoffice as a notification that stays on screen until dismissed, signed with your name.",
     userHeadlinePlaceholder: "e.g. Upgrade in 10 minutes",

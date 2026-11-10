@@ -2,12 +2,14 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Umbraco.Cms.Api.Common.Filters;
 using Umbraco.Cms.Api.Common.ViewModels.Pagination;
 using Umbraco.Cms.Core.Models.Membership;
 using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Web.Common.Routing;
+using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Metrics;
 using Umbricians.LiveView.Presence;
@@ -15,11 +17,15 @@ using Umbricians.LiveView.Security;
 
 namespace Umbricians.LiveView.Controllers;
 
+/// <summary>
+/// The Live View dashboard's API. Authorized by the Live View permissions, not by section access, so the dashboard
+/// works in whichever section its manifest shows it.
+/// </summary>
 [ApiController]
 [ApiVersion("1.0")]
 [ApiExplorerSettings(GroupName = "Live View")]
 [BackOfficeRoute("umbriciansliveview/api/v{version:apiVersion}")]
-[Authorize(Policy = AuthorizationPolicies.SectionAccessSettings)]
+[Authorize(Policy = AuthorizationPolicies.BackOfficeAccess)]
 [LiveViewPermission(Constants.Permissions.View)]
 [JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
 internal class LiveViewApiController : ControllerBase
@@ -31,19 +37,38 @@ internal class LiveViewApiController : ControllerBase
     private readonly MemberPresence _memberPresence;
     private readonly BackofficeMessenger _messenger;
     private readonly IBackOfficeSecurityAccessor _security;
+    private readonly IOptionsMonitor<LiveViewOptions> _options;
 
     public LiveViewApiController(
         LiveMetricsService metrics,
         BackofficePresence presence,
         MemberPresence memberPresence,
         BackofficeMessenger messenger,
-        IBackOfficeSecurityAccessor security)
+        IBackOfficeSecurityAccessor security,
+        IOptionsMonitor<LiveViewOptions> options)
     {
         _metrics = metrics;
         _presence = presence;
         _memberPresence = memberPresence;
         _messenger = messenger;
         _security = security;
+        _options = options;
+    }
+
+    /// <summary>How the dashboard refreshes and how many readings its chart keeps, from the site's settings.</summary>
+    [HttpGet("dashboard-settings")]
+    [ProducesResponseType<DashboardSettingsResponseModel>(StatusCodes.Status200OK)]
+    public DashboardSettingsResponseModel DashboardSettings()
+    {
+        LiveViewDashboardOptions dashboard = _options.CurrentValue.Dashboard;
+        return new()
+        {
+            RefreshIntervals = dashboard.RefreshIntervals,
+
+            // Always set once the options are configured; see LiveViewOptionsValidation.
+            DefaultRefreshInterval = dashboard.DefaultRefreshInterval.GetValueOrDefault(),
+            MaxReadings = dashboard.MaxReadings,
+        };
     }
 
     [HttpGet("snapshot")]
@@ -83,8 +108,8 @@ internal class LiveViewApiController : ControllerBase
         {
             Total = total,
             Items = items,
-            AnyOnMcp = _presence.AnyOnMcp(),
-            Recipients = _messenger.CountAllOnlineRecipients(currentUserKey),
+            AnyOnMcp = await _presence.AnyOnMcpAsync(),
+            Recipients = await _messenger.CountAllOnlineRecipientsAsync(currentUserKey),
         };
     }
 
@@ -110,7 +135,25 @@ internal class LiveViewApiController : ControllerBase
             })
             .ToList();
 
-        return new OnlineMembersResponseModel { Total = total, Items = items, AnyOnMcp = _memberPresence.AnyOnMcp() };
+        return new OnlineMembersResponseModel { Total = total, Items = items, AnyOnMcp = await _memberPresence.AnyOnMcpAsync() };
+    }
+
+    /// <summary>
+    /// How many users a message to these user groups would reach right now, as the dialog shows before sending.
+    /// Needs access to the Users section, as choosing user groups does.
+    /// </summary>
+    [HttpGet("message-recipients")]
+    [LiveViewPermission(Constants.Permissions.MessageUsers)]
+    [ProducesResponseType<MessageRecipientsResponseModel>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> MessageRecipients([FromQuery] Guid[] userGroupKeys)
+    {
+        (int recipients, string? rejected) = await _messenger.CountUserGroupRecipientsAsync(
+            userGroupKeys, CurrentSender());
+
+        return rejected is null
+            ? Ok(new MessageRecipientsResponseModel { Recipients = recipients })
+            : MessageNotSent.Because(rejected);
     }
 
     [HttpPost("messages")]
@@ -119,10 +162,9 @@ internal class LiveViewApiController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendMessage(SendBackofficeMessageRequestModel request)
     {
-        IUser? currentUser = _security.BackOfficeSecurity?.CurrentUser;
         BackofficeSendResult result = await _messenger.SendAsync(
-            new BackofficeMessageRequest(request.Headline, request.Message, request.Color, request.UserKeys, request.AllOnline),
-            new BackofficeSender(currentUser?.Key, currentUser?.Name));
+            new BackofficeMessageRequest(request.Headline, request.Message, request.Color, request.UserKeys, request.UserGroupKeys, request.AllOnline),
+            CurrentSender());
 
         return result switch
         {
@@ -131,6 +173,26 @@ internal class LiveViewApiController : ControllerBase
             _ => throw new InvalidOperationException($"Unexpected send result {result.GetType().Name}."),
         };
     }
+
+    private BackofficeSender CurrentSender()
+    {
+        IUser? user = _security.BackOfficeSecurity?.CurrentUser;
+        return new BackofficeSender(
+            user?.Key,
+            user?.Name,
+            user?.AllowedSections.Contains(Umbraco.Cms.Core.Constants.Applications.Users) == true);
+    }
+}
+
+internal class DashboardSettingsResponseModel
+{
+    /// <summary>The refresh intervals offered, in seconds, shortest first.</summary>
+    public required IReadOnlyList<int> RefreshIntervals { get; init; }
+
+    /// <summary>The interval, in seconds, used until someone picks another.</summary>
+    public required int DefaultRefreshInterval { get; init; }
+
+    public required int MaxReadings { get; init; }
 }
 
 internal class LiveViewSnapshotResponseModel
@@ -218,6 +280,17 @@ internal class SendBackofficeMessageRequestModel
 
     /// <summary>Send to every backoffice user who is online, ignoring <see cref="UserKeys"/>.</summary>
     public bool AllOnline { get; init; }
+
+    /// <summary>
+    /// Send to everyone online in the backoffice who is in any of these user groups, ignoring <see cref="UserKeys"/>.
+    /// Ignored when <see cref="AllOnline"/> is set. Needs access to the Users section.
+    /// </summary>
+    public Guid[]? UserGroupKeys { get; init; }
+}
+
+internal class MessageRecipientsResponseModel
+{
+    public required int Recipients { get; init; }
 }
 
 internal class SendBackofficeMessageResponseModel

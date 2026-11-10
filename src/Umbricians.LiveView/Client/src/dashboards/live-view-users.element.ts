@@ -1,4 +1,4 @@
-import { LitElement, css, html, customElement, property, repeat, nothing } from "@umbraco-cms/backoffice/external/lit";
+import { LitElement, css, html, customElement, state, repeat, nothing } from "@umbraco-cms/backoffice/external/lit";
 import { UmbElementMixin } from "@umbraco-cms/backoffice/element-api";
 // Registers <umb-user-avatar>, so users look as they do in the Users section.
 import "@umbraco-cms/backoffice/user";
@@ -14,36 +14,52 @@ import {
   renderSelectAllButton,
   renderSelectionBar,
 } from "./online-list.js";
-import type { SelectionSummary } from "./online-selection.js";
+import { LIVE_VIEW_DASHBOARD_CONTEXT } from "./live-view-dashboard.context.js";
 
 /**
  * Lists backoffice users who currently have the backoffice open, one page at a time, with a selection the
  * dashboard uses to send them a message. The current user is listed but never selectable, since nobody messages
  * themselves, and nor are users only on MCP, since a backoffice message is shown in a backoffice tab.
- * Fires a change event whenever who the selection reaches changes.
+ * A dashboard panel, which publishes its selection to the dashboard context.
  */
 @customElement("umbricians-live-view-users")
 export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) {
-  /** Refresh interval in seconds, shared with the chart. */
-  @property({ type: Number }) interval = 5;
-  @property({ type: Boolean }) paused = false;
+  /** Refresh interval in seconds, from the dashboard context. */
+  @state() interval = 5;
+  /** Whether the dashboard is paused, from the dashboard context. Starts paused so nothing is fetched before it arrives. */
+  @state() paused = true;
 
   /** Shows the selection checkboxes and delivery column; only for users allowed to message backoffice users. */
-  @property({ type: Boolean }) selectable = false;
+  @state() private _selectable = false;
+
+  #context?: typeof LIVE_VIEW_DASHBOARD_CONTEXT.TYPE;
 
   #list = new OnlineList<OnlineBackofficeUser>(
     this,
     fetchOnlineUsers,
+    () => this.#publishSelection(),
     (u) => !u.isCurrentUser && u.backofficeLastSeen !== null,
   );
 
-  get selection(): SelectionSummary {
-    return this.#list.summary;
+  constructor() {
+    super();
+    this.consumeContext(LIVE_VIEW_DASHBOARD_CONTEXT, (context) => {
+      this.#context = context;
+      this.observe(context?.interval, (interval) => (this.interval = interval ?? 5));
+      this.observe(context?.paused, (paused) => (this.paused = paused ?? true));
+      this.observe(context?.canMessageUsers, (can) => (this._selectable = can ?? false));
+      this.#publishSelection();
+    });
   }
 
-  /** Clears the selection, e.g. after a message has been sent. */
-  clearSelection() {
-    this.#list.clearSelection();
+  #publishSelection() {
+    this.#context?.setUsersSelection(this.#list.tableSelection);
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    // A panel that is no longer shown takes its footer action with it.
+    this.#context?.setUsersSelection(undefined);
   }
 
   override updated(changed: Map<string, unknown>) {
@@ -56,23 +72,25 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
       <uui-box headline=${this.localize.term("umbriciansLiveView_backofficeUsersOnline")}>
         <div slot="header-actions" class="header-actions">
           <span class="muted">${this.localize.term("umbriciansLiveView_onlineCount", list.total)}</span>
-          ${this.selectable ? renderSelectAllButton(list) : nothing}
+          ${this._selectable ? renderSelectAllButton(list) : nothing}
         </div>
 
         ${list.total === 0
           ? html`<p class="muted">${this.localize.term("umbriciansLiveView_nobodyInBackoffice")}</p>`
           : html`
-              ${this.selectable ? renderSelectionBar(list, {
+              ${this._selectable
+                ? renderSelectionBar(list, {
                     allOnline: "umbriciansLiveView_allOnlineUsersSelected",
                     allOnPage: "umbriciansLiveView_allUsersOnPageSelected",
-                  }) : nothing}
+                  })
+                : nothing}
               <uui-table aria-label=${this.localize.term("umbriciansLiveView_backofficeUsersOnline")}>
                 <uui-table-head>
-                  ${this.selectable ? renderPageCheckbox(list) : nothing}
+                  ${this._selectable ? renderPageCheckbox(list) : nothing}
                   <uui-table-head-cell>${this.localize.term("general_name")}</uui-table-head-cell>
                   <uui-table-head-cell class="tabs">${this.localize.term("umbriciansLiveView_openTabs")}</uui-table-head-cell>
                   <uui-table-head-cell class="last-seen">${this.localize.term("umbriciansLiveView_lastActive")}</uui-table-head-cell>
-                  ${this.selectable
+                  ${this._selectable
                     ? html`<uui-table-head-cell class="delivery">${this.localize.term("umbriciansLiveView_delivery")}</uui-table-head-cell>`
                     : nothing}
                 </uui-table-head>
@@ -81,7 +99,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                   (u) => u.key,
                   (u) => html`
                     <uui-table-row>
-                      ${this.selectable ? renderRowCheckbox(list, u) : nothing}
+                      ${this._selectable ? renderRowCheckbox(list, u) : nothing}
                       <uui-table-cell>
                         <div class="user">
                           <umb-user-avatar .name=${u.name} .imgUrls=${u.avatarUrls}></umb-user-avatar>
@@ -119,7 +137,7 @@ export class UmbriciansLiveViewUsersElement extends UmbElementMixin(LitElement) 
                       <uui-table-cell class="last-seen" title=${this.localize.dateTime(u.lastSeen)}>
                         ${formatAgo(this.localize, list.now - Date.parse(u.lastSeen))}
                       </uui-table-cell>
-                      ${this.selectable
+                      ${this._selectable
                         ? html`<uui-table-cell class="delivery">
                         ${!list.canSelect(u)
                           ? nothing

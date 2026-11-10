@@ -483,6 +483,29 @@ Return `new MemberMessageResult(delivered, note)`. `delivered` is how many membe
 `null` if the sender does not know (for example "every member"). `note` is a few words shown next to it on the
 dashboard, such as "queued for sending".
 
+### `MemberMessageSendingNotification` and `MemberMessageSentNotification`
+
+Published through `IEventAggregator` before and after a message is sent; see
+[Before and after a message is sent](../README.md#7-before-and-after-a-message-is-sent). Cancelling the sending
+notification stops the message.
+
+| Property | On | Meaning |
+|---|---|---|
+| `Message` | both | The `MemberMessage`. Its recipients are in `Audience` and `MemberKeys`. |
+| `DeliveryMethods` | sending | The aliases of the senders chosen to deliver it. |
+| `Results` | sent | One `MemberMessageSenderResult` per delivery method, including failures and timeouts. |
+| `SenderKey` | both | The key of the backoffice user sending it, if known. |
+
+### `MemberMessageSenderResult`
+
+| Property | Meaning |
+|---|---|
+| `Alias` | The sender's `Alias`. |
+| `Name` | The sender's `Name`. |
+| `Delivered` | The `Delivered` the sender returned, or `null` if it did not deliver or did not know. |
+| `Note` | The `Note` the sender returned. |
+| `Error` | `Failed` or `Timed out` when the sender did not deliver; otherwise `null`. |
+
 ### `IMemberMessageInbox`
 
 The package's optional in-memory store for messages waiting to be shown.

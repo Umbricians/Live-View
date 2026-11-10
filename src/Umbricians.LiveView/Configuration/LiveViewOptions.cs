@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http;
+
 namespace Umbricians.LiveView.Configuration;
 
 /// <summary>
@@ -5,6 +7,8 @@ namespace Umbricians.LiveView.Configuration;
 /// </summary>
 public class LiveViewOptions
 {
+    internal const int DefaultBackofficeMessageLifetimeMinutes = 15;
+
     /// <summary>Turns request tracking on or off. The dashboard still shows custom metric providers when off.</summary>
     public bool TrackingEnabled { get; set; } = true;
 
@@ -14,7 +18,7 @@ public class LiveViewOptions
     /// <summary>Requests whose User-Agent looks like a crawler are not tracked.</summary>
     public bool IgnoreBots { get; set; } = true;
 
-    /// <summary>Upper bound on sessions held in memory per channel, to protect the server from floods.</summary>
+    /// <summary>Upper bound on entries the in-memory store holds per line (sessions, or people online), to protect the server from floods.</summary>
     public int MaxSessionsPerChannel { get; set; } = 100_000;
 
     /// <summary>File extensions ignored by channels with <see cref="LiveViewChannelOptions.IgnoreStaticFiles"/> set.</summary>
@@ -37,9 +41,22 @@ public class LiveViewOptions
     /// </summary>
     public string? MessageTimeZone { get; set; }
 
+    /// <summary>How long a message to backoffice users is kept for recipients to fetch, in minutes.</summary>
+    public int BackofficeMessageLifetimeMinutes { get; set; } = DefaultBackofficeMessageLifetimeMinutes;
+
+    /// <summary>
+    /// Text that marks a User-Agent as a crawler, matched anywhere in it without regard to case, on top of the
+    /// built-in patterns. Surrounding spaces and blank entries are ignored. Only applies while <see cref="IgnoreBots"/> is on.
+    /// </summary>
+    public string[] BotUserAgents { get; set; } = [];
+
+    /// <summary>How the dashboard refreshes and how much of the chart it keeps.</summary>
+    public LiveViewDashboardOptions Dashboard { get; set; } = new();
+
     /// <summary>
     /// Request-tracked channels, keyed by alias. The built-in <c>web</c>, <c>members</c>, <c>backoffice</c>, <c>mcp</c> and <c>api</c> channels are
     /// added when not configured; any property left empty on them falls back to its built-in value.
+    /// Settings under the alias of an <see cref="Metrics.ILiveMetricProvider"/> apply to its line instead, which uses only Enabled, Name, Color and SortOrder.
     /// </summary>
     public Dictionary<string, LiveViewChannelOptions> Channels { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
@@ -62,7 +79,7 @@ public class LiveViewChannelOptions
 
     /// <summary>
     /// Path prefixes this channel tracks, matched on whole segments (<c>/api</c> matches <c>/api/x</c>, not <c>/apix</c>).
-    /// A channel with no prefixes is only fed from code through <see cref="Tracking.ILiveActivityTracker"/>.
+    /// A channel with no prefixes, no <see cref="Hosts"/> and no <see cref="RequestPredicate"/> is only fed from code through <see cref="Tracking.ILiveActivityTracker"/>.
     /// </summary>
     public string[]? PathPrefixes { get; set; }
 
@@ -70,8 +87,24 @@ public class LiveViewChannelOptions
     public string[]? ExcludePathPrefixes { get; set; }
 
     /// <summary>
+    /// Host names this channel tracks, such as <c>brand-a.com</c>, or <c>*.brand-a.com</c> for any of its subdomains (not
+    /// <c>brand-a.com</c> itself). Matched without regard to case or port. When empty, requests to any host match. A channel with hosts but no path prefixes counts every path on those
+    /// hosts, apart from its excluded prefixes.
+    /// </summary>
+    public string[]? Hosts { get; set; }
+
+    /// <summary>
+    /// Set from code with <see cref="Extensions.LiveViewBuilderExtensions.AddLiveViewChannel"/>: a test a request must
+    /// pass to count in this channel, together with its paths and hosts, or on its own. It runs
+    /// before authentication, so the signed-in user isn't known yet, and on every request offered to the channel, so keep
+    /// it quick.
+    /// </summary>
+    public Func<HttpContext, bool>? RequestPredicate { get; set; }
+
+    /// <summary>
     /// Where the session identity comes from, tried in order: <c>Header:Name</c>, <c>Cookie:Name</c>,
-    /// <c>Authorization</c>, <c>User</c> (signed-in user id) or <c>Client</c> (IP + User-Agent). Values are hashed before they are held in memory.
+    /// <c>Authorization</c>, <c>User</c> (signed-in user id), <c>Client</c> (IP + User-Agent), or the alias of an
+    /// <see cref="Tracking.ILiveSessionKeySource"/> the site registers. Values are hashed before they are held in memory.
     /// </summary>
     public string[]? SessionKeys { get; set; }
 
@@ -84,4 +117,23 @@ public class LiveViewChannelOptions
     /// for a channel that overlaps another, such as logged-in members, who are also web visitors.
     /// </summary>
     public bool? Exclusive { get; set; }
+}
+
+public class LiveViewDashboardOptions
+{
+    internal static readonly int[] DefaultRefreshIntervals = [2, 5, 10, 15, 30];
+    internal const int PreferredRefreshInterval = 5;
+    internal const int DefaultMaxReadings = 120;
+
+    /// <summary>The refresh intervals offered on the dashboard, in seconds, shortest first and each once. When empty, 2, 5, 10, 15 and 30.</summary>
+    public int[] RefreshIntervals { get; set; } = [];
+
+    /// <summary>
+    /// The interval, in seconds, a browser uses until someone picks another; one of <see cref="RefreshIntervals"/>.
+    /// When empty, 5, or the shortest choice when 5 isn't offered.
+    /// </summary>
+    public int? DefaultRefreshInterval { get; set; }
+
+    /// <summary>How many readings the chart keeps while the dashboard is open.</summary>
+    public int MaxReadings { get; set; } = DefaultMaxReadings;
 }

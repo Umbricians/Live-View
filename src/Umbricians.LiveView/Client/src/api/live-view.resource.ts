@@ -102,6 +102,16 @@ async function request<T>(
   return data as T;
 }
 
+export interface DashboardSettings {
+  /** Refresh intervals offered, in seconds, shortest first. */
+  refreshIntervals: Array<number>;
+  /** The interval, in seconds, used until someone picks another. */
+  defaultRefreshInterval: number;
+  maxReadings: number;
+}
+
+export const fetchDashboardSettings = () => request<DashboardSettings>("GET", "dashboard-settings");
+
 export const fetchSnapshot = (signal?: AbortSignal) => request<LiveViewSnapshot>("GET", "snapshot", { signal });
 
 export const fetchOnlineUsers = (skip: number, take: number, signal?: AbortSignal) =>
@@ -110,14 +120,26 @@ export const fetchOnlineUsers = (skip: number, take: number, signal?: AbortSigna
 export const fetchOnlineMembers = (skip: number, take: number, signal?: AbortSignal) =>
   request<OnlineMembers>("GET", `members?skip=${skip}&take=${take}`, { signal });
 
-/** Sends to the given users, or to everyone online when `allOnline` is set. */
+/** Who a backoffice message goes to: the users picked in the table, everyone online, or everyone online in chosen user groups. */
+export type BackofficeAudience = "selected" | "allOnline" | "userGroups";
+
+/** Sends to the given users, to everyone online when `allOnline` is set, or to everyone online in `userGroupKeys`. */
 export const sendMessage = (body: {
   headline: string;
   message: string;
   color: MessageColor;
   userKeys?: Array<string>;
+  userGroupKeys?: Array<string>;
   allOnline?: boolean;
 }) => request<{ key: string; recipients: number }>("POST", "messages", { body });
+
+/** How many users a message to these user groups reaches right now: everyone else in the backoffice in any of them. */
+export const fetchUserGroupRecipients = (userGroupKeys: Array<string>, signal?: AbortSignal) =>
+  request<{ recipients: number }>(
+    "GET",
+    "message-recipients?" + userGroupKeys.map((k) => "userGroupKeys=" + encodeURIComponent(k)).join("&"),
+    { signal },
+  );
 
 export interface MemberMessageSender {
   alias: string;

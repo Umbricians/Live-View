@@ -65,10 +65,10 @@ internal sealed class McpCallers : ILiveViewPresence
         switch (await FindAsync(key))
         {
             case Caller.BackofficeUser:
-                _backofficePresence.McpSeen(key);
+                await _backofficePresence.McpSeenAsync(key);
                 break;
             case Caller.Member:
-                _memberPresence.McpSeen(key);
+                await _memberPresence.McpSeenAsync(key);
                 break;
         }
     }
@@ -93,7 +93,7 @@ internal sealed class McpCallers : ILiveViewPresence
     /// Records an open MCP request, such as a stream, by whoever is signed in. They stay online until the returned
     /// hold is disposed; null when nobody known is signed in.
     /// </summary>
-    private async Task<IDisposable?> OpenedAsync(ClaimsPrincipal user)
+    private async Task<IAsyncDisposable?> OpenedAsync(ClaimsPrincipal user)
     {
         if (PrincipalKey.Resolve(user, _members.FindKey) is not { } key)
         {
@@ -102,8 +102,8 @@ internal sealed class McpCallers : ILiveViewPresence
 
         return await FindAsync(key) switch
         {
-            Caller.BackofficeUser => _backofficePresence.McpOpened(key),
-            Caller.Member => _memberPresence.McpOpened(key),
+            Caller.BackofficeUser => await _backofficePresence.McpOpenedAsync(key),
+            Caller.Member => await _memberPresence.McpOpenedAsync(key),
             _ => null,
         };
     }
@@ -145,7 +145,7 @@ internal sealed class McpCallers : ILiveViewPresence
     {
         private readonly McpCallers _callers;
         private readonly HttpContext _context;
-        private IDisposable? _hold;
+        private IAsyncDisposable? _hold;
         private bool _finished;
 
         public McpCall(McpCallers callers, HttpContext context)
@@ -167,7 +167,7 @@ internal sealed class McpCallers : ILiveViewPresence
             _finished = true;
             if (_hold is { } hold)
             {
-                hold.Dispose();
+                await hold.DisposeAsync();
             }
             else
             {

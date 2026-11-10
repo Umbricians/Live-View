@@ -1,10 +1,15 @@
 import { css, html, nothing } from "@umbraco-cms/backoffice/external/lit";
 import type { ReactiveController, ReactiveControllerHost } from "@umbraco-cms/backoffice/external/lit";
-import { UmbChangeEvent } from "@umbraco-cms/backoffice/event";
 import type { UmbLocalizationController } from "@umbraco-cms/backoffice/localization-api";
 import type { UUIBooleanInputEvent, UUIPaginationElement } from "@umbraco-cms/backoffice/external/uui";
 import { PAGE_SIZE } from "../utils/format.js";
-import { Selection, type Person, type SelectionSummary } from "./online-selection.js";
+import {
+  Selection,
+  selectionChanged,
+  type OnlineTableSelection,
+  type Person,
+  type SelectionSummary,
+} from "./online-selection.js";
 
 /** One page of people online, and how many are online in all. */
 export interface OnlinePage<T> {
@@ -21,8 +26,8 @@ type Host = ReactiveControllerHost &
 
 /**
  * One online table's list: the page shown, refreshed every `interval` seconds while not paused, and who is picked in
- * it. Each refresh supersedes the last, so an older response never replaces a newer page. Fires a change event on the
- * host when who the selection reaches changes.
+ * it. Each refresh supersedes the last, so an older response never replaces a newer page. Calls `onChange` when who
+ * the selection reaches, how many are online, or how many of them can be messaged, changes.
  */
 export class OnlineList<T extends Person> implements ReactiveController {
   items: Array<T> = [];
@@ -36,6 +41,7 @@ export class OnlineList<T extends Person> implements ReactiveController {
 
   #host: Host;
   #fetchPage: (skip: number, take: number, signal: AbortSignal) => Promise<OnlinePage<T>>;
+  #onChange: () => void;
   #canSelect: (item: T) => boolean;
   #timer?: number;
   #abort?: AbortController;
@@ -43,10 +49,12 @@ export class OnlineList<T extends Person> implements ReactiveController {
   constructor(
     host: Host,
     fetchPage: (skip: number, take: number, signal: AbortSignal) => Promise<OnlinePage<T>>,
+    onChange: () => void,
     canSelect: (item: T) => boolean = () => true,
   ) {
     this.#host = host;
     this.#fetchPage = fetchPage;
+    this.#onChange = onChange;
     this.#canSelect = canSelect;
     host.addController(this);
   }
@@ -64,6 +72,11 @@ export class OnlineList<T extends Person> implements ReactiveController {
   /** Who the selection reaches. */
   get summary(): SelectionSummary {
     return this.selection.summary(this.recipients);
+  }
+
+  /** The selection as the dashboard's footer needs it. */
+  get tableSelection(): OnlineTableSelection {
+    return { summary: this.summary, onlineCount: this.total, recipients: this.recipients, clear: this.clearSelection };
   }
 
   get pages() {
@@ -91,7 +104,7 @@ export class OnlineList<T extends Person> implements ReactiveController {
     if (this.#host.paused || !this.#host.isConnected) return;
 
     const abort = (this.#abort = new AbortController());
-    const before = this.summary;
+    const before = this.tableSelection;
     try {
       const result = await this.#fetchPage((this.page - 1) * PAGE_SIZE, PAGE_SIZE, abort.signal);
       if (abort.signal.aborted) return;
@@ -110,7 +123,7 @@ export class OnlineList<T extends Person> implements ReactiveController {
       }
 
       this.#host.requestUpdate();
-      if (this.#reachChanged(before)) this.#changed();
+      if (selectionChanged(before, this.tableSelection)) this.#changed();
     } catch {
       if (abort.signal.aborted) return;
       // The chart shows connection errors; keep the last list.
@@ -138,13 +151,8 @@ export class OnlineList<T extends Person> implements ReactiveController {
     this.#changed();
   }
 
-  #reachChanged(before: SelectionSummary) {
-    const after = this.summary;
-    return after.allOnline !== before.allOnline || after.count !== before.count;
-  }
-
   #changed() {
-    this.#host.dispatchEvent(new UmbChangeEvent());
+    this.#onChange();
   }
 }
 
