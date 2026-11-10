@@ -96,7 +96,7 @@ Live View adds three permissions to Umbraco's user groups, under **Users → Use
 | Permission | What it allows |
 |---|---|
 | **View Live View** | See the Live View dashboard in Settings: live activity and who is online. |
-| **Message backoffice users** | Select backoffice users, or pick user groups, and send them a notification. |
+| **Message backoffice users** | Select backoffice users, or pick user groups (which also needs access to the Users section), and send them a notification. |
 | **Message members** | Select website members and send them a message, once a developer has [set up a delivery method](docs/member-messaging.md). |
 
 The **Administrators** group gets all three automatically when the package is installed or upgraded; other groups
@@ -369,7 +369,8 @@ All under `/umbraco/umbriciansliveview/api/v1/`.
 | Endpoint | Who can call it |
 |---|---|
 | `GET snapshot`, `GET backoffice-users`, `GET members`, `GET member-messaging` | Settings section and **View Live View** |
-| `POST messages`, `GET message-recipients` | as above, plus **Message backoffice users** |
+| `POST messages` | as above, plus **Message backoffice users**; sending to user groups also needs the Users section |
+| `GET message-recipients` | as above, plus **Message backoffice users** and the Users section |
 | `POST member-messages` | as above, plus **Message members** |
 | `GET heartbeat`, `GET messages/{key}` | any backoffice user (recipients only for a message) |
 

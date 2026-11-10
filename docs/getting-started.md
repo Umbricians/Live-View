@@ -43,7 +43,7 @@ Live View**, below Umbraco's own permissions:
 | Permission | What it allows |
 |---|---|
 | **View Live View** | See the Live View dashboard in Settings: live activity and who is online. |
-| **Message backoffice users** | Select backoffice users, or pick user groups, and send them a notification. |
+| **Message backoffice users** | Select backoffice users, or pick user groups (which also needs access to the Users section), and send them a notification. |
 | **Message members** | Select website members and send them a message, once a developer has [set up a delivery method](member-messaging.md). |
 
 - **Administrators get all three** when the package is first installed, or when a site upgrades to a version with
@@ -207,7 +207,7 @@ dashboard tabs are crowded. Permission changes apply after the user reloads the 
 **Message members**. Members can only be messaged once a developer has set up a delivery method.
 
 **User groups can't be chosen.** Choosing user groups uses Umbraco's user group picker, which needs access to the
-**Users** section.
+**Users** section. Live View also refuses user groups from anyone without the Users section, not only in the picker.
 
 **A line stays at zero.** Requests must reach the site through the paths the channel watches. For members, the
 request must be a front-end page view by a logged-in member. MCP and API paths default to `/mcp`, `/umbraco/mcp`,

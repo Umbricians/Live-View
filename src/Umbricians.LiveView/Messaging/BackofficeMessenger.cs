@@ -22,8 +22,11 @@ internal sealed record BackofficeMessageRequest(
     IReadOnlyCollection<Guid>? UserGroupKeys,
     bool AllOnline);
 
-/// <summary>The backoffice user sending a message, who is never one of its recipients.</summary>
-internal sealed record BackofficeSender(Guid? Key, string? Name);
+/// <summary>
+/// The backoffice user sending a message, who is never one of its recipients. Only a sender with access to the
+/// Users section can choose user groups, the same rule the dialog's group picker has.
+/// </summary>
+internal sealed record BackofficeSender(Guid? Key, string? Name, bool CanChooseUserGroups);
 
 internal abstract record BackofficeSendResult
 {
@@ -41,8 +44,9 @@ internal abstract record BackofficeSendResult
 /// </summary>
 /// <remarks>
 /// It owns the send rules: the message content (see <see cref="MessageContent"/>), who "all online" and the chosen
-/// user groups mean at the moment of sending, and that the sender is never a recipient. A user group audience is
-/// everyone online in the backoffice in any of the groups, which must all exist. Selected users are sent to as chosen, even if they have since gone
+/// user groups mean at the moment of sending, that the sender is never a recipient, and that only a sender with
+/// access to the Users section can choose user groups. A user group audience is everyone online in the backoffice
+/// in any of the groups, which must all exist. Selected users are sent to as chosen, even if they have since gone
 /// offline, and pick the message up if they come back within its lifetime.
 /// Server events only carry a key, so the message is held in memory and each recipient's backoffice fetches it
 /// by key. Recipients whose realtime connection is down pick it up from their next heartbeat instead.
@@ -55,6 +59,7 @@ internal sealed class BackofficeMessenger
 
     internal const int MaxRecipients = 1000;
     internal const int MaxUserGroups = 100;
+    internal const string UserGroupsNeedUsersSection = "Choosing user groups needs access to the Users section.";
 
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
 
@@ -87,10 +92,15 @@ internal sealed class BackofficeMessenger
     /// but the sender. Or why the groups can't be sent to.
     /// </summary>
     internal async Task<(int Recipients, string? Rejected)> CountUserGroupRecipientsAsync(
-        IReadOnlyCollection<Guid> userGroupKeys, Guid? senderKey)
+        IReadOnlyCollection<Guid> userGroupKeys, BackofficeSender sender)
     {
+        if (!sender.CanChooseUserGroups)
+        {
+            return (0, UserGroupsNeedUsersSection);
+        }
+
         (IReadOnlyList<Guid> users, string? rejected) = await InUserGroupsAsync(userGroupKeys);
-        return (users.Count(k => k != senderKey), rejected);
+        return (users.Count(k => k != sender.Key), rejected);
     }
 
     /// <summary>Checks the message, works out its recipients and delivers it, or says why it can't be sent.</summary>
@@ -109,6 +119,11 @@ internal sealed class BackofficeMessenger
         }
         else if (request.UserGroupKeys is { } userGroupKeys)
         {
+            if (!sender.CanChooseUserGroups)
+            {
+                return new BackofficeSendResult.Rejected(UserGroupsNeedUsersSection);
+            }
+
             (IReadOnlyList<Guid> inGroups, string? rejected) = await InUserGroupsAsync(userGroupKeys);
             if (rejected is not null)
             {

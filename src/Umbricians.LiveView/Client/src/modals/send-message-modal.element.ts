@@ -13,7 +13,7 @@ import type {
   UmbriciansSendMessageModalValue,
 } from "./send-message.modal-token.js";
 
-/** Umbraco's user group picker reads the groups through the Users section's API, so it needs access to that section. */
+/** Umbraco's user group picker reads the groups through the Users section's API, so it needs access to that section. The server enforces the same rule. */
 const USERS_SECTION = "Umb.Section.Users";
 
 /**
