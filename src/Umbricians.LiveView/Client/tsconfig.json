@@ -20,9 +20,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    "types": [ "@umbraco-cms/backoffice/extension-types" ]
+    "types": [ "@umbraco-cms/backoffice/extension-types", "node" ]
   },
-  "include": [ "src" ],
-  // Tests run in Node, which strips their types, so the build leaves them out.
-  "exclude": [ "src/**/*.test.ts" ]
+  // Includes the tests: Node only strips their types, so tsc is what checks them.
+  "include": [ "src" ]
 }

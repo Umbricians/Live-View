@@ -9,7 +9,7 @@ const terms = en.umbriciansLiveView as Record<string, string | ((...args: Array<
 
 const srcDirectory = fileURLToPath(new URL("..", import.meta.url));
 const source = readdirSync(srcDirectory, { recursive: true, encoding: "utf8" })
-  .map((path) => path.replaceAll("\\", "/"))
+  .map((path) => path.replace(/\\/g, "/"))
   .filter((path) => path.endsWith(".ts") && !path.endsWith(".test.ts") && path !== "localization/en.ts")
   .map((path) => readFileSync(new URL(path, new URL("..", import.meta.url)), "utf8"))
   .join("\n");
