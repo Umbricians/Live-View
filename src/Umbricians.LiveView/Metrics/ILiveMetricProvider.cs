@@ -12,7 +12,10 @@ namespace Umbricians.LiveView.Metrics;
 /// </remarks>
 public interface ILiveMetricProvider
 {
-    /// <summary>Unique, stable key for the line. Use one no channel has, since settings under it apply to this line.</summary>
+    /// <summary>
+    /// Unique, stable key for the line. A provider whose alias matches a channel, built-in or declared in code,
+    /// replaces that channel: the channel stops counting requests, and settings under the alias apply to this line.
+    /// </summary>
     string Alias { get; }
 
     /// <summary>Label shown in the legend.</summary>

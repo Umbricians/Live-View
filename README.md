@@ -279,7 +279,9 @@ line rather than breaking the dashboard. See
 [ThreadPoolQueueMetric.cs](demo/Umbricians.LiveView.Demo/LiveView/ThreadPoolQueueMetric.cs) for a working example.
 
 Its line can be renamed, recoloured, reordered or switched off in `appsettings.json` under `Channels:mcp-server`, like
-any channel; see [Configuration](#configuration). Give it an alias no channel uses.
+any channel; see [Configuration](#configuration). A provider whose alias matches a channel, built-in or declared in
+code, replaces that channel: the channel stops counting requests, and the settings under that alias apply to the
+provider's line. Give it an alias no channel uses unless you mean to replace one.
 
 ### 4. Messaging members
 

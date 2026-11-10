@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Umbricians.LiveView.Configuration;
@@ -77,14 +78,52 @@ public class LiveMetricsServiceTests
         Assert.Equal("Queued work", line.Name);
     }
 
-    private Task<IReadOnlyList<LiveMetricReading>> Snapshot()
+    [Fact]
+    public async Task A_provider_aliased_like_a_built_in_channel_replaces_it()
+    {
+        var api = new StubMetricProvider("api", "Queue depth", value: 4);
+        new LiveViewOptionsDefaults([]).PostConfigure(null, _options);
+
+        await AssertReplacedByProvider(api, "/api/products");
+    }
+
+    [Fact]
+    public async Task A_provider_aliased_like_a_channel_declared_in_code_replaces_it()
+    {
+        var shop = new StubMetricProvider("shop", "Basket size", value: 4);
+        new LiveViewOptionsDefaults([new LiveViewChannelRegistration("shop", new() { PathPrefixes = ["/shop"] })])
+            .PostConfigure(null, _options);
+
+        await AssertReplacedByProvider(shop, "/shop/basket");
+    }
+
+    // The request is matched by no channel under the provider's alias, and the snapshot has one line for it, read from the provider.
+    private async Task AssertReplacedByProvider(StubMetricProvider provider, string path)
+    {
+        var monitor = new StaticOptionsMonitor<LiveViewOptions>(_options);
+        var classifier = new RequestClassifier(monitor, [provider]);
+        var context = new DefaultHttpContext();
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Path = path;
+        context.Connection.RemoteIpAddress = System.Net.IPAddress.Loopback;
+
+        Assert.DoesNotContain(provider.Alias, classifier.Classify(context.Request).Sessions.Select(s => s.Channel));
+
+        IReadOnlyList<LiveMetricReading> snapshot = await Snapshot(provider);
+
+        LiveMetricReading line = Assert.Single(snapshot, r => r.Alias == provider.Alias);
+        Assert.Equal(4, line.Value);
+        Assert.Equal(1, provider.Calls);
+    }
+
+    private Task<IReadOnlyList<LiveMetricReading>> Snapshot(params ILiveMetricProvider[] providers)
     {
         var monitor = new StaticOptionsMonitor<LiveViewOptions>(_options);
         return new LiveMetricsService(
             new LiveActivityTracker(monitor, _clock),
             new BackofficePresence(new InMemoryBackofficeUserDirectory(), monitor, _clock),
             new MemberPresence(new InMemoryMemberDirectory(), monitor, _clock),
-            [_queue],
+            providers.Length > 0 ? providers : [_queue],
             monitor,
             NullLogger<LiveMetricsService>.Instance).GetSnapshotAsync(CancellationToken.None);
     }
