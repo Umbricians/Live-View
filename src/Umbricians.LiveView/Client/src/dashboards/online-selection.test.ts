@@ -39,15 +39,17 @@ test("a page with nobody pickable is never all picked", () => {
   assert.equal(Selection.none.selectAllOnline().pageState([]), "none");
 });
 
-const reach = (allOnline: boolean, count: number, people: typeof page = [], onlineCount = 10) => ({
+const reach = (allOnline: boolean, count: number, people: typeof page = [], onlineCount = 10, recipients = 10) => ({
   summary: { allOnline, count, people },
   onlineCount,
+  recipients,
 });
 
-test("the footer is told when the count, all online or the online total changes", () => {
+test("the footer is told when the count, all online, the online total or the number who can be messaged changes", () => {
   assert.equal(selectionChanged(reach(false, 1), reach(false, 2)), true);
   assert.equal(selectionChanged(reach(false, 1), reach(true, 1)), true);
   assert.equal(selectionChanged(reach(false, 1, [], 10), reach(false, 1, [], 11)), true);
+  assert.equal(selectionChanged(reach(false, 1, [], 10, 9), reach(false, 1, [], 10, 10)), true);
 });
 
 test("the footer is not told when only who is listed differs", () => {
