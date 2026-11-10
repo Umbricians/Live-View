@@ -1,0 +1,42 @@
+{
+  "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json",
+  "Title": "Umbricians Live View",
+  "Description": "A real-time Live View dashboard for the Umbraco Settings section, charting active web, MCP and API sessions plus any custom metric you plug in.",
+  "Category": "Analytics & Insights",
+  "Tags": ["dashboard", "analytics", "realtime"],
+  "PackageType": "Package",
+  "LicenseTypes": ["Free"],
+  "DocumentationUrl": "https://github.com/Umbricians/Live-View/blob/main/docs/getting-started.md",
+  "IssueTrackerUrl": "https://github.com/Umbricians/Live-View/issues",
+  "Screenshots": [
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/Umbricians/Live-View/main/docs/images/live-view-dashboard.png",
+      "Caption": "The Live View dashboard: session counts per channel, a live chart of members logging in and out, and the online tables"
+    },
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/Umbricians/Live-View/main/docs/images/live-view-members-online.png",
+      "Caption": "The Members online table: members with pictures or initials, tagged Website, MCP or both"
+    },
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/Umbricians/Live-View/main/docs/images/live-view-message-members.png",
+      "Caption": "The Message members slide-out with Relevant for set to Midnight tonight and the time it stops being shown"
+    },
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/Umbricians/Live-View/main/docs/images/live-view-message-custom.png",
+      "Caption": "Relevant for set to Custom… with 2 hours 30 minutes, and the line saying when the message stops being shown"
+    },
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/Umbricians/Live-View/main/docs/images/live-view-send-message.png",
+      "Caption": "The Send message slide-out with a headline, type and message for the selected backoffice users"
+    },
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/Umbricians/Live-View/main/docs/images/live-view-notification.png",
+      "Caption": "The message shown as a warning notification in another editor's backoffice, signed by the sender"
+    }
+  ],
+  "AuthorDetails": {
+    "Name": "Umbricians",
+    "Url": "https://github.com/Umbricians",
+    "SyncContributorsFromRepository": true
+  }
+}
