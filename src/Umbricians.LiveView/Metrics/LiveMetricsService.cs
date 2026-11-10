@@ -9,7 +9,7 @@ namespace Umbricians.LiveView.Metrics;
 internal sealed record LiveMetricReading(string Alias, string Name, string? Color, double? Value, string? Error);
 
 /// <summary>
-/// Takes a snapshot of every enabled tracked channel and registered <see cref="ILiveMetricProvider"/>.
+/// Takes a snapshot of every enabled channel and metric provider line.
 /// </summary>
 internal sealed class LiveMetricsService
 {
@@ -40,28 +40,34 @@ internal sealed class LiveMetricsService
 
     public async Task<IReadOnlyList<LiveMetricReading>> GetSnapshotAsync(CancellationToken cancellationToken)
     {
-        var channels = ChannelSettings.InOrder(_options.CurrentValue)
-            .Where(c => c.Enabled)
-            .Select(c => (Order: c.SortOrder, Reading: new LiveMetricReading(c.Alias, c.Name, c.Color, CountActive(c.Alias), null)));
+        LiveViewOptions options = _options.CurrentValue;
+        var channels = new List<(int Order, LiveMetricReading Reading)>();
+        foreach (ChannelSettings c in ChannelSettings.InOrder(options, _providers).Where(c => c.Enabled))
+        {
+            channels.Add((c.SortOrder, new LiveMetricReading(c.Alias, c.Name, c.Color, await CountActiveAsync(c.Alias), null)));
+        }
 
-        var providers = await Task.WhenAll(_providers.Select(async p =>
-            (Order: p.SortOrder, Reading: await ReadAsync(p, cancellationToken))));
+        // A provider whose line is switched off is not asked for its value.
+        var lines = await Task.WhenAll(_providers
+            .Select(p => (Provider: p, Line: ChannelSettings.Of(options, p)))
+            .Where(l => l.Line.Enabled)
+            .Select(async l => (Order: l.Line.SortOrder, Reading: await ReadAsync(l.Provider, l.Line, cancellationToken))));
 
-        return channels.Concat(providers)
+        return channels.Concat(lines)
             .OrderBy(r => r.Order)
             .Select(r => r.Reading)
             .ToList();
     }
 
     // The members and backoffice users lines come from their presence modules, the same sources as their tables.
-    private int CountActive(string channel) => channel switch
+    private async Task<int> CountActiveAsync(string channel) => channel switch
     {
-        Constants.Channels.Members => _memberPresence.CountOnline(),
-        Constants.Channels.Backoffice => _backofficePresence.CountOnline(),
-        _ => _tracker.CountActive(channel),
+        Constants.Channels.Members => await _memberPresence.CountOnlineAsync(),
+        Constants.Channels.Backoffice => await _backofficePresence.CountOnlineAsync(),
+        _ => await _tracker.CountActiveAsync(channel),
     };
 
-    private async Task<LiveMetricReading> ReadAsync(ILiveMetricProvider provider, CancellationToken cancellationToken)
+    private async Task<LiveMetricReading> ReadAsync(ILiveMetricProvider provider, ChannelSettings line, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(ProviderTimeout);
@@ -69,16 +75,16 @@ internal sealed class LiveMetricsService
         try
         {
             double value = await provider.GetValueAsync(timeout.Token).WaitAsync(timeout.Token);
-            return new LiveMetricReading(provider.Alias, provider.Name, provider.Color, value, null);
+            return new LiveMetricReading(line.Alias, line.Name, line.Color, value, null);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new LiveMetricReading(provider.Alias, provider.Name, provider.Color, null, "Timed out");
+            return new LiveMetricReading(line.Alias, line.Name, line.Color, null, "Timed out");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Live View metric provider {Alias} failed", provider.Alias);
-            return new LiveMetricReading(provider.Alias, provider.Name, provider.Color, null, "Failed");
+            return new LiveMetricReading(line.Alias, line.Name, line.Color, null, "Failed");
         }
     }
 }

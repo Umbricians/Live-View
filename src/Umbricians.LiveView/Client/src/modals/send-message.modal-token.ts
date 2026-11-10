@@ -1,11 +1,11 @@
 import { UmbModalToken } from "@umbraco-cms/backoffice/modal";
+import type { SelectionSummary } from "../dashboards/online-selection.js";
 
 export interface UmbriciansSendMessageModalData {
-  /** Send to everyone online; `count` is how many that is right now. */
-  allOnline: boolean;
-  count: number;
-  /** The picked users, when not sending to everyone online. */
-  recipients: Array<{ key: string; name: string }>;
+  /** Who is picked in the users table. */
+  selection: SelectionSummary;
+  /** How many users a message to everyone online reaches right now. */
+  onlineCount: number;
 }
 
 export interface UmbriciansSendMessageModalValue {

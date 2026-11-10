@@ -11,6 +11,7 @@ using Umbricians.LiveView.Controllers;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Metrics;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 using Umbricians.LiveView.Security;
 using Umbricians.LiveView.Tracking;
 
@@ -51,7 +52,7 @@ public class DashboardSettingsTests
             Describe(controller.GetMethod(nameof(LiveViewApiController.DashboardSettings))!));
 
         Assert.Contains(controller.GetCustomAttributes<AuthorizeAttribute>(),
-            a => a.Policy == AuthorizationPolicies.SectionAccessSettings);
+            a => a.Policy == AuthorizationPolicies.BackOfficeAccess);
         Assert.Contains(controller.GetCustomAttributes<LiveViewPermissionAttribute>(),
             a => a.Arguments!.SequenceEqual([Constants.Permissions.View]));
     }
@@ -79,14 +80,23 @@ public class DashboardSettingsTests
         LiveViewComposer.AddOptions(services, config);
         IOptionsMonitor<LiveViewOptions> options = services.BuildServiceProvider().GetRequiredService<IOptionsMonitor<LiveViewOptions>>();
 
-        var backoffice = new BackofficePresence(new InMemoryBackofficeUserDirectory(), options, TimeProvider.System);
-        var members = new MemberPresence(new InMemoryMemberDirectory(), options, TimeProvider.System);
-        var tracker = new LiveActivityTracker(options, TimeProvider.System);
+        var store = new InMemoryActivityStore(options);
+        var users = new InMemoryBackofficeUserDirectory();
+        var backoffice = new BackofficePresence(store, users, options, TimeProvider.System);
+        var members = new MemberPresence(store, new InMemoryMemberDirectory(), options, TimeProvider.System);
+        var tracker = new LiveActivityTracker(store, options, TimeProvider.System);
         return new LiveViewApiController(
             new LiveMetricsService(tracker, backoffice, members, [], options, NullLogger<LiveMetricsService>.Instance),
             backoffice,
             members,
-            new BackofficeMessenger(new NullServerEventRouter(), backoffice, options, TimeProvider.System),
+            new BackofficeMessenger(
+                new NullServerEventRouter(),
+                backoffice,
+                users,
+                new InMemoryBackofficeMessageStore(TimeProvider.System),
+                new RecordingEventAggregator(),
+                options,
+                TimeProvider.System),
             new NoBackOfficeSecurityAccessor(),
             options);
     }

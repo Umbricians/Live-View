@@ -8,6 +8,7 @@ using Umbraco.Cms.Core.ServerEvents;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 using Umbricians.LiveView.Tracking;
 
 namespace Umbricians.LiveView.Tests.Presence;
@@ -32,10 +33,11 @@ public class McpPresenceTests
             SessionKeys = [Constants.SessionKeySources.HeaderPrefix + "Mcp-Session-Id", Constants.SessionKeySources.Client],
         };
         var options = new StaticOptionsMonitor<LiveViewOptions>(liveViewOptions);
-        _backoffice = new BackofficePresence(_users, options, _clock);
-        _memberPresence = new MemberPresence(_members, options, _clock);
+        var store = new InMemoryActivityStore(options);
+        _backoffice = new BackofficePresence(store, _users, options, _clock);
+        _memberPresence = new MemberPresence(store, _members, options, _clock);
         _callers = new McpCallers(_backoffice, _memberPresence, _users, _members, _clock, NullLogger<McpCallers>.Instance);
-        _middleware = new LiveActivityMiddleware(new RequestClassifier(options), new NoTracker(), _backoffice, _memberPresence, _callers);
+        _middleware = new LiveActivityMiddleware(new RequestClassifier(options, [], []), new NoTracker(), _backoffice, _memberPresence, _callers, new UnforwardedProxyDetector());
     }
 
     [Fact]
@@ -50,18 +52,18 @@ public class McpPresenceTests
         Assert.Equal(1, total);
         Assert.Null(row.WebsiteLastSeen);
         Assert.Equal(_clock.GetUtcNow(), row.McpLastSeen);
-        Assert.True(_memberPresence.AnyOnMcp());
-        Assert.Equal(0, _backoffice.CountOnline());
+        Assert.True(await _memberPresence.AnyOnMcpAsync());
+        Assert.Equal(0, await _backoffice.CountOnlineAsync());
     }
 
     [Fact]
     public async Task Nobody_on_mcp_means_the_table_needs_no_labels()
     {
         Guid alice = _members.Add(1, "Alice");
-        _memberPresence.Seen(SignedInWithKey(alice));
+        await _memberPresence.SeenAsync(SignedInWithKey(alice));
 
-        Assert.False(_memberPresence.AnyOnMcp());
-        Assert.False(_backoffice.AnyOnMcp());
+        Assert.False(await _memberPresence.AnyOnMcpAsync());
+        Assert.False(await _backoffice.AnyOnMcpAsync());
     }
 
     [Fact]
@@ -71,7 +73,7 @@ public class McpPresenceTests
 
         await CallMcp(new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "42")], "Test")));
 
-        Assert.Equal([alice], _memberPresence.AllOnline());
+        Assert.Equal([alice], await _memberPresence.AllOnlineAsync());
     }
 
     [Fact]
@@ -79,10 +81,10 @@ public class McpPresenceTests
     {
         Guid alice = _members.Add(1, "Alice");
         Guid bob = _members.Add(2, "Bob");
-        _memberPresence.Seen(SignedInWithKey(alice));
+        await _memberPresence.SeenAsync(SignedInWithKey(alice));
         DateTimeOffset onWebsite = _clock.GetUtcNow();
         _clock.Advance(TimeSpan.FromSeconds(10));
-        _memberPresence.Seen(SignedInWithKey(bob));
+        await _memberPresence.SeenAsync(SignedInWithKey(bob));
         _clock.Advance(TimeSpan.FromSeconds(10));
 
         await CallMcp(SignedInWithKey(alice));
@@ -94,17 +96,17 @@ public class McpPresenceTests
         Assert.Equal(onWebsite, row.WebsiteLastSeen);
         Assert.Equal(_clock.GetUtcNow(), row.McpLastSeen);
         Assert.Equal(_clock.GetUtcNow(), row.LastSeen);
-        Assert.Equal(2, _memberPresence.CountOnline());
+        Assert.Equal(2, await _memberPresence.CountOnlineAsync());
     }
 
     [Fact]
     public async Task Signing_out_of_the_website_leaves_the_mcp_row()
     {
         Guid alice = _members.Add(1, "Alice");
-        _memberPresence.Seen(SignedInWithKey(alice));
+        await _memberPresence.SeenAsync(SignedInWithKey(alice));
         await CallMcp(SignedInWithKey(alice));
 
-        _memberPresence.SignedOut(alice);
+        await _memberPresence.SignedOutAsync(alice);
 
         (_, IReadOnlyList<OnlineMember> page) = await _memberPresence.PageAsync(0, 10);
         OnlineMember row = Assert.Single(page);
@@ -117,7 +119,7 @@ public class McpPresenceTests
     {
         Guid alice = _users.Add("Alice");
         Guid bob = _users.Add("Bob");
-        _backoffice.Seen(SignedInWithKey(bob));
+        await _backoffice.SeenAsync(SignedInWithKey(bob));
 
         await CallMcp(SignedInWithKey(alice));
 
@@ -130,12 +132,18 @@ public class McpPresenceTests
         OnlineBackofficeUser inBackoffice = page.Single(u => u.Key == bob);
         Assert.NotNull(inBackoffice.BackofficeLastSeen);
         Assert.Null(inBackoffice.McpLastSeen);
-        Assert.Equal(2, _backoffice.CountOnline());
-        Assert.Equal([bob], _backoffice.AllInBackoffice());
+        Assert.Equal(2, await _backoffice.CountOnlineAsync());
+        Assert.Equal([bob], await _backoffice.AllInBackofficeAsync());
 
         var messenger = new BackofficeMessenger(
-            new NoServerEvents(), _backoffice, new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions()), _clock);
-        Assert.Equal(1, messenger.CountAllOnlineRecipients(senderKey: null));
+            new NoServerEvents(),
+            _backoffice,
+            _users,
+            new InMemoryBackofficeMessageStore(_clock),
+            new RecordingEventAggregator(),
+            new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions()),
+            _clock);
+        Assert.Equal(1, await messenger.CountAllOnlineRecipientsAsync(senderKey: null));
     }
 
     [Fact]
@@ -147,8 +155,8 @@ public class McpPresenceTests
 
         await CallMcp(SignedInWithKey(key));
 
-        Assert.Equal([key], _backoffice.AllOnline());
-        Assert.Empty(_memberPresence.AllOnline());
+        Assert.Equal([key], await _backoffice.AllOnlineAsync());
+        Assert.Empty(await _memberPresence.AllOnlineAsync());
     }
 
     [Fact]
@@ -157,8 +165,8 @@ public class McpPresenceTests
         await CallMcp(new ClaimsPrincipal(new ClaimsIdentity()));
         await CallMcp(SignedInWithKey(Guid.NewGuid()));
 
-        Assert.Equal(0, _backoffice.CountOnline());
-        Assert.Equal(0, _memberPresence.CountOnline());
+        Assert.Equal(0, await _backoffice.CountOnlineAsync());
+        Assert.Equal(0, await _memberPresence.CountOnlineAsync());
     }
 
     [Fact]
@@ -188,7 +196,7 @@ public class McpPresenceTests
         });
 
         // Listed as soon as the stream starts, and still listed, as active now, long after the window while it stays open.
-        Assert.Equal([alice], _memberPresence.AllOnline());
+        Assert.Equal([alice], await _memberPresence.AllOnlineAsync());
         _clock.Advance(TimeSpan.FromMinutes(30));
         (_, IReadOnlyList<OnlineMember> page) = await _memberPresence.PageAsync(0, 10);
         Assert.Equal(_clock.GetUtcNow(), Assert.Single(page).McpLastSeen);
@@ -196,9 +204,9 @@ public class McpPresenceTests
         stream.SetResult();
         await request;
         _clock.Advance(TimeSpan.FromSeconds(299));
-        Assert.Equal([alice], _memberPresence.AllOnline());
+        Assert.Equal([alice], await _memberPresence.AllOnlineAsync());
         _clock.Advance(TimeSpan.FromSeconds(2));
-        Assert.Empty(_memberPresence.AllOnline());
+        Assert.Empty(await _memberPresence.AllOnlineAsync());
     }
 
     [Fact]
@@ -214,7 +222,7 @@ public class McpPresenceTests
         }));
 
         _clock.Advance(TimeSpan.FromSeconds(301));
-        Assert.Empty(_memberPresence.AllOnline());
+        Assert.Empty(await _memberPresence.AllOnlineAsync());
     }
 
     [Fact]
@@ -228,7 +236,7 @@ public class McpPresenceTests
         _clock.Advance(TimeSpan.FromSeconds(301));
 
         // Starting the response after the request finished must not leave a stream open forever.
-        Assert.Empty(_memberPresence.AllOnline());
+        Assert.Empty(await _memberPresence.AllOnlineAsync());
     }
 
     [Fact]
@@ -238,7 +246,7 @@ public class McpPresenceTests
 
         await CallMcp(SignedInWithKey(alice), path: "/umbraco/delivery/api/v2/content");
 
-        Assert.Empty(_memberPresence.AllOnline());
+        Assert.Empty(await _memberPresence.AllOnlineAsync());
     }
 
     [Fact]
@@ -254,11 +262,11 @@ public class McpPresenceTests
 
         (_, IReadOnlyList<OnlineMember> members) = await _memberPresence.PageAsync(0, 10);
         Assert.NotNull(Assert.Single(members).McpLastSeen);
-        Assert.Equal([bob], _backoffice.AllOnline());
+        Assert.Equal([bob], await _backoffice.AllOnlineAsync());
 
         _clock.Advance(TimeSpan.FromSeconds(301));
-        Assert.Equal(0, _memberPresence.CountOnline());
-        Assert.Equal(0, _backoffice.CountOnline());
+        Assert.Equal(0, await _memberPresence.CountOnlineAsync());
+        Assert.Equal(0, await _backoffice.CountOnlineAsync());
     }
 
     private Task CallMcp(
@@ -298,23 +306,18 @@ public class McpPresenceTests
 
     private sealed class NoTracker : ILiveActivityTracker
     {
-        public IDisposable BeginActivity(string channel, string sessionKey) => new Nothing();
+        public Task<IAsyncDisposable> BeginActivityAsync(string channel, string sessionKey) =>
+            Task.FromResult<IAsyncDisposable>(new Nothing());
 
-        public void Touch(string channel, string sessionKey)
+        public Task TouchAsync(string channel, string sessionKey) => Task.CompletedTask;
+
+        public Task EndAsync(string channel, string sessionKey) => Task.CompletedTask;
+
+        public Task<int> CountActiveAsync(string channel) => Task.FromResult(0);
+
+        private sealed class Nothing : IAsyncDisposable
         {
-        }
-
-        public void End(string channel, string sessionKey)
-        {
-        }
-
-        public int CountActive(string channel) => 0;
-
-        private sealed class Nothing : IDisposable
-        {
-            public void Dispose()
-            {
-            }
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
     }
 

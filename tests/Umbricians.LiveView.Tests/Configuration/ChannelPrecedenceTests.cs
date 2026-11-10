@@ -83,6 +83,23 @@ public class ChannelPrecedenceTests
         Assert.Null(signalr.PathPrefixes);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_request_predicate_set_in_code_is_kept_beside_hosts_from_appsettings(bool packageFirst)
+    {
+        Func<Microsoft.AspNetCore.Http.HttpContext, bool> predicate = _ => true;
+
+        LiveViewOptions options = Build(
+            packageFirst,
+            appsettings: new() { [$"{Constants.ConfigurationSection}:Channels:app:Hosts:0"] = "brand-a.com" },
+            builder => builder.AddLiveViewChannel("app", "App", c => c.RequestPredicate = predicate));
+
+        LiveViewChannelOptions app = options.Channels["app"];
+        Assert.Same(predicate, app.RequestPredicate);
+        Assert.Equal(["brand-a.com"], app.Hosts!);
+    }
+
     [Fact]
     public void The_first_code_declaration_of_a_channel_wins()
     {

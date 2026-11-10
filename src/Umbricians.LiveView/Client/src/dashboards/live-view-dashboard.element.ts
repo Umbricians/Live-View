@@ -1,310 +1,78 @@
-import { LitElement, css, html, customElement, state, query, repeat, nothing } from "@umbraco-cms/backoffice/external/lit";
+import { LitElement, css, html, customElement, state } from "@umbraco-cms/backoffice/external/lit";
 import { UmbElementMixin } from "@umbraco-cms/backoffice/element-api";
 import type { UUISelectEvent } from "@umbraco-cms/backoffice/external/uui";
-import {
-  CategoryScale,
-  Chart,
-  Legend,
-  LineController,
-  LineElement,
-  LinearScale,
-  PointElement,
-  Tooltip,
-  type ChartDataset,
-} from "chart.js";
-import { color } from "chart.js/helpers";
 import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
-import { UMB_CURRENT_USER_CONTEXT } from "@umbraco-cms/backoffice/current-user";
-import {
-  LIVE_VIEW_PERMISSION_MESSAGE_MEMBERS,
-  LIVE_VIEW_PERMISSION_MESSAGE_USERS,
-} from "../permissions/constants.js";
 import { umbOpenModal } from "@umbraco-cms/backoffice/modal";
 import { UMBRICIANS_SEND_MESSAGE_MODAL } from "../modals/send-message.modal-token.js";
 import { UMBRICIANS_SEND_MEMBER_MESSAGE_MODAL } from "../modals/send-member-message.modal-token.js";
-import {
-  fetchDashboardSettings,
-  fetchMemberMessaging,
-  fetchSnapshot,
-  type DashboardSettings,
-  type LiveMetricReading,
-  type MemberMessaging,
-} from "../api/live-view.resource.js";
-import type { UmbriciansLiveViewUsersElement } from "./live-view-users.element.js";
-import type { UmbriciansLiveViewMembersElement } from "./live-view-members.element.js";
+import type { DashboardSettings, MemberMessaging } from "../api/live-view.resource.js";
+import { LIVE_VIEW_PANEL_TYPE } from "./constants.js";
+import { LiveViewDashboardContext } from "./live-view-dashboard.context.js";
+import type { OnlineTableSelection } from "./online-selection.js";
+// Loaded with the dashboard so the built-in panels appear together.
+import "./live-view-activity.element.js";
 import "./live-view-users.element.js";
 import "./live-view-members.element.js";
 import { plural } from "../utils/format.js";
-import { offeredInterval } from "./refresh-interval.js";
 
-Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend);
-
-const STORAGE_KEY = "umbricians.liveView.interval";
-const FALLBACK_COLORS = ["#3544b1", "#f79c37", "#2bc37c", "#d42054", "#8b5cf6", "#0ea5e9", "#a16207"];
-
-/** The package defaults, used only if the site's settings can't be read. */
-const FALLBACK_SETTINGS: DashboardSettings = {
-  refreshIntervals: [2, 5, 10, 15, 30],
-  defaultRefreshInterval: 5,
-  maxReadings: 120,
-};
-
-type LineDataset = ChartDataset<"line", Array<number | null>> & { alias?: string };
-
+/**
+ * The dashboard: a header with the refresh controls, the panels, and a footer with the message actions. What the
+ * panels share lives in the dashboard context it provides.
+ */
 @customElement("umbricians-live-view-dashboard")
 export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitElement) {
+  /** The site's dashboard settings; the panels aren't shown until they are read. */
   @state() private _settings?: DashboardSettings;
-  /** In seconds; set with the settings, before anything polls. */
-  @state() private _interval = 0;
+  @state() private _interval = 5;
   @state() private _paused = false;
-  @state() private _metrics: Array<LiveMetricReading> = [];
   @state() private _lastUpdated?: Date;
   @state() private _error?: string;
-  /** Aliases of the lines switched off from their tile or legend entry, for this visit. */
-  @state() private _hidden = new Set<string>();
-
-  @state() private _selectedCount = 0;
 
   /** The current user's Live View messaging permissions, from their user groups. */
   @state() private _canMessageUsers = false;
   @state() private _canMessageMembers = false;
-  @state() private _selectedMembers = 0;
 
   /** The site's member message senders; member messaging is offered only when there is at least one. */
   @state() private _memberMessaging?: MemberMessaging;
 
-  @query("canvas") private _canvas!: HTMLCanvasElement;
-  @query("umbricians-live-view-users") private _users?: UmbriciansLiveViewUsersElement;
-  @query("umbricians-live-view-members") private _members?: UmbriciansLiveViewMembersElement;
+  /** Who is picked in each table, while its panel is shown. */
+  @state() private _usersSelection?: OnlineTableSelection;
+  @state() private _membersSelection?: OnlineTableSelection;
 
-  #chart?: Chart<"line", Array<number | null>, string>;
-  #timer?: number;
-  #abort?: AbortController;
+  #context: LiveViewDashboardContext;
   #notifications?: typeof UMB_NOTIFICATION_CONTEXT.TYPE;
 
   constructor() {
     super();
+    this.#context = new LiveViewDashboardContext(this);
     this.consumeContext(UMB_NOTIFICATION_CONTEXT, (context) => (this.#notifications = context));
-    this.consumeContext(UMB_CURRENT_USER_CONTEXT, (context) => {
-      this.observe(context?.fallbackPermissions, (permissions) => {
-        this._canMessageUsers = permissions?.includes(LIVE_VIEW_PERMISSION_MESSAGE_USERS) ?? false;
-        this._canMessageMembers = permissions?.includes(LIVE_VIEW_PERMISSION_MESSAGE_MEMBERS) ?? false;
-      });
-    });
-  }
 
-  override connectedCallback() {
-    super.connectedCallback();
-    this.#start();
-    fetchMemberMessaging()
-      .then((messaging) => (this._memberMessaging = messaging))
-      .catch(() => (this._memberMessaging = undefined));
-  }
-
-  override disconnectedCallback() {
-    super.disconnectedCallback();
-    this.#stop();
-    this.#chart?.destroy();
-    this.#chart = undefined;
-  }
-
-  override firstUpdated() {
-    const styles = getComputedStyle(this);
-    const text = styles.getPropertyValue("--uui-color-text").trim() || "#1b264f";
-    const grid = styles.getPropertyValue("--uui-color-divider").trim() || "#e9e9eb";
-
-    this.#chart = new Chart(this._canvas, {
-      type: "line",
-      data: { labels: [], datasets: [] },
-      options: {
-        animation: false,
-        maintainAspectRatio: false,
-        interaction: { mode: "index", intersect: false },
-        elements: { point: { radius: 0, hoverRadius: 4 }, line: { cubicInterpolationMode: "monotone", borderWidth: 2 } },
-        scales: {
-          x: { ticks: { color: text, maxTicksLimit: 8, maxRotation: 0 }, grid: { color: grid } },
-          y: { beginAtZero: true, ticks: { color: text, precision: 0 }, grid: { color: grid } },
-        },
-        plugins: {
-          legend: {
-            position: "bottom",
-            // A legend click switches a line off like its tile does, and a switched-off entry fades like its tile
-            // instead of being struck through.
-            labels: {
-              color: text,
-              usePointStyle: true,
-              generateLabels: (chart) =>
-                Chart.defaults.plugins.legend.labels.generateLabels(chart).map((item) =>
-                  item.hidden
-                    ? {
-                        ...item,
-                        hidden: false,
-                        fontColor: faded(text),
-                        fillStyle: faded(item.fillStyle),
-                        strokeStyle: faded(item.strokeStyle),
-                      }
-                    : item,
-                ),
-            },
-            onClick: (_event, item) => {
-              const alias = (this.#chart?.data.datasets[item.datasetIndex!] as LineDataset | undefined)?.alias;
-              if (alias) this.#toggleLine(alias);
-            },
-          },
-        },
-      },
-    });
-  }
-
-  /** Reads the site's dashboard settings, then starts polling at the remembered interval if it is still offered. */
-  async #start() {
-    let settings = FALLBACK_SETTINGS;
-    let failed = false;
-    try {
-      settings = await fetchDashboardSettings();
-    } catch {
-      failed = true;
-    }
-    if (!this.isConnected) return;
-    if (failed) {
-      this.#notifications?.peek("warning", {
-        data: {
-          headline: "Dashboard settings not loaded",
-          message:
-            "Live View couldn't read this site's dashboard settings, so it is using the built-in refresh choices and chart length.",
-        },
-      });
-    }
-    this._settings = settings;
-    this._interval = offeredInterval(readStoredInterval(), settings.refreshIntervals, settings.defaultRefreshInterval);
-    this.#schedule(0);
-  }
-
-  #schedule(delayMs: number) {
-    window.clearTimeout(this.#timer);
-    if (this._paused || !this._settings) return;
-    this.#timer = window.setTimeout(() => this.#poll(), delayMs);
-  }
-
-  #stop() {
-    window.clearTimeout(this.#timer);
-    this.#abort?.abort();
-  }
-
-  async #poll() {
-    this.#abort = new AbortController();
-    try {
-      const snapshot = await fetchSnapshot(this.#abort.signal);
-      this._metrics = snapshot.metrics;
-      this._lastUpdated = new Date(snapshot.timestamp);
-      this._error = undefined;
-      this.#append(this._lastUpdated, snapshot.metrics);
-    } catch (error) {
-      if (this.#abort.signal.aborted) return;
-      this._error = error instanceof Error ? error.message : String(error);
-    }
-    // Scheduled after the response, so slow responses never stack up.
-    this.#schedule(this._interval * 1000);
-  }
-
-  #append(timestamp: Date, metrics: Array<LiveMetricReading>) {
-    const chart = this.#chart;
-    const maxReadings = this._settings?.maxReadings;
-    if (!chart || !maxReadings) return;
-
-    const labels = chart.data.labels!;
-    const datasets = chart.data.datasets as Array<LineDataset>;
-
-    for (const metric of metrics) {
-      if (datasets.some((d) => d.alias === metric.alias)) continue;
-      const color = this.#colorFor(metric, datasets.length);
-      // Back-fill with gaps so a line that appears later still lines up with the timeline.
-      datasets.push({
-        alias: metric.alias,
-        label: metric.name,
-        data: labels.map(() => null),
-        borderColor: color,
-        backgroundColor: color,
-        spanGaps: false,
-        hidden: this._hidden.has(metric.alias),
-      });
-    }
-
-    labels.push(timestamp.toLocaleTimeString());
-    for (const dataset of datasets) {
-      dataset.data.push(metrics.find((m) => m.alias === dataset.alias)?.value ?? null);
-    }
-
-    if (labels.length > maxReadings) {
-      labels.splice(0, labels.length - maxReadings);
-      for (const dataset of datasets) dataset.data.splice(0, dataset.data.length - maxReadings);
-    }
-
-    chart.update("none");
-  }
-
-  /** Switches a line off or back on: the line leaves the chart, and its tile and legend entry fade. */
-  #toggleLine(alias: string) {
-    const hidden = new Set(this._hidden);
-    if (!hidden.delete(alias)) hidden.add(alias);
-    this._hidden = hidden;
-
-    const chart = this.#chart;
-    if (!chart) return;
-    for (const dataset of chart.data.datasets as Array<LineDataset>) {
-      dataset.hidden = dataset.alias !== undefined && hidden.has(dataset.alias);
-    }
-    chart.update("none");
-  }
-
-  #colorFor(metric: LiveMetricReading, index: number) {
-    return metric.color || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+    const context = this.#context;
+    this.observe(context.settings, (settings) => (this._settings = settings));
+    this.observe(context.interval,(interval) => (this._interval = interval));
+    this.observe(context.paused, (paused) => (this._paused = paused));
+    this.observe(context.error, (error) => (this._error = error));
+    this.observe(context.snapshot, (snapshot) => (this._lastUpdated = snapshot ? new Date(snapshot.timestamp) : undefined));
+    this.observe(context.canMessageUsers, (can) => (this._canMessageUsers = can));
+    this.observe(context.canMessageMembers, (can) => (this._canMessageMembers = can));
+    this.observe(context.memberMessaging, (messaging) => (this._memberMessaging = messaging));
+    this.observe(context.usersSelection, (selection) => (this._usersSelection = selection));
+    this.observe(context.membersSelection, (selection) => (this._membersSelection = selection));
   }
 
   #onIntervalChange(event: UUISelectEvent) {
-    const settings = this._settings;
-    if (!settings) return;
-    this._interval = offeredInterval(String(event.target.value), settings.refreshIntervals, settings.defaultRefreshInterval);
-    try {
-      localStorage.setItem(STORAGE_KEY, String(this._interval));
-    } catch {
-      // Storage may be unavailable (private mode); the choice then lasts for this visit only.
-    }
-    this.#stop();
-    this.#schedule(0);
-  }
-
-  #togglePaused() {
-    this._paused = !this._paused;
-    if (this._paused) this.#stop();
-    else this.#schedule(0);
-  }
-
-  #clear() {
-    const chart = this.#chart;
-    if (!chart) return;
-    chart.data.labels = [];
-    chart.data.datasets = [];
-    chart.update("none");
-  }
-
-  #onUsersChange() {
-    this._selectedCount = this._users?.selection.count ?? 0;
-  }
-
-  #onMembersChange() {
-    this._selectedMembers = this._members?.selection.count ?? 0;
+    this.#context.setRefreshInterval(Number(event.target.value));
   }
 
   async #openSendMemberMessage() {
-    const members = this._members;
+    const members = this._membersSelection;
     const messaging = this._memberMessaging;
     if (!members || !messaging?.senders.length) return;
 
     try {
       const result = await umbOpenModal(this, UMBRICIANS_SEND_MEMBER_MESSAGE_MODAL, {
         data: {
-          selection: members.selection,
+          selection: members.summary,
           onlineCount: members.onlineCount,
           totalMembers: messaging.totalMembers,
           senders: messaging.senders,
@@ -322,36 +90,39 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
       this.#notifications?.peek(failed.length ? "warning" : "positive", {
         data: { headline: failed.length ? "Message partly sent" : "Message sent to members", message: summary },
       });
-      members.clearSelection();
+      members.clear();
     } catch {
       // Closed without sending.
     }
   }
 
   async #openSendMessage() {
-    const users = this._users;
-    const selection = users?.selection;
-    if (!users || !selection || selection.count === 0) return;
+    const users = this._usersSelection;
+    if (!users) return;
+    const selection = users.summary;
 
     try {
       const { sentTo } = await umbOpenModal(this, UMBRICIANS_SEND_MESSAGE_MODAL, {
-        data: { allOnline: selection.allOnline, count: selection.count, recipients: selection.people },
+        data: { selection, onlineCount: users.recipients },
       });
       this.#notifications?.peek("positive", {
         data: { headline: "Message sent", message: `Sent to ${sentTo} ${sentTo === 1 ? "user" : "users"}.` },
       });
-      users.clearSelection();
+      users.clear();
     } catch {
       // Closed without sending.
     }
   }
 
   override render() {
-    const selected = this._selectedCount;
-    const selectedMembers = this._selectedMembers;
-    const canMessageUsers = this._canMessageUsers;
-    // Members can be messaged only with the permission and at least one delivery method set up by a developer.
-    const canMessageMembers = this._canMessageMembers && (this._memberMessaging?.senders.length ?? 0) > 0;
+    const users = this._usersSelection;
+    const members = this._membersSelection;
+    // A message action is offered only while its panel is shown. Members can be messaged only with the permission
+    // and at least one delivery method set up by a developer.
+    const canMessageUsers = this._canMessageUsers && users !== undefined;
+    const canMessageMembers = this._canMessageMembers && members !== undefined;
+    const selected = users?.summary.count ?? 0;
+    const selectedMembers = members?.summary.count ?? 0;
     const hint = canMessageUsers && canMessageMembers
       ? "Select users or members to message them"
       : canMessageUsers
@@ -380,63 +151,19 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
               look="secondary"
               compact
               label=${this._paused ? "Resume" : "Pause"}
-              @click=${this.#togglePaused}>
+              @click=${() => this.#context.togglePaused()}>
               <uui-icon name=${this._paused ? "icon-play" : "icon-pause"}></uui-icon>
             </uui-button>
-            <uui-button look="secondary" compact label="Clear chart" @click=${this.#clear}>
+            <uui-button look="secondary" compact label="Clear chart" @click=${() => this.#context.clearReadings()}>
               <uui-icon name="icon-trash"></uui-icon>
             </uui-button>
           </div>
         </div>
 
         <div class="content">
-          <uui-box headline="Live activity">
-            <div class="tiles">
-              ${repeat(
-                this._metrics,
-                (m) => m.alias,
-                (m, i) => {
-                  const shown = !this._hidden.has(m.alias);
-                  return html`
-                    <button
-                      type="button"
-                      class="tile"
-                      style="--tile-color: ${this.#colorFor(m, i)}"
-                      aria-pressed=${shown ? "true" : "false"}
-                      title=${[m.error, `${shown ? "Hide" : "Show"} ${m.name} on the chart`].filter(Boolean).join("\n")}
-                      @click=${() => this.#toggleLine(m.alias)}>
-                      <div class="tile-value">${m.value === null ? "–" : formatValue(m.value)}</div>
-                      <div class="tile-label">${m.name}</div>
-                    </button>
-                  `;
-                },
-              )}
-            </div>
-
-            <div class="chart"><canvas></canvas></div>
-            ${this._settings
-              ? html`<p class="muted note">
-                  A live snapshot only: nothing is stored, and the chart keeps the last
-                  ${this._settings.maxReadings} readings while this page is open.
-                </p>`
-              : nothing}
-          </uui-box>
-
           ${this._settings
-            ? html`
-                <umbricians-live-view-users
-                  .interval=${this._interval}
-                  ?paused=${this._paused}
-                  ?selectable=${canMessageUsers}
-                  @change=${this.#onUsersChange}></umbricians-live-view-users>
-
-                <umbricians-live-view-members
-                  .interval=${this._interval}
-                  ?paused=${this._paused}
-                  ?selectable=${canMessageMembers}
-                  @change=${this.#onMembersChange}></umbricians-live-view-members>
-              `
-            : nothing}
+            ? html`<umb-extension-slot type=${LIVE_VIEW_PANEL_TYPE}></umb-extension-slot>`
+            : html`<uui-loader-bar></uui-loader-bar>`}
         </div>
 
         ${canMessageUsers || canMessageMembers
@@ -464,7 +191,6 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
               look="primary"
               color="positive"
               label="Message users…"
-              ?disabled=${selected === 0}
               @click=${this.#openSendMessage}></uui-button>`
           : ""}
       </umb-body-layout>
@@ -477,15 +203,11 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
       height: 100%;
     }
 
-    /* minmax(0, 1fr) and min-width: 0 let the chart canvas shrink again after the window narrows. */
+    /* minmax(0, 1fr) and each panel's min-width: 0 let the chart canvas shrink again after the window narrows. */
     .content {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
       gap: var(--uui-size-layout-1);
-    }
-
-    uui-box {
-      min-width: 0;
     }
 
     .toolbar {
@@ -532,87 +254,10 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
       color: var(--uui-color-danger);
     }
 
-    .tiles {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-      gap: var(--uui-size-space-4);
-      margin-bottom: var(--uui-size-space-5);
-    }
-
-    .tile {
-      min-width: 0;
-      border: none;
-      border-left: 4px solid var(--tile-color);
-      background: var(--uui-color-surface-alt);
-      border-radius: var(--uui-border-radius);
-      padding: var(--uui-size-space-3) var(--uui-size-space-4);
-      color: inherit;
-      font: inherit;
-      text-align: left;
-      cursor: pointer;
-      transition: opacity 120ms ease;
-    }
-
-    .tile:hover {
-      background: var(--uui-color-surface-emphasis);
-    }
-
-    .tile:focus-visible {
-      outline: 2px solid var(--uui-color-focus);
-      outline-offset: 2px;
-    }
-
-    .tile[aria-pressed="false"] {
-      opacity: 0.4;
-    }
-
-    .tile-value {
-      font-size: 1.75rem;
-      font-weight: 700;
-      line-height: 1.2;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .tile-label {
-      color: var(--uui-color-text-alt);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .chart {
-      position: relative;
-      width: 100%;
-      min-width: 0;
-      height: clamp(220px, 40vh, 360px);
-    }
-
-    .note {
-      font-size: var(--uui-type-small-size);
-      margin-bottom: 0;
-    }
-
     .footer-info {
       margin-left: var(--uui-size-layout-1);
     }
   `;
-}
-
-function readStoredInterval(): string | null {
-  try {
-    return localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-/** A legend colour at the same 40% opacity as a switched-off tile. */
-function faded<T>(value: T): T {
-  return typeof value === "string" ? (color(value).alpha(0.4).rgbString() as T) : value;
-}
-
-function formatValue(value: number) {
-  return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 export default UmbriciansLiveViewDashboardElement;

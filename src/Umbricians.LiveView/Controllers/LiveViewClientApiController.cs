@@ -45,7 +45,7 @@ internal class LiveViewClientApiController : ControllerBase
     /// <param name="tab">A random id the tab picks when it loads.</param>
     [HttpGet("heartbeat")]
     [ProducesResponseType<HeartbeatResponseModel>(StatusCodes.Status200OK)]
-    public ActionResult<HeartbeatResponseModel> Heartbeat([FromQuery] string? tab)
+    public async Task<ActionResult<HeartbeatResponseModel>> Heartbeat([FromQuery] string? tab)
     {
         if (_security.BackOfficeSecurity?.CurrentUser?.Key is not { } userKey)
         {
@@ -54,20 +54,20 @@ internal class LiveViewClientApiController : ControllerBase
 
         if (IsValidTabId(tab))
         {
-            _presence.TabHeartbeat(userKey, tab);
+            await _presence.TabHeartbeatAsync(userKey, tab);
         }
 
-        return new HeartbeatResponseModel { PendingMessages = _messenger.GetUndelivered(userKey) };
+        return new HeartbeatResponseModel { PendingMessages = await _messenger.GetUndeliveredAsync(userKey) };
     }
 
     /// <summary>Sent by a tab as it closes, so it stops counting straight away.</summary>
     [HttpDelete("heartbeat")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public IActionResult EndTab([FromQuery] string? tab)
+    public async Task<IActionResult> EndTab([FromQuery] string? tab)
     {
         if (_security.BackOfficeSecurity?.CurrentUser?.Key is { } userKey && IsValidTabId(tab))
         {
-            _presence.TabClosed(userKey, tab);
+            await _presence.TabClosedAsync(userKey, tab);
         }
 
         return NoContent();
@@ -79,10 +79,10 @@ internal class LiveViewClientApiController : ControllerBase
     [HttpGet("messages/{key:guid}")]
     [ProducesResponseType<BackofficeMessage>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<BackofficeMessage> Message(Guid key)
+    public async Task<ActionResult<BackofficeMessage>> Message(Guid key)
     {
         if (_security.BackOfficeSecurity?.CurrentUser?.Key is not { } userKey
-            || _messenger.Receive(key, userKey) is not { } message)
+            || await _messenger.ReceiveAsync(key, userKey) is not { } message)
         {
             return NotFound();
         }

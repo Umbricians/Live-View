@@ -1,4 +1,4 @@
-import { LitElement, css, html, customElement, property, repeat, nothing } from "@umbraco-cms/backoffice/external/lit";
+import { LitElement, css, html, customElement, state, repeat, nothing } from "@umbraco-cms/backoffice/external/lit";
 import { UmbElementMixin } from "@umbraco-cms/backoffice/element-api";
 import { fetchOnlineMembers, type OnlineMember } from "../api/live-view.resource.js";
 import { formatAgo } from "../utils/format.js";
@@ -12,41 +12,55 @@ import {
   renderSelectAllButton,
   renderSelectionBar,
 } from "./online-list.js";
-import type { SelectionSummary } from "./online-selection.js";
+import { LIVE_VIEW_DASHBOARD_CONTEXT } from "./live-view-dashboard.context.js";
 
 /**
  * Lists members online, on the website or MCP, one page at a time, newest arrivals first. When anyone is on MCP,
  * each row says how its member is online. When the site has member message senders, members can be selected, across
  * pages or all at once, and the dashboard sends to them.
- * Fires a change event whenever who the selection reaches changes.
+ * A dashboard panel, which publishes its selection to the dashboard context.
  */
 @customElement("umbricians-live-view-members")
 export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement) {
-  /** Refresh interval in seconds, shared with the chart. */
-  @property({ type: Number }) interval = 5;
-  @property({ type: Boolean }) paused = false;
+  /** Refresh interval in seconds, from the dashboard context. */
+  @state() interval = 5;
+  /** Whether the dashboard is paused, from the dashboard context. Starts paused so nothing is fetched before it arrives. */
+  @state() paused = true;
 
   /** Shows the selection checkboxes; only useful when the site can deliver member messages. */
-  @property({ type: Boolean }) selectable = false;
+  @state() private _selectable = false;
+
+  #context?: typeof LIVE_VIEW_DASHBOARD_CONTEXT.TYPE;
 
   // Every member online can be messaged.
-  #list = new OnlineList<OnlineMember>(this, async (skip, take, signal) => {
-    const page = await fetchOnlineMembers(skip, take, signal);
-    return { ...page, recipients: page.total };
-  });
+  #list = new OnlineList<OnlineMember>(
+    this,
+    async (skip, take, signal) => {
+      const page = await fetchOnlineMembers(skip, take, signal);
+      return { ...page, recipients: page.total };
+    },
+    () => this.#publishSelection(),
+  );
 
-  get selection(): SelectionSummary {
-    return this.#list.summary;
+  constructor() {
+    super();
+    this.consumeContext(LIVE_VIEW_DASHBOARD_CONTEXT, (context) => {
+      this.#context = context;
+      this.observe(context?.interval, (interval) => (this.interval = interval ?? 5));
+      this.observe(context?.paused, (paused) => (this.paused = paused ?? true));
+      this.observe(context?.canMessageMembers, (can) => (this._selectable = can ?? false));
+      this.#publishSelection();
+    });
   }
 
-  /** How many members are online right now. */
-  get onlineCount() {
-    return this.#list.total;
+  #publishSelection() {
+    this.#context?.setMembersSelection(this.#list.tableSelection);
   }
 
-  /** Clears the selection, e.g. after a message has been sent. */
-  clearSelection() {
-    this.#list.clearSelection();
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    // A panel that is no longer shown takes its footer action with it.
+    this.#context?.setMembersSelection(undefined);
   }
 
   override updated(changed: Map<string, unknown>) {
@@ -59,16 +73,16 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
       <uui-box headline="Members online">
         <div slot="header-actions" class="header-actions">
           <span class="muted">${list.total} online</span>
-          ${this.selectable ? renderSelectAllButton(list) : nothing}
+          ${this._selectable ? renderSelectAllButton(list) : nothing}
         </div>
 
         ${list.total === 0
           ? html`<p class="muted">No members are online right now.</p>`
           : html`
-              ${this.selectable ? renderSelectionBar(list, { one: "member", many: "members" }) : nothing}
+              ${this._selectable ? renderSelectionBar(list, { one: "member", many: "members" }) : nothing}
               <uui-table aria-label="Members online">
                 <uui-table-head>
-                  ${this.selectable ? renderPageCheckbox(list) : nothing}
+                  ${this._selectable ? renderPageCheckbox(list) : nothing}
                   <uui-table-head-cell>Name</uui-table-head-cell>
                   <uui-table-head-cell class="type">Member type</uui-table-head-cell>
                   <uui-table-head-cell class="last-seen">Last active</uui-table-head-cell>
@@ -78,7 +92,7 @@ export class UmbriciansLiveViewMembersElement extends UmbElementMixin(LitElement
                   (m) => m.key,
                   (m) => html`
                     <uui-table-row>
-                      ${this.selectable ? renderRowCheckbox(list, m) : nothing}
+                      ${this._selectable ? renderRowCheckbox(list, m) : nothing}
                       <uui-table-cell>
                         <div class="member">
                           <uui-avatar name=${m.name} img-src=${m.avatarUrl ?? nothing}></uui-avatar>

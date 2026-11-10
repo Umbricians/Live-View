@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Selection } from "./online-selection.ts";
+import { Selection, selectionChanged } from "./online-selection.ts";
 
 const ann = { key: "a", name: "Ann" };
 const bob = { key: "b", name: "Bob" };
@@ -37,4 +37,22 @@ test("unticking someone while all online is on picks the rest of their page", ()
 
 test("a page with nobody pickable is never all picked", () => {
   assert.equal(Selection.none.selectAllOnline().pageState([]), "none");
+});
+
+const reach = (allOnline: boolean, count: number, people: typeof page = [], onlineCount = 10, recipients = 10) => ({
+  summary: { allOnline, count, people },
+  onlineCount,
+  recipients,
+});
+
+test("the footer is told when the count, all online, the online total or the number who can be messaged changes", () => {
+  assert.equal(selectionChanged(reach(false, 1), reach(false, 2)), true);
+  assert.equal(selectionChanged(reach(false, 1), reach(true, 1)), true);
+  assert.equal(selectionChanged(reach(false, 1, [], 10), reach(false, 1, [], 11)), true);
+  assert.equal(selectionChanged(reach(false, 1, [], 10, 9), reach(false, 1, [], 10, 10)), true);
+});
+
+test("the footer is not told when only who is listed differs", () => {
+  assert.equal(selectionChanged(reach(false, 1), reach(false, 1)), false);
+  assert.equal(selectionChanged(reach(false, 1, [ann]), reach(false, 1, [bob])), false);
 });

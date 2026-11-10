@@ -74,3 +74,11 @@ public sealed record MemberMessage(
 /// <param name="Delivered">How many members the message was sent or queued for, if the sender knows.</param>
 /// <param name="Note">Shown next to the result on the dashboard, e.g. "queued for their next page view".</param>
 public sealed record MemberMessageResult(int? Delivered, string? Note = null);
+
+/// <summary>What one delivery method did with a member message.</summary>
+/// <param name="Alias">The <see cref="IMemberMessageSender.Alias"/> of the sender.</param>
+/// <param name="Name">The <see cref="IMemberMessageSender.Name"/> of the sender.</param>
+/// <param name="Delivered">The <see cref="MemberMessageResult.Delivered"/> the sender returned, or null if it did not deliver.</param>
+/// <param name="Note">The <see cref="MemberMessageResult.Note"/> the sender returned.</param>
+/// <param name="Error"><c>Failed</c> or <c>Timed out</c> when the sender did not deliver; otherwise null.</param>
+public sealed record MemberMessageSenderResult(string Alias, string Name, int? Delivered, string? Note, string? Error);
