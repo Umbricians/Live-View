@@ -46,10 +46,10 @@ public class DashboardSettingsTests
     [Fact]
     public void Dashboard_settings_needs_the_same_authorization_as_snapshot()
     {
-        Type controller = typeof(LiveViewApiController);
+        Type controller = typeof(DashboardController);
 
-        Assert.Equal(Describe(controller.GetMethod(nameof(LiveViewApiController.Snapshot))!),
-            Describe(controller.GetMethod(nameof(LiveViewApiController.DashboardSettings))!));
+        Assert.Equal(Describe(controller.GetMethod(nameof(DashboardController.Snapshot))!),
+            Describe(controller.GetMethod(nameof(DashboardController.DashboardSettings))!));
 
         Assert.Contains(controller.GetCustomAttributes<AuthorizeAttribute>(),
             a => a.Policy == AuthorizationPolicies.BackOfficeAccess);
@@ -70,7 +70,7 @@ public class DashboardSettingsTests
             .ToList();
 
     /// <summary>The controller over the options the composer registers for the given Live View settings.</summary>
-    private static LiveViewApiController Controller(Dictionary<string, string?> settings)
+    private static DashboardController Controller(Dictionary<string, string?> settings)
     {
         IConfigurationRoot config = new ConfigurationBuilder()
             .AddInMemoryCollection(settings.ToDictionary(p => $"{Constants.ConfigurationSection}:{p.Key}", p => p.Value))
@@ -85,7 +85,7 @@ public class DashboardSettingsTests
         var backoffice = new BackofficePresence(store, users, options, TimeProvider.System);
         var members = new MemberPresence(store, new InMemoryMemberDirectory(), options, TimeProvider.System);
         var tracker = new LiveActivityTracker(store, options, TimeProvider.System);
-        return new LiveViewApiController(
+        return new DashboardController(
             new LiveMetricsService(tracker, backoffice, members, [], options, NullLogger<LiveMetricsService>.Instance),
             backoffice,
             members,

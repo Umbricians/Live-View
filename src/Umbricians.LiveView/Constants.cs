@@ -5,6 +5,11 @@ public static class Constants
     public const string ConfigurationSection = "Umbricians:LiveView";
 
     /// <summary>
+    /// The name of the package's Management API document in the backoffice's Swagger UI.
+    /// </summary>
+    public const string ApiName = "umbricians-live-view";
+
+    /// <summary>
     /// User group permissions, granted in Users → User groups → Permissions → Live View. They are stored with the
     /// group's other permissions; the backoffice registers matching <c>entityUserPermission</c> extensions. The dashboard's API checks these, not
     /// section access.

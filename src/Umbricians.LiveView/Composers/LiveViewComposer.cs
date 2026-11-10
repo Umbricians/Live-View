@@ -13,6 +13,7 @@ using Umbricians.LiveView.Controllers;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Metrics;
+using Umbricians.LiveView.OpenApi;
 using Umbricians.LiveView.Presence;
 using Umbricians.LiveView.Storage;
 using Umbricians.LiveView.Tracking;
@@ -33,8 +34,7 @@ public class LiveViewComposer : IComposer
     {
         AddOptions(builder.Services, builder.Config);
 
-        builder.Services.AddMvcCore().ConfigureApplicationPartManager(parts =>
-            parts.FeatureProviders.Add(new LiveViewControllerFeatureProvider()));
+        AddManagementApi(builder.Services);
         builder.Services.TryAddSingleton(TimeProvider.System);
         AddStores(builder.Services);
         builder.Services.AddSingleton<RequestClassifier>();
@@ -79,6 +79,14 @@ public class LiveViewComposer : IComposer
             {
                 PrePipeline = app => app.UseMiddleware<LiveActivityMiddleware>(),
             }));
+    }
+
+    /// <summary>Makes the internal controllers reachable and gives them their own Swagger document.</summary>
+    internal static void AddManagementApi(IServiceCollection services)
+    {
+        services.AddMvcCore().ConfigureApplicationPartManager(parts =>
+            parts.FeatureProviders.Add(new LiveViewControllerFeatureProvider()));
+        services.ConfigureOptions<LiveViewSwaggerGenOptions>();
     }
 
     // A site's own stores win whichever composer runs first: TryAdd skips ours if one is already there, and a

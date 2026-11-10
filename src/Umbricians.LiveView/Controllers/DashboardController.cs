@@ -1,13 +1,10 @@
 using Asp.Versioning;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using Umbraco.Cms.Api.Common.Filters;
 using Umbraco.Cms.Api.Common.ViewModels.Pagination;
 using Umbraco.Cms.Core.Models.Membership;
 using Umbraco.Cms.Core.Security;
-using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Web.Common.Routing;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging;
@@ -21,14 +18,11 @@ namespace Umbricians.LiveView.Controllers;
 /// The Live View dashboard's API. Authorized by the Live View permissions, not by section access, so the dashboard
 /// works in whichever section its manifest shows it.
 /// </summary>
-[ApiController]
 [ApiVersion("1.0")]
 [ApiExplorerSettings(GroupName = "Live View")]
 [BackOfficeRoute("umbriciansliveview/api/v{version:apiVersion}")]
-[Authorize(Policy = AuthorizationPolicies.BackOfficeAccess)]
 [LiveViewPermission(Constants.Permissions.View)]
-[JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
-internal class LiveViewApiController : ControllerBase
+internal class DashboardController : LiveViewControllerBase
 {
     private const int MaxPageSize = 100;
 
@@ -39,7 +33,7 @@ internal class LiveViewApiController : ControllerBase
     private readonly IBackOfficeSecurityAccessor _security;
     private readonly IOptionsMonitor<LiveViewOptions> _options;
 
-    public LiveViewApiController(
+    public DashboardController(
         LiveMetricsService metrics,
         BackofficePresence presence,
         MemberPresence memberPresence,
