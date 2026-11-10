@@ -25,7 +25,7 @@ type Host = ReactiveControllerHost & HTMLElement & { interval: number; paused: b
 /**
  * One online table's list: the page shown, refreshed every `interval` seconds while not paused, and who is picked in
  * it. Each refresh supersedes the last, so an older response never replaces a newer page. Calls `onChange` when who
- * the selection reaches, or how many are online, changes.
+ * the selection reaches, how many are online, or how many of them can be messaged, changes.
  */
 export class OnlineList<T extends Person> implements ReactiveController {
   items: Array<T> = [];
@@ -69,7 +69,7 @@ export class OnlineList<T extends Person> implements ReactiveController {
 
   /** The selection as the dashboard's footer needs it. */
   get tableSelection(): OnlineTableSelection {
-    return { summary: this.summary, onlineCount: this.total, clear: this.clearSelection };
+    return { summary: this.summary, onlineCount: this.total, recipients: this.recipients, clear: this.clearSelection };
   }
 
   get pages() {

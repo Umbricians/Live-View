@@ -16,19 +16,22 @@ export interface OnlineTableSelection {
   readonly summary: SelectionSummary;
   /** How many people are online in the table. */
   readonly onlineCount: number;
+  /** How many people a message to everyone online reaches right now: the people online who can be messaged. */
+  readonly recipients: number;
   /** Clears the selection, e.g. after a message has been sent. */
   clear(): void;
 }
 
-/** Whether the footer needs telling: who the selection reaches, or how many are online, changed. */
+/** Whether the footer needs telling: who the selection reaches, how many are online, or how many of them can be messaged, changed. */
 export function selectionChanged(
-  before: Pick<OnlineTableSelection, "summary" | "onlineCount">,
-  after: Pick<OnlineTableSelection, "summary" | "onlineCount">,
+  before: Pick<OnlineTableSelection, "summary" | "onlineCount" | "recipients">,
+  after: Pick<OnlineTableSelection, "summary" | "onlineCount" | "recipients">,
 ): boolean {
   return (
     before.summary.allOnline !== after.summary.allOnline ||
     before.summary.count !== after.summary.count ||
-    before.onlineCount !== after.onlineCount
+    before.onlineCount !== after.onlineCount ||
+    before.recipients !== after.recipients
   );
 }
 

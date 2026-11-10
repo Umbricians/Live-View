@@ -96,12 +96,12 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
 
   async #openSendMessage() {
     const users = this._usersSelection;
-    if (!users || users.summary.count === 0) return;
+    if (!users) return;
     const selection = users.summary;
 
     try {
       const { sentTo } = await umbOpenModal(this, UMBRICIANS_SEND_MESSAGE_MODAL, {
-        data: { allOnline: selection.allOnline, count: selection.count, recipients: selection.people },
+        data: { selection, onlineCount: users.recipients },
       });
       this.#notifications?.peek("positive", {
         data: { headline: "Message sent", message: `Sent to ${sentTo} ${sentTo === 1 ? "user" : "users"}.` },
@@ -187,7 +187,6 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
               look="primary"
               color="positive"
               label="Message users…"
-              ?disabled=${selected === 0}
               @click=${this.#openSendMessage}></uui-button>`
           : ""}
       </umb-body-layout>

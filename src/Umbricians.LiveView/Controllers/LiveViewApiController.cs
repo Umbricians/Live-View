@@ -117,16 +117,33 @@ internal class LiveViewApiController : ControllerBase
         return new OnlineMembersResponseModel { Total = total, Items = items, AnyOnMcp = await _memberPresence.AnyOnMcpAsync() };
     }
 
+    /// <summary>
+    /// How many users a message to these user groups would reach right now, as the dialog shows before sending.
+    /// Needs access to the Users section, as choosing user groups does.
+    /// </summary>
+    [HttpGet("message-recipients")]
+    [LiveViewPermission(Constants.Permissions.MessageUsers)]
+    [ProducesResponseType<MessageRecipientsResponseModel>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> MessageRecipients([FromQuery] Guid[] userGroupKeys)
+    {
+        (int recipients, string? rejected) = await _messenger.CountUserGroupRecipientsAsync(
+            userGroupKeys, CurrentSender());
+
+        return rejected is null
+            ? Ok(new MessageRecipientsResponseModel { Recipients = recipients })
+            : MessageNotSent.Because(rejected);
+    }
+
     [HttpPost("messages")]
     [LiveViewPermission(Constants.Permissions.MessageUsers)]
     [ProducesResponseType<SendBackofficeMessageResponseModel>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendMessage(SendBackofficeMessageRequestModel request)
     {
-        IUser? currentUser = _security.BackOfficeSecurity?.CurrentUser;
         BackofficeSendResult result = await _messenger.SendAsync(
-            new BackofficeMessageRequest(request.Headline, request.Message, request.Color, request.UserKeys, request.AllOnline),
-            new BackofficeSender(currentUser?.Key, currentUser?.Name));
+            new BackofficeMessageRequest(request.Headline, request.Message, request.Color, request.UserKeys, request.UserGroupKeys, request.AllOnline),
+            CurrentSender());
 
         return result switch
         {
@@ -134,6 +151,15 @@ internal class LiveViewApiController : ControllerBase
             BackofficeSendResult.Rejected rejected => MessageNotSent.Because(rejected.Reason),
             _ => throw new InvalidOperationException($"Unexpected send result {result.GetType().Name}."),
         };
+    }
+
+    private BackofficeSender CurrentSender()
+    {
+        IUser? user = _security.BackOfficeSecurity?.CurrentUser;
+        return new BackofficeSender(
+            user?.Key,
+            user?.Name,
+            user?.AllowedSections.Contains(Umbraco.Cms.Core.Constants.Applications.Users) == true);
     }
 }
 
@@ -222,6 +248,17 @@ internal class SendBackofficeMessageRequestModel
 
     /// <summary>Send to every backoffice user who is online, ignoring <see cref="UserKeys"/>.</summary>
     public bool AllOnline { get; init; }
+
+    /// <summary>
+    /// Send to everyone online in the backoffice who is in any of these user groups, ignoring <see cref="UserKeys"/>.
+    /// Ignored when <see cref="AllOnline"/> is set. Needs access to the Users section.
+    /// </summary>
+    public Guid[]? UserGroupKeys { get; init; }
+}
+
+internal class MessageRecipientsResponseModel
+{
+    public required int Recipients { get; init; }
 }
 
 internal class SendBackofficeMessageResponseModel

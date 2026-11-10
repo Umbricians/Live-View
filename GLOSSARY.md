@@ -13,8 +13,10 @@ servers.
 
 The module that sends a one-off message to backoffice users. It owns the send rules: the **message content**, who
 **everyone online** means at the moment of sending (users in the backoffice; an MCP caller only on MCP can't see a
-backoffice message), and that the **sender** is never one of the recipients. It also says how many users a message to
-everyone online would reach, so the users table's count and the delivery always agree. Before delivering it publishes a sending notification a site can cancel (the reason comes back as why the message wasn't sent), and afterwards a sent notification. It keeps the messages it sends
+backoffice message), who a message to **user groups** reaches at the moment of sending (everyone online in the
+backoffice in any of the chosen groups, which must all exist), that the **sender** is never one of the
+recipients, and that only a sender with access to the Users section can choose user groups. It also says how many users a message to everyone online, or to chosen user groups, would reach, so the
+counts the dashboard shows and the delivery always agree. Before delivering it publishes a sending notification a site can cancel (the reason comes back as why the message wasn't sent), and afterwards a sent notification. It keeps the messages it sends
 in the **message store**.
 
 ## Backoffice presence

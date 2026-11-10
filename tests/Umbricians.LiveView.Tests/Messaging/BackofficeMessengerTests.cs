@@ -24,11 +24,11 @@ public class BackofficeMessengerTests
     {
         var options = new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions());
         _presence = new BackofficePresence(new InMemoryActivityStore(options), _directory, options, _clock);
-        _messenger = new BackofficeMessenger(_router, _presence, new InMemoryBackofficeMessageStore(_clock), _events, _clock);
+        _messenger = new BackofficeMessenger(_router, _presence, _directory, new InMemoryBackofficeMessageStore(_clock), _events, _clock);
         _me = _directory.Add("Me");
     }
 
-    private BackofficeSender Me => new(_me, "Me");
+    private BackofficeSender Me => new(_me, "Me", CanChooseUserGroups: true);
 
     [Fact]
     public async Task Selected_users_are_each_notified_and_can_fetch_the_message()
@@ -186,10 +186,15 @@ public class BackofficeMessengerTests
         BackofficeSendResult selected = await _messenger.SendAsync(Request(userKeys: [_me]), Me);
         BackofficeSendResult allOnline = await _messenger.SendAsync(Request(allOnline: true), Me);
         BackofficeSendResult nobody = await _messenger.SendAsync(Request(), Me);
+        BackofficeSendResult onlyMeInGroup = await _messenger.SendAsync(
+            Request(userGroupKeys: [_directory.AddUserGroup(_me)]), Me);
+        BackofficeSendResult noGroups = await _messenger.SendAsync(Request(userGroupKeys: []), Me);
 
         Assert.IsType<BackofficeSendResult.Rejected>(selected);
         Assert.IsType<BackofficeSendResult.Rejected>(allOnline);
         Assert.IsType<BackofficeSendResult.Rejected>(nobody);
+        Assert.IsType<BackofficeSendResult.Rejected>(onlyMeInGroup);
+        Assert.IsType<BackofficeSendResult.Rejected>(noGroups);
         Assert.Empty(_router.Notified);
         Assert.Empty(await _messenger.GetUndeliveredAsync(_me));
     }
@@ -274,13 +279,178 @@ public class BackofficeMessengerTests
         Assert.Empty(_events.Published);
     }
 
+    [Fact]
+    public async Task User_groups_mean_everyone_online_in_any_of_them_but_the_sender()
+    {
+        Guid alice = _directory.Add("Alice");
+        Guid bob = _directory.Add("Bob");
+        Guid carol = _directory.Add("Carol");
+        foreach (Guid user in new[] { _me, alice, bob, carol })
+        {
+            await _presence.SeenAsync(SignedIn(user));
+        }
+
+        Guid editors = _directory.AddUserGroup(_me, alice);
+        Guid translators = _directory.AddUserGroup(alice, bob);
+
+        BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(Request(userGroupKeys: [editors, translators]), Me));
+
+        Assert.Equal(2, sent.Recipients);
+        Assert.Equivalent(new[] { alice, bob }, _router.Notified.Select(n => n.UserKey).ToArray());
+        Assert.Single(_router.Notified, n => n.UserKey == alice);
+    }
+
+    [Fact]
+    public async Task The_sending_notification_for_a_user_group_send_sees_the_final_recipients()
+    {
+        Guid alice = _directory.Add("Alice");
+        Guid bob = _directory.Add("Bob");
+        foreach (Guid user in new[] { _me, alice, bob })
+        {
+            await _presence.SeenAsync(SignedIn(user));
+        }
+
+        Guid group = _directory.AddUserGroup(_me, alice, bob);
+
+        await _messenger.SendAsync(Request(userGroupKeys: [group]), Me);
+
+        var sending = _events.Single<BackofficeMessageSendingNotification>();
+        Assert.Equivalent(new[] { alice, bob }, sending.RecipientKeys.ToArray());
+        Assert.DoesNotContain(_me, sending.RecipientKeys);
+    }
+
+    [Fact]
+    public async Task Users_in_the_groups_who_are_offline_or_only_on_MCP_are_not_sent_to()
+    {
+        Guid alice = _directory.Add("Alice");
+        Guid dave = _directory.Add("Dave");
+        Guid erin = _directory.Add("Erin");
+        await _presence.SeenAsync(SignedIn(dave));
+        _clock.Advance(TimeSpan.FromHours(1));
+        await _presence.SeenAsync(SignedIn(alice));
+        await _presence.McpSeenAsync(erin);
+        Guid group = _directory.AddUserGroup(alice, dave, erin);
+
+        AssertSent(await _messenger.SendAsync(Request(userGroupKeys: [group]), Me));
+
+        Assert.Equal([alice], _router.Notified.Select(n => n.UserKey));
+    }
+
+    [Fact]
+    public async Task Users_in_the_groups_whose_account_has_gone_are_not_sent_to()
+    {
+        Guid alice = _directory.Add("Alice");
+        Guid bob = _directory.Add("Bob");
+        await _presence.SeenAsync(SignedIn(alice));
+        await _presence.SeenAsync(SignedIn(bob));
+        Guid group = _directory.AddUserGroup(alice, bob);
+        _directory.Remove(bob);
+
+        AssertSent(await _messenger.SendAsync(Request(userGroupKeys: [group]), Me));
+
+        Assert.Equal([alice], _router.Notified.Select(n => n.UserKey));
+    }
+
+    [Fact]
+    public async Task The_user_group_count_matches_who_a_message_to_the_groups_reaches()
+    {
+        Guid alice = _directory.Add("Alice");
+        Guid bob = _directory.Add("Bob");
+        foreach (Guid user in new[] { _me, alice, bob })
+        {
+            await _presence.SeenAsync(SignedIn(user));
+        }
+
+        Guid group = _directory.AddUserGroup(_me, alice, bob);
+
+        (int counted, string? rejected) = await _messenger.CountUserGroupRecipientsAsync([group], Me);
+        BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(Request(userGroupKeys: [group]), Me));
+
+        Assert.Null(rejected);
+        Assert.Equal(2, counted);
+        Assert.Equal(counted, sent.Recipients);
+    }
+
+    [Fact]
+    public async Task Unknown_user_groups_are_rejected()
+    {
+        Guid alice = _directory.Add("Alice");
+        await _presence.SeenAsync(SignedIn(alice));
+        Guid[] groups = [_directory.AddUserGroup(alice), Guid.NewGuid()];
+
+        BackofficeSendResult result = await _messenger.SendAsync(Request(userGroupKeys: groups), Me);
+        (_, string? rejected) = await _messenger.CountUserGroupRecipientsAsync(groups, Me);
+
+        Assert.IsType<BackofficeSendResult.Rejected>(result);
+        Assert.NotNull(rejected);
+        Assert.Empty(_router.Notified);
+    }
+
+    [Fact]
+    public async Task User_groups_take_the_place_of_selected_users()
+    {
+        Guid alice = _directory.Add("Alice");
+        Guid carol = _directory.Add("Carol");
+        await _presence.SeenAsync(SignedIn(alice));
+        Guid group = _directory.AddUserGroup(alice);
+
+        AssertSent(await _messenger.SendAsync(Request(userKeys: [carol], userGroupKeys: [group]), Me));
+
+        Assert.Equal([alice], _router.Notified.Select(n => n.UserKey));
+    }
+
+    [Theory]
+    [InlineData(100, true)]
+    [InlineData(101, false)]
+    public async Task At_most_a_hundred_user_groups_can_be_chosen(int count, bool accepted)
+    {
+        Guid alice = _directory.Add("Alice");
+        await _presence.SeenAsync(SignedIn(alice));
+        Guid[] groups = [_directory.AddUserGroup(alice), .. Enumerable.Range(1, count - 1).Select(_ => _directory.AddUserGroup())];
+
+        BackofficeSendResult result = await _messenger.SendAsync(Request(userGroupKeys: groups), Me);
+
+        Assert.Equal(accepted, result is BackofficeSendResult.Sent);
+    }
+
+    [Fact]
+    public async Task User_groups_need_access_to_the_Users_section()
+    {
+        Guid alice = _directory.Add("Alice");
+        await _presence.SeenAsync(SignedIn(alice));
+        Guid group = _directory.AddUserGroup(alice);
+        var sender = new BackofficeSender(_me, "Me", CanChooseUserGroups: false);
+
+        BackofficeSendResult result = await _messenger.SendAsync(Request(userGroupKeys: [group]), sender);
+        (int counted, string? rejected) = await _messenger.CountUserGroupRecipientsAsync([group], sender);
+
+        Assert.Equal(BackofficeMessenger.UserGroupsNeedUsersSection, Assert.IsType<BackofficeSendResult.Rejected>(result).Reason);
+        Assert.Empty(_router.Notified);
+        Assert.Equal(0, counted);
+        Assert.Equal(BackofficeMessenger.UserGroupsNeedUsersSection, rejected);
+    }
+
+    [Fact]
+    public async Task Selected_users_and_everyone_online_do_not_need_the_Users_section()
+    {
+        Guid alice = _directory.Add("Alice");
+        await _presence.SeenAsync(SignedIn(alice));
+        Guid group = _directory.AddUserGroup(alice);
+        var sender = new BackofficeSender(_me, "Me", CanChooseUserGroups: false);
+
+        AssertSent(await _messenger.SendAsync(Request(userKeys: [alice]), sender));
+        AssertSent(await _messenger.SendAsync(Request(allOnline: true), sender));
+        AssertSent(await _messenger.SendAsync(Request(allOnline: true, userGroupKeys: [group]), sender));
+    }
+
     private static BackofficeMessageRequest Request(
         string? headline = "Heads up",
         string? message = "Restarting soon.",
         string? color = null,
         Guid[]? userKeys = null,
+        Guid[]? userGroupKeys = null,
         bool allOnline = false) =>
-        new(headline, message, color, userKeys, allOnline);
+        new(headline, message, color, userKeys, userGroupKeys, allOnline);
 
     private static BackofficeSendResult.Sent AssertSent(BackofficeSendResult result) =>
         Assert.IsType<BackofficeSendResult.Sent>(result);

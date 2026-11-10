@@ -77,6 +77,7 @@ public class LiveViewAuthorizationTests
             $"GET members: {Permissions.View}",
             $"GET member-messaging: {Permissions.View}",
             $"POST messages: {string.Join(", ", new[] { Permissions.MessageUsers, Permissions.View }.Order())}",
+            $"GET message-recipients: {string.Join(", ", new[] { Permissions.MessageUsers, Permissions.View }.Order())}",
             $"POST member-messages: {string.Join(", ", new[] { Permissions.MessageMembers, Permissions.View }.Order())}",
             "GET heartbeat: ",
             "DELETE heartbeat: ",

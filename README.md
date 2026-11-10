@@ -53,7 +53,9 @@ initials. Users on MCP are tagged the same way, **Backoffice**, **MCP** or both.
 tabs and can't be selected, since a backoffice message is shown in a backoffice tab. Tick one or several of the others (the selection is kept
 across pages), or click **Select all N online** to include every page, then click **Message users…** in the footer to open a slide-out where you write a headline, pick a type
 (information, warning, urgent or good news) and add a message, for example to warn people before an upgrade or
-restart. It appears in their backoffice as a standard Umbraco notification that stays until dismissed, and is
+restart. The slide-out sends to the selected users, to everyone online, or to everyone online in the user groups you
+pick with Umbraco's user group picker (for example Editors before an upgrade), and shows how many users that reaches
+right now. Choosing user groups needs access to the Users section. It appears in their backoffice as a standard Umbraco notification that stays until dismissed, and is
 signed with the sender's name. You are marked **You** in the list and are never sent your own message.
 
 ![The Send message slide-out with a headline, type and message for the selected backoffice users](docs/images/live-view-send-message.png)
@@ -95,7 +97,7 @@ Live View adds three permissions to Umbraco's user groups, under **Users → Use
 | Permission | What it allows |
 |---|---|
 | **View Live View** | See the Live View dashboard in Settings: live activity and who is online. |
-| **Message backoffice users** | Select backoffice users and send them a notification. |
+| **Message backoffice users** | Select backoffice users, or pick user groups (which also needs access to the Users section), and send them a notification. |
 | **Message members** | Select website members and send them a message, once a developer has [set up a delivery method](docs/member-messaging.md). |
 
 The **Administrators** group gets all three automatically when the package is installed or upgraded; other groups
@@ -630,11 +632,12 @@ All under `/umbraco/umbriciansliveview/api/v1/`.
 | Endpoint | Who can call it |
 |---|---|
 | `GET snapshot`, `GET backoffice-users`, `GET members`, `GET member-messaging` | **View Live View** |
-| `POST messages` | **View Live View** and **Message backoffice users** |
+| `POST messages` | **View Live View** and **Message backoffice users**; sending to user groups also needs access to the Users section |
+| `GET message-recipients` | **View Live View**, **Message backoffice users** and access to the Users section |
 | `POST member-messages` | **View Live View** and **Message members** |
 | `GET heartbeat`, `DELETE heartbeat`, `GET messages/{key}` | any backoffice user (recipients only for a message) |
 
-Every endpoint needs a signed-in backoffice user. None checks section access.
+Every endpoint needs a signed-in backoffice user. Apart from choosing user groups, which needs the Users section, none checks section access.
 
 `GET snapshot` returns:
 
