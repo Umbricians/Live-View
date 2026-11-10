@@ -24,9 +24,9 @@ internal sealed class MemberMessagingCheck : HealthCheck
 
     public override async Task<IEnumerable<HealthCheckStatus>> GetStatusAsync()
     {
-        List<(string Alias, string Name)> groups = (await _userGroups.GetAllAsync(0, int.MaxValue)).Items
+        List<(Guid Key, string Name)> groups = (await _userGroups.GetAllAsync(0, int.MaxValue)).Items
             .Where(g => g.Permissions.Contains(Constants.Permissions.MessageMembers))
-            .Select(g => (g.Alias, g.Name ?? g.Alias))
+            .Select(g => (g.Key, g.Name ?? g.Alias))
             .ToList();
 
         return [Status(_senders.Select(s => s.Name).ToList(), groups)];
@@ -34,7 +34,7 @@ internal sealed class MemberMessagingCheck : HealthCheck
 
     internal static HealthCheckStatus Status(
         IReadOnlyCollection<string> senders,
-        IReadOnlyCollection<(string Alias, string Name)> groupsWithPermission)
+        IReadOnlyCollection<(Guid Key, string Name)> groupsWithPermission)
     {
         string groupNames = string.Join(", ", groupsWithPermission.Select(g => WebUtility.HtmlEncode(g.Name)));
 
@@ -59,7 +59,7 @@ internal sealed class MemberMessagingCheck : HealthCheck
         }
 
         // Administrators get the permission automatically on install, so on their own they say nothing about the site.
-        if (groupsWithPermission.Any(g => g.Alias != Umbraco.Cms.Core.Constants.Security.AdminGroupAlias))
+        if (groupsWithPermission.Any(g => g.Key != Umbraco.Cms.Core.Constants.Security.AdminGroupKey))
         {
             return new HealthCheckStatus(
                 $"{groupNames} have the Message members permission, but no member message sender is registered, so they can't message members. "
