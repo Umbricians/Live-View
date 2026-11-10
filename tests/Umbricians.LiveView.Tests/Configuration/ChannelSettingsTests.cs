@@ -51,6 +51,15 @@ public class ChannelSettingsTests
         _options.Channels["unsorted"] = new LiveViewChannelOptions();
         _options.Channels["early"] = new LiveViewChannelOptions { SortOrder = 10 };
 
-        Assert.Equal(["unsorted", "early", "late"], ChannelSettings.InOrder(_options).Select(c => c.Alias));
+        Assert.Equal(["unsorted", "early", "late"], ChannelSettings.InOrder(_options, []).Select(c => c.Alias));
+    }
+
+    [Fact]
+    public void Settings_under_a_metric_providers_alias_are_not_a_channel()
+    {
+        _options.Channels["queue"] = new LiveViewChannelOptions { Name = "Queued work" };
+        _options.Channels["web"] = new LiveViewChannelOptions();
+
+        Assert.Equal(["web"], ChannelSettings.InOrder(_options, [new StubMetricProvider("queue")]).Select(c => c.Alias));
     }
 }

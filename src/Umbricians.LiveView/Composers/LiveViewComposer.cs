@@ -61,6 +61,8 @@ public class LiveViewComposer : IComposer
         builder.AddNotificationAsyncHandler<MemberDeletedNotification, MemberDeletedHandler>();
         builder.Services.AddSingleton<BackofficeMessenger>();
         builder.Services.AddSingleton<MemberMessagingService>();
+        builder.AddNotificationAsyncHandler<BackofficeMessageSentNotification, MessageAuditHandler>();
+        builder.AddNotificationAsyncHandler<MemberMessageSentNotification, MessageAuditHandler>();
         builder.Services.TryAddSingleton<IMemberMessageInbox, MemberMessageInbox>();
 
         builder.Services.Configure<UmbracoPipelineOptions>(options =>

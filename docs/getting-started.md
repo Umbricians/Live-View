@@ -143,6 +143,8 @@ Below the chart, **Backoffice users online** and **Members online** list who is 
 Crawlers, static files (CSS, JavaScript, images and so on) and the backoffice's own requests are not counted as web
 sessions.
 
+Each box is a panel; developers can add their own or hide one, see [Dashboard panels](../README.md#6-dashboard-panels).
+
 ## 4. Configure what is counted
 
 Everything is optional. Add a `Umbricians:LiveView` section to `appsettings.json` and set only what you want to
@@ -181,18 +183,23 @@ endpoint, keyed on a client id header.
 | `MessageTimeZone` | the sender's own | The time zone "midnight tonight" means when messaging members, as an IANA id such as `America/Denver` (a Windows id works too). |
 
 Each channel under `Channels` can set `Enabled`, `Name`, `Color`, `SortOrder`, `PathPrefixes`,
-`ExcludePathPrefixes`, `SessionKeys` (`Header:<name>`, `Cookie:<name>`, `Authorization`, `User` or `Client`),
+`ExcludePathPrefixes`, `Hosts`, `SessionKeys` (`Header:<name>`, `Cookie:<name>`, `Authorization`, `User`, `Client`, or a
+source your code registers),
 `ActivityWindowSeconds`, `IgnoreStaticFiles` and `Exclusive`. The built-in channels (`web`, `members`, `backoffice`,
 `mcp`, `api`) keep their defaults for anything you leave out. `SessionKeys` and `Exclusive` don't apply to
 `members`, which always counts the signed-in member and also counts them as a web visitor. `SessionKeys` doesn't
 apply to `backoffice`, which always counts the signed-in backoffice user. See
-[How sessions are counted](../README.md#how-sessions-are-counted) for the details.
+[How sessions are counted](../README.md#how-sessions-are-counted) for the details. A line from a metric provider
+(step 5) takes `Enabled`, `Name`, `Color` and `SortOrder` from the settings under its alias too; the other settings
+don't apply to it.
 
 ## 5. Add your own lines
 
 Anything the site can count can go on the chart. Pick the approach that fits:
 
-- **Requests to certain paths:** add a channel in `appsettings.json`, as above. No code needed.
+- **Requests to certain paths or hosts:** add a channel in `appsettings.json`, as above. No code needed. To match
+  requests in code, or key sessions on something only your code knows, see
+  [A channel for requests](../README.md#1-a-channel-for-requests).
 - **Sessions your code knows about**, such as SignalR connections: declare a channel with
   `builder.AddLiveViewChannel(...)` and call `ILiveActivityTracker.TouchAsync` / `EndAsync` from your code.
 - **Any number you can work out on demand**, such as a queue length or a count from another service: implement
@@ -223,7 +230,8 @@ public class LiveViewComposer : IComposer
 ```
 
 Providers are called every time the dashboard refreshes and are given 2 seconds to answer, so keep them cheap: cache
-anything expensive. The [README](../README.md#extending) has examples of the other two approaches.
+anything expensive. To rename, recolour, reorder or switch off its line without changing code, set `Name`, `Color`,
+`SortOrder` or `Enabled` under `Channels:pending-orders` in `appsettings.json`. The [README](../README.md#extending) has examples of the other two approaches.
 
 ## 6. Message backoffice users and members
 
@@ -266,6 +274,9 @@ Even with shared stores, these stay per server, and need no action:
 - Member sign-out markers.
 
 No distributed store ships with the package.
+
+Every message sent is written to Umbraco's audit log, and a site can stop one with a notification handler: see
+[Before and after a message is sent](../README.md#7-before-and-after-a-message-is-sent).
 
 ## Before you go live
 

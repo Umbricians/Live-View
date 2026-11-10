@@ -37,7 +37,7 @@ public class McpPresenceTests
         _backoffice = new BackofficePresence(store, _users, options, _clock);
         _memberPresence = new MemberPresence(store, _members, options, _clock);
         _callers = new McpCallers(_backoffice, _memberPresence, _users, _members, _clock, NullLogger<McpCallers>.Instance);
-        _middleware = new LiveActivityMiddleware(new RequestClassifier(options), new NoTracker(), _backoffice, _memberPresence, _callers);
+        _middleware = new LiveActivityMiddleware(new RequestClassifier(options, [], []), new NoTracker(), _backoffice, _memberPresence, _callers);
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class McpPresenceTests
         Assert.Equal(2, await _backoffice.CountOnlineAsync());
         Assert.Equal([bob], await _backoffice.AllInBackofficeAsync());
 
-        var messenger = new BackofficeMessenger(new NoServerEvents(), _backoffice, new InMemoryBackofficeMessageStore(_clock), _clock);
+        var messenger = new BackofficeMessenger(new NoServerEvents(), _backoffice, new InMemoryBackofficeMessageStore(_clock), new RecordingEventAggregator(), _clock);
         Assert.Equal(1, await messenger.CountAllOnlineRecipientsAsync(senderKey: null));
     }
 

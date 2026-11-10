@@ -14,7 +14,7 @@ servers.
 The module that sends a one-off message to backoffice users. It owns the send rules: the **message content**, who
 **everyone online** means at the moment of sending (users in the backoffice; an MCP caller only on MCP can't see a
 backoffice message), and that the **sender** is never one of the recipients. It also says how many users a message to
-everyone online would reach, so the users table's count and the delivery always agree. It keeps the messages it sends
+everyone online would reach, so the users table's count and the delivery always agree. Before delivering it publishes a sending notification a site can cancel (the reason comes back as why the message wasn't sent), and afterwards a sent notification. It keeps the messages it sends
 in the **message store**.
 
 ## Backoffice presence
@@ -33,10 +33,24 @@ classifier** decides; others are fed from code.
 
 ## Channel settings
 
-A channel's settings as they apply, with every value filled in: its name, sort order, paths, session key sources,
-activity window and so on. Appsettings beat channels declared in code, which beat the built-in defaults; whatever is
+A channel's settings as they apply, with every value filled in: its name, sort order, paths, hosts, request predicate,
+session key sources, activity window and so on. Appsettings beat channels declared in code, which beat the built-in defaults; whatever is
 still empty then gets the package defaults (counted by client, a window of `ActivityWindowSeconds`). Everything that
-reads a channel's settings reads them here.
+reads a channel's settings reads them here. A **metric provider**'s line reads its settings here too, under its alias,
+but only whether it is shown, its name, colour and sort order: appsettings beat the provider's own values, which beat
+the defaults.
+
+## Dashboard context
+
+What the dashboard shares with its panels. Every panel follows its refresh interval and paused state; the package's own
+panels also share the readings and what the footer's message actions need from the online tables' selections. Sites'
+panels see only the refresh interval and paused state.
+
+## Dashboard panel
+
+One box on the Live View dashboard (Live activity, Backoffice users online, Members online, or one a site adds),
+registered as an `umbriciansLiveViewPanel` extension and shown in weight order. It refreshes and pauses with the chart
+through the **dashboard context**.
 
 ## Live View permissions
 
@@ -64,7 +78,7 @@ their key once, inside Member presence, and never leaves it.
 
 The module that sends a message to members through the site's member message senders. It owns the send rules: the
 **message content**, the audience (selected members, **everyone online** at the moment of sending, or every member),
-which senders deliver it, and when it stops being shown.
+which senders deliver it, and when it stops being shown. Before delivering it publishes a sending notification a site can cancel (the reason comes back as why the message wasn't sent), and afterwards a sent notification.
 
 ## Member presence
 
@@ -72,6 +86,12 @@ The module that knows which members are online. It is told when a member is **se
 when they **sign out**, and when they are an **MCP caller**, and it answers who is online: one page at a time, or
 all at once. It is the only source for both the members line on the chart and the members table, so the two
 always agree.
+
+## Message audit
+
+Every message sent, to backoffice users or members, is written to Umbraco's audit log by the sender's key, with the audience and headline. For a member message it names the delivery methods that
+delivered it and those that failed or timed out; if none delivered it, the entry says the message was not delivered. A
+message sent by no known backoffice user is not audited.
 
 ## Message content
 
@@ -83,6 +103,12 @@ Both messaging modules check it the same way, and both dialogs share the same fi
 
 Where sent backoffice messages wait to be fetched by their recipients' backoffice, and who each one has been
 delivered to. In memory on each server unless a site replaces it.
+
+## Metric provider
+
+A line on the chart that is not a **channel**: a number the site works out on demand by implementing
+`ILiveMetricProvider`, asked for every time the dashboard refreshes. Its line takes the **channel settings** under its
+alias.
 
 ## Online backoffice user
 
@@ -110,8 +136,15 @@ leaves a member online on MCP.
 
 The module that decides which **channels** a request counts in, under what session key, and who it shows was seen:
 a member (for **Member presence**), a backoffice user (for **Backoffice presence**) or an **MCP caller**. It owns
-every rule about which requests count: path prefixes and exclusions, sort order and exclusive channels, static
-files, bots, and the session key sources. The tracking middleware only acts on what it decides.
+every rule about which requests count: path prefixes and exclusions, hosts and request predicates, sort order and
+exclusive channels, static files, bots, and the **session key sources**, including those a site registers. The tracking middleware only acts on what it decides.
+
+## Session key source
+
+Where a channel's session key comes from: a request header, a cookie, the Authorization header, the signed-in user,
+the client (IP address and User-Agent), or a source the site registers in code under its own alias. A channel tries
+its sources in order and uses the first with a value, which is hashed before it is held. Sources that use the
+signed-in user are read once authentication has run.
 
 ## Signed-out marker
 

@@ -1,3 +1,4 @@
+using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models.ServerEvents;
 using Umbraco.Cms.Core.ServerEvents;
 using Umbricians.LiveView.Presence;
@@ -12,7 +13,7 @@ internal sealed record BackofficeMessageRequest(
     IReadOnlyCollection<Guid>? UserKeys,
     bool AllOnline);
 
-/// <summary>The backoffice user sending a message, who is never one of its recipients.</summary>
+/// <summary>The backoffice user sending a message.</summary>
 internal sealed record BackofficeSender(Guid? Key, string? Name);
 
 internal abstract record BackofficeSendResult
@@ -33,6 +34,7 @@ internal abstract record BackofficeSendResult
 /// It owns the send rules: the message content (see <see cref="MessageContent"/>), who "all online" means at the
 /// moment of sending, and that the sender is never a recipient. Selected users are sent to as chosen, even if they have since gone
 /// offline, and pick the message up if they come back within its lifetime.
+/// Sites can stop or follow a send with <see cref="BackofficeMessageSendingNotification"/> and <see cref="BackofficeMessageSentNotification"/>.
 /// Server events only carry a key, so the message is held in the <see cref="IBackofficeMessageStore"/> and each
 /// recipient's backoffice fetches it by key. Recipients whose realtime connection is down pick it up from their next
 /// heartbeat instead. On a load-balanced site only the recipients connected to this server get the instant push; the
@@ -50,14 +52,20 @@ internal sealed class BackofficeMessenger
     private readonly IServerEventRouter _router;
     private readonly BackofficePresence _presence;
     private readonly IBackofficeMessageStore _store;
+    private readonly IEventAggregator _eventAggregator;
     private readonly TimeProvider _timeProvider;
 
     public BackofficeMessenger(
-        IServerEventRouter router, BackofficePresence presence, IBackofficeMessageStore store, TimeProvider timeProvider)
+        IServerEventRouter router,
+        BackofficePresence presence,
+        IBackofficeMessageStore store,
+        IEventAggregator eventAggregator,
+        TimeProvider timeProvider)
     {
         _router = router;
         _presence = presence;
         _store = store;
+        _eventAggregator = eventAggregator;
         _timeProvider = timeProvider;
     }
 
@@ -89,10 +97,19 @@ internal sealed class BackofficeMessenger
 
         var sent = new BackofficeMessage(
             Guid.NewGuid(), content.Headline, content.Message, content.Color, sender.Name, _timeProvider.GetUtcNow());
+
+        var sending = new BackofficeMessageSendingNotification(sent, recipients, sender.Key, new EventMessages());
+        if (await _eventAggregator.PublishCancelableAsync(sending))
+        {
+            return new BackofficeSendResult.Rejected(CancelledSend.Reason(sending.Messages));
+        }
+
         await _store.AddAsync(sent, recipients, sent.SentAt + Lifetime);
 
         var serverEvent = new ServerEvent { EventSource = EventSource, EventType = EventType, Key = sent.Key };
         await Task.WhenAll(recipients.Select(r => _router.NotifyUserAsync(serverEvent, r)));
+
+        await _eventAggregator.PublishAsync(new BackofficeMessageSentNotification(sent, recipients, sender.Key));
 
         return new BackofficeSendResult.Sent(sent, recipients.Length);
     }

@@ -1,0 +1,14 @@
+{
+  "id": "LiveViewDemo",
+  "name": "Live View demo",
+  "version": "1.0.0",
+  "extensions": [
+    {
+      "type": "umbriciansLiveViewPanel",
+      "alias": "LiveViewDemo.Panel.TryIt",
+      "name": "Live View Demo Try It Panel",
+      "element": "/App_Plugins/LiveViewDemo/try-it-panel.js",
+      "weight": 50
+    }
+  ]
+}

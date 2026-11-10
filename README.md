@@ -17,7 +17,7 @@ sessions are active right now:
 
 The chart refreshes every 2, 5, 10, 15 or 30 seconds (your choice is remembered per browser). Nothing is stored:
 the server keeps an in-memory set of recently active sessions (by default; see
-[load-balanced sites](#6-load-balanced-sites)), and the browser keeps the last 120 readings while the page is open.
+[load-balanced sites](#8-load-balanced-sites)), and the browser keeps the last 120 readings while the page is open.
 
 Click a counter, or its legend entry, to take its line off the chart; both fade until you click either again.
 
@@ -71,6 +71,7 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
 - Messages are pushed over Umbraco's server events (SignalR), so they arrive instantly. If a user's realtime
   connection is down, their next heartbeat picks the message up instead ("Delivery" column).
 - Messages are held for 15 minutes in the message store (in memory by default), then discarded.
+- Every message sent is recorded in [Umbraco's audit log](#7-before-and-after-a-message-is-sent): who sent it, to whom and its headline.
 
 ## Documentation
 
@@ -105,9 +106,11 @@ manifest alone. Every backoffice user can receive messages. See [Permissions](do
 
 ## How sessions are counted
 
-Middleware offers each request to the channels in order and counts it in every channel whose path prefixes it falls
-under, stopping at the first *exclusive* one (channels are exclusive unless `Exclusive` is `false`). For each, it
-works out a session key and keeps the session active for the length of the request and for the channel's
+Middleware offers each request to the channels in order and counts it in every channel it matches, stopping at the
+first *exclusive* one (channels are exclusive unless `Exclusive` is `false`). A request matches a channel when it
+falls under one of the channel's path prefixes (when it has any) and none of its excluded ones, is for one of its
+`Hosts` (when it lists any), and passes its request predicate (when it has one). For each channel, it works out a session key from the channel's
+session key sources and keeps the session active for the length of the request and for the channel's
 *activity window* after it. Session keys are hashed before they are held in memory, and no cookies are set.
 
 | Channel | Paths | Session key (first one present) | Window |
@@ -120,6 +123,9 @@ works out a session key and keeps the session active for the length of the reque
 
 Because the session stays active for as long as a request is open, long-lived MCP streams (SSE) count while they
 are connected. Crawlers are ignored by default.
+
+A site with several domains can count each on its own line with `Hosts`, and sessions can be keyed on anything the
+site's code works out, such as a tenant or API client id: see [Extending](#1-a-channel-for-requests).
 
 Backoffice users and members are counted once per person, however many tabs or devices they use, and whether they
 are in the backoffice or on the website, on MCP, or both. Only requests that pass authentication count, so a failed
@@ -188,11 +194,24 @@ Everything is optional. Override only what you need in `appsettings.json`:
 ```
 
 Built-in channels keep their defaults for any property you leave out. Session key sources are `Header:<name>`,
-`Cookie:<name>`, `Authorization`, `User` (the authenticated backoffice user or member) and `Client`. Set
+`Cookie:<name>`, `Authorization`, `User` (the authenticated backoffice user or member) and `Client`, or the alias of a
+[session key source of your own](#your-own-session-key-sources). `Hosts` limits a channel to requests for those host
+names, ignoring port: `brand-a.com`, or `*.brand-a.com` for its subdomains. With `Hosts` and no `PathPrefixes`, a
+channel counts every path on those hosts. When `Hosts` is empty, any host matches. Set
 `"Exclusive": false` on a channel whose requests should also count in later channels. The built-in `members`
 channel always counts the signed-in member and always lets members count as web visitors too, so `SessionKeys` and
 `Exclusive` don't apply to it; its other settings do. The built-in `backoffice` channel always counts the signed-in
 backoffice user, so `SessionKeys` doesn't apply to it.
+
+The same settings restyle a line from a [custom metric provider](#3-a-custom-metric-provider), under the provider's
+`Alias`: `Name`, `Color` and `SortOrder` replace the provider's own values, and `"Enabled": false` takes the line off the
+chart and stops the provider being called. Anything left out keeps the provider's own value. `PathPrefixes`, `Hosts`,
+`ExcludePathPrefixes`, `SessionKeys`, `RequestPredicate`, `ActivityWindowSeconds`, `IgnoreStaticFiles` and `Exclusive` don't apply to a
+provider and are ignored.
+
+```json
+{ "Umbricians": { "LiveView": { "Channels": { "mcp-server": { "Name": "Remote MCP", "SortOrder": 15 } } } } }
+```
 
 `MemberAvatarProperty` names the member property that holds each member's picture; see
 [member avatars](#5-member-avatars).
@@ -202,11 +221,66 @@ backoffice user, so `SessionKeys` doesn't apply to it.
 
 ## Extending
 
-There are three ways to put your own data on the chart, from least to most code.
+Ways to add your own data and panels to the dashboard, from least to most code.
 
-### 1. A path-based channel (no code)
+### 1. A channel for requests
 
-Add a channel under `Umbricians:LiveView:Channels` as shown above.
+Add a channel under `Umbricians:LiveView:Channels` as shown above. No code needed. To count each of several sites on
+its own line, give each channel its `Hosts`:
+
+```json
+"brand-a": {
+  "Name": "Brand A",
+  "SortOrder": 95,
+  "Hosts": [ "brand-a.com", "*.brand-a.com" ],
+  "ExcludePathPrefixes": [ "/umbraco", "/App_Plugins", "/media", "/api", "/mcp" ],
+  "IgnoreStaticFiles": true
+}
+```
+
+It sorts after `members` (90), so members are still seen, and before `web` (100). Channels are exclusive by default,
+so Web sessions then counts the other sites; set `"Exclusive": false` to keep Web sessions as the total.
+
+#### Matching requests in code
+
+Set a `RequestPredicate` on a channel declared with `AddLiveViewChannel` to match requests by anything the request
+carries:
+
+```csharp
+builder.AddLiveViewChannel("app", "Mobile app", c =>
+{
+    c.SortOrder = 5;
+    c.RequestPredicate = context => context.Request.Headers.ContainsKey("X-App-Version");
+    c.SessionKeys = ["Header:X-Device-Id", "Client"];
+});
+```
+
+A predicate is used together with the channel's path prefixes and hosts, or on its own. It runs before authentication
+on every request offered to the channel, so keep it quick; it can't see the signed-in user.
+
+#### Your own session key sources
+
+To key sessions on something only your code knows, implement `ILiveSessionKeySource`, register it with
+`builder.AddLiveViewSessionKeySource<T>()` and list its alias in a channel's `SessionKeys`:
+
+```csharp
+public class TenantSessionKeySource : ILiveSessionKeySource
+{
+    public string Alias => "Tenant";
+
+    public bool UsesSignedInUser => true;
+
+    public string? GetSessionKey(HttpContext context) => context.User.FindFirst("tenant_id")?.Value;
+}
+```
+
+```json
+"SessionKeys": [ "Tenant", "Client" ]
+```
+
+Sources are tried in order along with the built-in ones; return null to fall through to the next. Values are hashed
+before they are held. `UsesSignedInUser` defers reading until authentication has run, as for `User`. The built-in
+names always mean the built-in sources.
 
 ### 2. Feed a channel from code
 
@@ -270,6 +344,11 @@ builder.AddLiveViewMetric<McpServerSessionsMetric>();
 Providers are called on every poll and given 2 seconds to answer. A slow or failing provider shows as a gap in its
 line rather than breaking the dashboard. See
 [ThreadPoolQueueMetric.cs](demo/Umbricians.LiveView.Demo/LiveView/ThreadPoolQueueMetric.cs) for a working example.
+
+Its line can be renamed, recoloured, reordered or switched off in `appsettings.json` under `Channels:mcp-server`, like
+any channel; see [Configuration](#configuration). A provider whose alias matches a channel, built-in or declared in
+code, replaces that channel: the channel stops counting requests, and the settings under that alias apply to the
+provider's line. Give it an alias no channel uses unless you mean to replace one.
 
 ### 4. Messaging members
 
@@ -363,7 +442,154 @@ their initials. The demo site's
 [DemoMemberAvatarProvider.cs](demo/Umbricians.LiveView.Demo/DemoMembers/DemoMemberAvatarProvider.cs) hands out a few
 bundled pictures.
 
-### 6. Load-balanced sites
+### 6. Dashboard panels
+
+Each box on the dashboard is a panel: an `umbriciansLiveViewPanel` extension, shown below the header in weight order,
+highest first. The built-in panels are:
+
+| Panel | Alias | Weight |
+|---|---|---|
+| Live activity | `Umbricians.LiveView.Panel.Activity` | 300 |
+| Backoffice users online | `Umbricians.LiveView.Panel.Users` | 200 |
+| Members online | `Umbricians.LiveView.Panel.Members` | 100 |
+
+**Adding one:** register it in an `App_Plugins/MySite/umbraco-package.json`, with a weight that puts it where you want
+it (150 places it between the two tables):
+
+```json
+{
+  "id": "MySite",
+  "name": "My site",
+  "version": "1.0.0",
+  "extensions": [
+    {
+      "type": "umbriciansLiveViewPanel",
+      "alias": "MySite.Panel.Orders",
+      "name": "My Site Orders Panel",
+      "element": "/App_Plugins/MySite/orders-panel.js",
+      "weight": 150
+    }
+  ]
+}
+```
+
+The element consumes the dashboard context from `@umbricians/live-view`. The context gives a panel two observables,
+`interval` (the refresh interval in seconds) and `paused`, so the panel refreshes and pauses with the chart. This one fetches a count from the site's own
+endpoint:
+
+```js
+import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
+import { html } from "@umbraco-cms/backoffice/external/lit";
+import { UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT } from "@umbricians/live-view";
+
+export default class OrdersPanel extends UmbLitElement {
+  static properties = { _count: { state: true } };
+
+  #interval = 5;
+  #paused = true;
+  #timer;
+
+  constructor() {
+    super();
+    this._count = undefined;
+    this.consumeContext(UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT, (context) => {
+      this.observe(context?.interval, (interval) => {
+        this.#interval = interval ?? 5;
+        this.#refresh();
+      });
+      this.observe(context?.paused, (paused) => {
+        this.#paused = paused ?? true;
+        this.#refresh();
+      });
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearTimeout(this.#timer);
+  }
+
+  // The only place a timer is started, so the two observers can never leave two running.
+  #refresh = async () => {
+    clearTimeout(this.#timer);
+    if (this.#paused || !this.isConnected) return;
+    this.#timer = setTimeout(this.#refresh, this.#interval * 1000);
+    const response = await fetch("/my-site/orders/open");
+    if (response.ok) this._count = (await response.json()).count;
+  };
+
+  render() {
+    return html`<uui-box headline="Open orders">${this._count ?? "–"}</uui-box>`;
+  }
+}
+
+customElements.define("my-site-orders-panel", OrdersPanel);
+```
+
+A panel can take `conditions` like any extension. The demo's
+[try-it-panel.js](demo/Umbricians.LiveView.Demo/wwwroot/App_Plugins/LiveViewDemo/try-it-panel.js) is a complete
+example.
+
+**Hiding or replacing a built-in:** in a `backofficeEntryPoint` of your own, exclude the panel's alias:
+
+```js
+export const onInit = (host, extensionRegistry) => extensionRegistry.exclude("Umbricians.LiveView.Panel.Members");
+```
+
+To replace a panel, register yours with `overwrites` set to its alias. To show one only to some users, add a condition
+with `extensionRegistry.appendCondition(alias, condition)`. "Message users…" and "Message members…" show only while
+their panel is shown.
+
+For a TypeScript site, the package ships declarations for `@umbricians/live-view` (the context token, the
+`UmbriciansLiveViewDashboardContext` interface and the `ManifestLiveViewPanel` manifest interface). They sit in `App_Plugins/UmbriciansLiveView/types/index.d.ts` among the
+package's static web assets; point a `paths` entry in the site's `tsconfig.json` at that file:
+
+```json
+{ "compilerOptions": { "paths": { "@umbricians/live-view": ["<path to>/App_Plugins/UmbriciansLiveView/types/index.d.ts"] } } }
+```
+
+### 7. Before and after a message is sent
+
+Each send, to backoffice users or to members, publishes two Umbraco notifications through `IEventAggregator`:
+
+| Notification | Published | Carries |
+|---|---|---|
+| `BackofficeMessageSendingNotification` | before the message is delivered; can be cancelled | the message, its recipients, the sender |
+| `BackofficeMessageSentNotification` | after it has been pushed to each recipient's backoffice | the same |
+| `MemberMessageSendingNotification` | before the delivery methods run; can be cancelled | the message (its audience and member keys), the delivery methods' aliases, the sender |
+| `MemberMessageSentNotification` | after every delivery method has finished | the message, what each delivery method did, the sender |
+
+To stop a message, cancel the sending notification with an `EventMessage`. The dashboard shows the `EventMessage`'s
+message as the reason the message was not sent, and nothing is delivered:
+
+```csharp
+public class ReleaseFreezeHandler : INotificationHandler<MemberMessageSendingNotification>
+{
+    public void Handle(MemberMessageSendingNotification notification)
+    {
+        if (notification.Message.Audience == MemberMessageAudience.AllMembers)
+        {
+            notification.CancelOperation(new EventMessage(
+                "Live View",
+                "Messages to every member are paused during the release freeze.",
+                EventMessageType.Warning));
+        }
+    }
+}
+
+builder.AddNotificationHandler<MemberMessageSendingNotification, ReleaseFreezeHandler>();
+```
+
+A handler that cancels without an `EventMessage` still stops the message; the dashboard says a handler on the site did.
+
+The sent notifications carry the recipients and, for members, each delivery method's result (including failures and
+timeouts), so they suit logging a send or forwarding it elsewhere.
+
+Each message sent is also written to Umbraco's audit log (`IAuditService`, type `Notify`, entity type
+`Umbricians.LiveView`) under the sending user, with the audience and headline and, for member messages, which delivery methods delivered it
+and which failed (or that none did).
+
+### 8. Load-balanced sites
 
 By default each server keeps its own counts, online lists and sent backoffice messages in memory. To share them,
 register your own `ILiveViewActivityStore` (sessions, users, tabs, members and MCP callers) and

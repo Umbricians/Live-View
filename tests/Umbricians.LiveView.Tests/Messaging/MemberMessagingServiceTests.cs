@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using Umbraco.Cms.Core.Events;
 using Umbricians.LiveView.Configuration;
+using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Presence;
 using Umbricians.LiveView.Storage;
@@ -15,6 +17,8 @@ public class MemberMessagingServiceTests
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
     private readonly InMemoryMemberDirectory _directory = new();
     private readonly RecordingSender _banner = new("banner");
+    private readonly RecordingEventAggregator _events = new();
+    private readonly Guid _meKey = Guid.NewGuid();
     private readonly MemberPresence _presence;
     private readonly MemberMessagingService _messaging;
 
@@ -22,7 +26,7 @@ public class MemberMessagingServiceTests
     {
         var options = new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions());
         _presence = new MemberPresence(new InMemoryActivityStore(options), _directory, options, _clock);
-        _messaging = new MemberMessagingService([_banner], _presence, _clock, NullLogger<MemberMessagingService>.Instance);
+        _messaging = new MemberMessagingService([_banner], _presence, _events, _clock, NullLogger<MemberMessagingService>.Instance);
     }
 
     [Fact]
@@ -105,8 +109,84 @@ public class MemberMessagingServiceTests
         Assert.Empty(_banner.Sent);
     }
 
+    [Fact]
+    public async Task A_handler_can_stop_a_message_and_the_reason_comes_back()
+    {
+        _events.OnPublish = n =>
+        {
+            if (n is MemberMessageSendingNotification sending)
+            {
+                sending.CancelOperation(new EventMessage("Policy", "Not during the release freeze.", EventMessageType.Warning));
+            }
+        };
+
+        MemberSendResult result = await SendAsync(Request());
+
+        Assert.Equal("Not during the release freeze.", Assert.IsType<MemberSendResult.Rejected>(result).Reason);
+        Assert.Empty(_banner.Sent);
+        Assert.Empty(_events.Published.OfType<MemberMessageSentNotification>());
+    }
+
+    [Fact]
+    public async Task A_handler_that_cancels_without_a_reason_still_says_why()
+    {
+        _events.OnPublish = n =>
+        {
+            if (n is MemberMessageSendingNotification sending)
+            {
+                sending.Cancel = true;
+            }
+        };
+
+        MemberSendResult result = await SendAsync(Request());
+
+        Assert.Equal(CancelledSend.DefaultReason, Assert.IsType<MemberSendResult.Rejected>(result).Reason);
+    }
+
+    [Fact]
+    public async Task Sending_comes_before_delivery_with_the_message_its_delivery_methods_and_its_sender()
+    {
+        Guid ann = _directory.Add(1, "Ann");
+        await _presence.McpSeenAsync(ann);
+        _events.OnPublish = n =>
+        {
+            if (n is MemberMessageSendingNotification)
+            {
+                Assert.Empty(_banner.Sent);
+            }
+        };
+
+        await SendAsync(Request(audience: "allOnline"));
+
+        var sending = _events.Single<MemberMessageSendingNotification>();
+        Assert.Equal(["banner"], sending.DeliveryMethods);
+        Assert.Equal(_meKey, sending.SenderKey);
+        Assert.Equal([ann], sending.Message.MemberKeys);
+    }
+
+    [Fact]
+    public async Task Sent_comes_after_delivery_with_what_each_delivery_method_did()
+    {
+        var sent = Assert.IsType<MemberSendResult.Sent>(await SendAsync(Request()));
+
+        var notification = Assert.IsType<MemberMessageSentNotification>(_events.Published.Last());
+        Assert.Equal(sent.Result.Key, notification.Message.Key);
+        Assert.Equal(_meKey, notification.SenderKey);
+        MemberMessageSenderResult result = Assert.Single(notification.Results);
+        Assert.Equal("banner", result.Alias);
+        Assert.Equal(sent.Result.Results[0].Delivered, result.Delivered);
+    }
+
+    [Fact]
+    public async Task An_invalid_message_publishes_nothing()
+    {
+        await SendAsync(Request(headline: "   "));
+
+        Assert.Empty(_events.Published);
+    }
+
     private Task<MemberSendResult> SendAsync(MemberMessageRequest request) =>
-        _messaging.SendAsync(request, "Me", CancellationToken.None);
+        _messaging.SendAsync(request, new BackofficeSender(_meKey, "Me"), CancellationToken.None);
 
     private MemberMessageRequest Request(
         string? headline = "Hello",

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.Extensions.Time.Testing;
+using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models.ServerEvents;
 using Umbraco.Cms.Core.ServerEvents;
 using Umbricians.LiveView.Configuration;
@@ -14,6 +15,7 @@ public class BackofficeMessengerTests
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
     private readonly InMemoryBackofficeUserDirectory _directory = new();
     private readonly RecordingServerEventRouter _router = new();
+    private readonly RecordingEventAggregator _events = new();
     private readonly BackofficePresence _presence;
     private readonly BackofficeMessenger _messenger;
     private readonly Guid _me;
@@ -22,7 +24,7 @@ public class BackofficeMessengerTests
     {
         var options = new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions());
         _presence = new BackofficePresence(new InMemoryActivityStore(options), _directory, options, _clock);
-        _messenger = new BackofficeMessenger(_router, _presence, new InMemoryBackofficeMessageStore(_clock), _clock);
+        _messenger = new BackofficeMessenger(_router, _presence, new InMemoryBackofficeMessageStore(_clock), _events, _clock);
         _me = _directory.Add("Me");
     }
 
@@ -190,6 +192,86 @@ public class BackofficeMessengerTests
         Assert.IsType<BackofficeSendResult.Rejected>(nobody);
         Assert.Empty(_router.Notified);
         Assert.Empty(await _messenger.GetUndeliveredAsync(_me));
+    }
+
+    [Fact]
+    public async Task A_handler_can_stop_a_message_and_the_reason_comes_back()
+    {
+        Guid alice = _directory.Add("Alice");
+        _events.OnPublish = n =>
+        {
+            if (n is BackofficeMessageSendingNotification sending)
+            {
+                sending.CancelOperation(new EventMessage("Policy", "Not during the release freeze.", EventMessageType.Warning));
+            }
+        };
+
+        BackofficeSendResult result = await _messenger.SendAsync(Request(userKeys: [alice]), Me);
+
+        Assert.Equal("Not during the release freeze.", Assert.IsType<BackofficeSendResult.Rejected>(result).Reason);
+        Assert.Empty(_router.Notified);
+        Assert.Empty(await _messenger.GetUndeliveredAsync(alice));
+        Assert.Empty(_events.Published.OfType<BackofficeMessageSentNotification>());
+    }
+
+    [Fact]
+    public async Task A_handler_that_cancels_without_a_reason_still_says_why()
+    {
+        _events.OnPublish = n =>
+        {
+            if (n is BackofficeMessageSendingNotification sending)
+            {
+                sending.Cancel = true;
+            }
+        };
+
+        BackofficeSendResult result = await _messenger.SendAsync(Request(userKeys: [_directory.Add("Alice")]), Me);
+
+        Assert.Equal(CancelledSend.DefaultReason, Assert.IsType<BackofficeSendResult.Rejected>(result).Reason);
+    }
+
+    [Fact]
+    public async Task Sending_comes_before_delivery_with_the_message_its_recipients_and_its_sender()
+    {
+        Guid alice = _directory.Add("Alice");
+        Guid bob = _directory.Add("Bob");
+        _events.OnPublish = n =>
+        {
+            if (n is BackofficeMessageSendingNotification)
+            {
+                Assert.Empty(_router.Notified);
+            }
+        };
+
+        await _messenger.SendAsync(Request(headline: "  Heads up  ", userKeys: [alice, bob]), Me);
+
+        var sending = _events.Single<BackofficeMessageSendingNotification>();
+        Assert.Equal([alice, bob], sending.RecipientKeys);
+        Assert.Equal(_me, sending.SenderKey);
+        Assert.Equal("Heads up", sending.Message.Headline);
+    }
+
+    [Fact]
+    public async Task Sent_comes_after_delivery_with_the_recipients()
+    {
+        Guid alice = _directory.Add("Alice");
+        Guid bob = _directory.Add("Bob");
+
+        BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(Request(userKeys: [alice, bob]), Me));
+
+        var notification = Assert.IsType<BackofficeMessageSentNotification>(_events.Published.Last());
+        Assert.Equal(sent.Message.Key, notification.Message.Key);
+        Assert.Equal([alice, bob], notification.RecipientKeys);
+        Assert.Equal(_me, notification.SenderKey);
+        Assert.Equal(2, _router.Notified.Count);
+    }
+
+    [Fact]
+    public async Task A_message_that_is_rejected_publishes_nothing()
+    {
+        await _messenger.SendAsync(Request(headline: "   ", userKeys: [_directory.Add("Alice")]), Me);
+
+        Assert.Empty(_events.Published);
     }
 
     private static BackofficeMessageRequest Request(
