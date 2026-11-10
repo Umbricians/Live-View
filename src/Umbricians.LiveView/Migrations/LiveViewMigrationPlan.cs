@@ -11,11 +11,13 @@ namespace Umbricians.LiveView.Migrations;
 /// </summary>
 public class LiveViewMigrationPlan : PackageMigrationPlan
 {
+    /// <summary>Creates the plan under the package's name, which Umbraco records its completed steps against.</summary>
     public LiveViewMigrationPlan()
         : base("Umbricians.LiveView")
     {
     }
 
+    /// <summary>Lists the plan's steps in the order they run.</summary>
     protected override void DefinePlan() =>
         To<GrantLiveViewPermissionsToAdministrators>("8f4b6a1e-2c3d-4e5f-9a0b-1c2d3e4f5a60");
 }
@@ -28,9 +30,11 @@ public class GrantLiveViewPermissionsToAdministrators : AsyncMigrationBase
 {
     private readonly IUserGroupService _userGroupService;
 
+    /// <summary>Created by Umbraco when it runs the plan.</summary>
     public GrantLiveViewPermissionsToAdministrators(IMigrationContext context, IUserGroupService userGroupService)
         : base(context) => _userGroupService = userGroupService;
 
+    /// <summary>Adds each Live View permission the Administrators group doesn't have yet.</summary>
     protected override async Task MigrateAsync()
     {
         IUserGroup? administrators = await _userGroupService.GetAsync(Umbraco.Cms.Core.Constants.Security.AdminGroupKey);

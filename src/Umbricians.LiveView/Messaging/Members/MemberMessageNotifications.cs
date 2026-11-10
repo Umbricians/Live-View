@@ -9,6 +9,11 @@ namespace Umbricians.LiveView.Messaging.Members;
 /// </summary>
 public sealed class MemberMessageSendingNotification : CancelableNotification
 {
+    /// <summary>Creates the notification for a member message about to be sent.</summary>
+    /// <param name="message">The message about to be sent.</param>
+    /// <param name="deliveryMethods">The aliases of the senders chosen to deliver it.</param>
+    /// <param name="senderKey">The backoffice user sending it.</param>
+    /// <param name="messages">Collects the reason when a handler cancels the message.</param>
     public MemberMessageSendingNotification(
         MemberMessage message, IReadOnlyList<string> deliveryMethods, Guid? senderKey, EventMessages messages)
         : base(messages)
@@ -31,6 +36,10 @@ public sealed class MemberMessageSendingNotification : CancelableNotification
 /// <summary>Published after every chosen delivery method has finished with a member message, whether or not it delivered.</summary>
 public sealed class MemberMessageSentNotification : INotification
 {
+    /// <summary>Creates the notification for a member message every chosen delivery method has finished with.</summary>
+    /// <param name="message">The message that was sent.</param>
+    /// <param name="results">What each delivery method did.</param>
+    /// <param name="senderKey">The backoffice user who sent it.</param>
     public MemberMessageSentNotification(
         MemberMessage message, IReadOnlyList<MemberMessageSenderResult> results, Guid? senderKey)
     {

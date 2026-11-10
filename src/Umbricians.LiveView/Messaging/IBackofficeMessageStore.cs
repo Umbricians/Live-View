@@ -2,7 +2,11 @@ namespace Umbricians.LiveView.Messaging;
 
 /// <summary>A message sent to backoffice users, as their backoffice fetches it.</summary>
 /// <param name="Key">Identifies the message; it is what a server event carries.</param>
+/// <param name="Headline">The headline, up to 200 characters.</param>
+/// <param name="Message">The message under the headline, up to 2000 characters of plain text; may be empty.</param>
+/// <param name="Color">The message's type as an Umbraco UI colour: <c>default</c>, <c>positive</c>, <c>warning</c> or <c>danger</c>.</param>
 /// <param name="SenderName">The name of the user who sent it, or null when it has no sender.</param>
+/// <param name="SentAt">When it was sent.</param>
 public sealed record BackofficeMessage(
     Guid Key,
     string Headline,
