@@ -28,7 +28,9 @@ classifier** decides; others are fed from code.
 A channel's settings as they apply, with every value filled in: its name, sort order, paths, session key sources,
 activity window and so on. Appsettings beat channels declared in code, which beat the built-in defaults; whatever is
 still empty then gets the package defaults (counted by client, a window of `ActivityWindowSeconds`). Everything that
-reads a channel's settings reads them here.
+reads a channel's settings reads them here. A **metric provider**'s line reads its settings here too, under its alias,
+but only whether it is shown, its name, colour and sort order: appsettings beat the provider's own values, which beat
+the defaults.
 
 ## Live View permissions
 
@@ -70,6 +72,12 @@ always agree.
 What every message says, to backoffice users or members alike: a headline (required, up to 200 characters), a
 message (up to 2000) and its type (Information, Warning, Urgent or Good news). Text is trimmed before it is checked.
 Both messaging modules check it the same way, and both dialogs share the same fields for it.
+
+## Metric provider
+
+A line on the chart that is not a **channel**: a number the site works out on demand by implementing
+`ILiveMetricProvider`, asked for every time the dashboard refreshes. Its line takes the **channel settings** under its
+alias.
 
 ## Online backoffice user
 

@@ -185,7 +185,9 @@ Each channel under `Channels` can set `Enabled`, `Name`, `Color`, `SortOrder`, `
 `mcp`, `api`) keep their defaults for anything you leave out. `SessionKeys` and `Exclusive` don't apply to
 `members`, which always counts the signed-in member and also counts them as a web visitor. `SessionKeys` doesn't
 apply to `backoffice`, which always counts the signed-in backoffice user. See
-[How sessions are counted](../README.md#how-sessions-are-counted) for the details.
+[How sessions are counted](../README.md#how-sessions-are-counted) for the details. A line from a metric provider
+(step 5) takes `Enabled`, `Name`, `Color` and `SortOrder` from the settings under its alias too; the other settings
+don't apply to it.
 
 ## 5. Add your own lines
 
@@ -222,7 +224,8 @@ public class LiveViewComposer : IComposer
 ```
 
 Providers are called every time the dashboard refreshes and are given 2 seconds to answer, so keep them cheap: cache
-anything expensive. The [README](../README.md#extending) has examples of the other two approaches.
+anything expensive. To rename, recolour, reorder or switch off its line without changing code, set `Name`, `Color`,
+`SortOrder` or `Enabled` under `Channels:pending-orders` in `appsettings.json`. The [README](../README.md#extending) has examples of the other two approaches.
 
 ## 6. Message backoffice users and members
 

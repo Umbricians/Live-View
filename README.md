@@ -193,6 +193,16 @@ channel always counts the signed-in member and always lets members count as web 
 `Exclusive` don't apply to it; its other settings do. The built-in `backoffice` channel always counts the signed-in
 backoffice user, so `SessionKeys` doesn't apply to it.
 
+The same settings restyle a line from a [custom metric provider](#3-a-custom-metric-provider), under the provider's
+`Alias`: `Name`, `Color` and `SortOrder` replace the provider's own values, and `"Enabled": false` takes the line off the
+chart and stops the provider being called. Anything left out keeps the provider's own value. `PathPrefixes`,
+`ExcludePathPrefixes`, `SessionKeys`, `ActivityWindowSeconds`, `IgnoreStaticFiles` and `Exclusive` don't apply to a
+provider and are ignored.
+
+```json
+{ "Umbricians": { "LiveView": { "Channels": { "mcp-server": { "Name": "Remote MCP", "SortOrder": 15 } } } } }
+```
+
 `MemberAvatarProperty` names the member property that holds each member's picture; see
 [member avatars](#5-member-avatars).
 
@@ -269,6 +279,11 @@ builder.AddLiveViewMetric<McpServerSessionsMetric>();
 Providers are called on every poll and given 2 seconds to answer. A slow or failing provider shows as a gap in its
 line rather than breaking the dashboard. See
 [ThreadPoolQueueMetric.cs](demo/Umbricians.LiveView.Demo/LiveView/ThreadPoolQueueMetric.cs) for a working example.
+
+Its line can be renamed, recoloured, reordered or switched off in `appsettings.json` under `Channels:mcp-server`, like
+any channel; see [Configuration](#configuration). A provider whose alias matches a channel, built-in or declared in
+code, replaces that channel: the channel stops counting requests, and the settings under that alias apply to the
+provider's line. Give it an alias no channel uses unless you mean to replace one.
 
 ### 4. Messaging members
 

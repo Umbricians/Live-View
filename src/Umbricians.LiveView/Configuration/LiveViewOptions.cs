@@ -40,6 +40,7 @@ public class LiveViewOptions
     /// <summary>
     /// Request-tracked channels, keyed by alias. The built-in <c>web</c>, <c>members</c>, <c>backoffice</c>, <c>mcp</c> and <c>api</c> channels are
     /// added when not configured; any property left empty on them falls back to its built-in value.
+    /// Settings under the alias of an <see cref="Metrics.ILiveMetricProvider"/> apply to its line instead, which uses only Enabled, Name, Color and SortOrder.
     /// </summary>
     public Dictionary<string, LiveViewChannelOptions> Channels { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

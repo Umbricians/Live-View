@@ -17,7 +17,7 @@ public class SessionKeySourceTests
     private readonly LiveViewOptions _options = new();
     private readonly RequestClassifier _classifier;
 
-    public SessionKeySourceTests() => _classifier = new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options));
+    public SessionKeySourceTests() => _classifier = new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options), []);
 
     [Theory]
     [InlineData("User")]
