@@ -13,17 +13,23 @@ updates:
     groups:
       umbraco:
         patterns: ["Umbraco.*"]
-    # The package's references in src/Directory.Packages.props stay at the lowest Umbraco version it supports. The
-    # demo's Umbraco.Cms keeps getting updates.
     ignore:
+      # The package's references in src/Directory.Packages.props stay at the lowest Umbraco version it supports.
       - dependency-name: "Umbraco.Cms.Api.Common"
       - dependency-name: "Umbraco.Cms.Api.Management"
       - dependency-name: "Umbraco.Cms.Web.Common"
+      # The demo's Umbraco.Cms keeps getting minor and patch updates. A new Umbraco major moves the package, the
+      # client and the demo together in a major release (CONVENTIONS.md, Versions), so it isn't proposed here.
+      - dependency-name: "Umbraco.*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /src/Umbricians.LiveView/Client
     schedule:
       interval: weekly
-    # @umbraco-cms/backoffice stays at the lowest Umbraco version the package supports.
     ignore:
+      # @umbraco-cms/backoffice stays at the lowest Umbraco version the package supports.
       - dependency-name: "@umbraco-cms/backoffice"
+      # The types follow the Node major CI runs (node-version in build.yml), so they only offer APIs it has.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
