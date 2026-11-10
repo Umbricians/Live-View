@@ -5,33 +5,33 @@ using Umbraco.Cms.Core.Notifications;
 namespace Umbricians.LiveView.Presence;
 
 /// <summary>Takes deleted backoffice users off the dashboard straight away.</summary>
-internal sealed class BackofficeUserDeletedHandler : INotificationHandler<UserDeletedNotification>
+internal sealed class BackofficeUserDeletedHandler : INotificationAsyncHandler<UserDeletedNotification>
 {
     private readonly BackofficePresence _presence;
 
     public BackofficeUserDeletedHandler(BackofficePresence presence) => _presence = presence;
 
-    public void Handle(UserDeletedNotification notification)
+    public async Task HandleAsync(UserDeletedNotification notification, CancellationToken cancellationToken)
     {
         foreach (IUser user in notification.DeletedEntities)
         {
-            _presence.Forget(user.Key);
+            await _presence.ForgetAsync(user.Key);
         }
     }
 }
 
 /// <summary>Takes backoffice users off the dashboard straight away when they are disabled.</summary>
-internal sealed class BackofficeUserDisabledHandler : INotificationHandler<UserSavedNotification>
+internal sealed class BackofficeUserDisabledHandler : INotificationAsyncHandler<UserSavedNotification>
 {
     private readonly BackofficePresence _presence;
 
     public BackofficeUserDisabledHandler(BackofficePresence presence) => _presence = presence;
 
-    public void Handle(UserSavedNotification notification)
+    public async Task HandleAsync(UserSavedNotification notification, CancellationToken cancellationToken)
     {
         foreach (IUser user in notification.SavedEntities.Where(u => u.UserState == UserState.Disabled))
         {
-            _presence.Forget(user.Key);
+            await _presence.ForgetAsync(user.Key);
         }
     }
 }

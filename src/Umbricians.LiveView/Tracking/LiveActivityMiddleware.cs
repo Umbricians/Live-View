@@ -46,31 +46,39 @@ internal sealed class LiveActivityMiddleware : IMiddleware
 
         await using (request.McpCall ? _mcpCallers.Begin(context) : null)
         {
-            List<IDisposable> activities = request.Sessions.Select(s => _tracker.BeginActivity(s.Channel, s.SessionKey)).ToList();
+            var activities = new List<IAsyncDisposable>();
             try
             {
+                foreach (ChannelSession session in request.Sessions)
+                {
+                    activities.Add(await _tracker.BeginActivityAsync(session.Channel, session.SessionKey));
+                }
+
                 await next(context);
             }
             finally
             {
-                activities.ForEach(a => a.Dispose());
+                foreach (IAsyncDisposable activity in activities)
+                {
+                    await activity.DisposeAsync();
+                }
             }
         }
 
         // The signed-in user (or member) is only known once authentication has run, so they are counted now.
         if (request.MemberSeen)
         {
-            _memberPresence.Seen(context.User);
+            await _memberPresence.SeenAsync(context.User);
         }
 
         if (request.BackofficeSeen)
         {
-            _backofficePresence.Seen(context.User);
+            await _backofficePresence.SeenAsync(context.User);
         }
 
         foreach (ChannelSession session in request.SignedInSessions())
         {
-            _tracker.Touch(session.Channel, session.SessionKey);
+            await _tracker.TouchAsync(session.Channel, session.SessionKey);
         }
     }
 }

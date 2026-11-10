@@ -11,6 +11,7 @@ This guide takes you from installing Umbricians Live View to a dashboard showing
 - [4. Configure what is counted](#4-configure-what-is-counted)
 - [5. Add your own lines](#5-add-your-own-lines)
 - [6. Message backoffice users and members](#6-message-backoffice-users-and-members)
+- [Load-balanced sites](#load-balanced-sites)
 - [Before you go live](#before-you-go-live)
 - [Troubleshooting](#troubleshooting)
 
@@ -177,7 +178,7 @@ endpoint, keyed on a client id header.
 | `TrackingEnabled` | `true` | Turns request counting off entirely. Custom lines from code still show. |
 | `ActivityWindowSeconds` | `300` | How long a session counts as active after its last request. Each channel can override it. |
 | `IgnoreBots` | `true` | Ignores requests whose User-Agent looks like a crawler. |
-| `MaxSessionsPerChannel` | `100000` | A safety limit on sessions held in memory per line. |
+| `MaxSessionsPerChannel` | `100000` | Upper bound on entries the in-memory store holds per line (sessions, or people online), to protect the server from floods. |
 | `MemberAvatarProperty` | none | The alias of a member image property (media picker, image cropper or upload) to show as each member's picture. For other sources, see [Member avatars](../README.md#5-member-avatars). |
 | `MessageTimeZone` | the sender's own | The time zone "midnight tonight" means when messaging members, as an IANA id such as `America/Denver` (a Windows id works too). |
 
@@ -200,7 +201,7 @@ Anything the site can count can go on the chart. Pick the approach that fits:
   requests in code, or key sessions on something only your code knows, see
   [A channel for requests](../README.md#1-a-channel-for-requests).
 - **Sessions your code knows about**, such as SignalR connections: declare a channel with
-  `builder.AddLiveViewChannel(...)` and call `ILiveActivityTracker.Touch` / `End` from your code.
+  `builder.AddLiveViewChannel(...)` and call `ILiveActivityTracker.TouchAsync` / `EndAsync` from your code.
 - **Any number you can work out on demand**, such as a queue length or a count from another service: implement
   `ILiveMetricProvider` and register it with `builder.AddLiveViewMetric<T>()`.
 
@@ -243,7 +244,39 @@ messages should reach them: a banner, a live pop-up, email or something else. Se
 [Messaging members](member-messaging.md).
 
 Every message sent is written to Umbraco's audit log, and a site can stop one with a notification handler: see
-[Before and after a message is sent](../README.md#6-before-and-after-a-message-is-sent).
+[Before and after a message is sent](../README.md#7-before-and-after-a-message-is-sent).
+
+## Load-balanced sites
+
+By default each server keeps its own counts, online lists and sent backoffice messages in memory, so each server
+shows only what it handled. To make every server show the same, replace the two stores Live View keeps them in. Register
+yours in a composer with `builder.Services.AddSingleton<...>()`; it wins whichever composer runs first.
+
+- `ILiveViewActivityStore` holds who is active: sessions per channel, backoffice users and their tabs, members and
+  MCP callers.
+- `IBackofficeMessageStore` holds sent backoffice messages until their recipients' backoffice fetches them.
+
+The stores only hold data. Live View decides the activity windows, the tab timeout, who counts as online and how long
+a message lives, and passes the cutoff times in. What a store must do:
+
+- Set names and keys are opaque strings; store them as given.
+- An entry is active while its open count is above 0 or its last-seen time is at or after the `since` that
+  `GetActiveAsync` and `CountActiveAsync` are given.
+- `ClosedAsync` on an entry that is not there does nothing.
+- `CountActiveAsync` takes many sets at once (the backoffice reads every online user's tabs in one call), so answer it in one round trip.
+- A store with a cap on a set returns false from `SeenAsync` or `OpenedAsync` when it drops a new entry because the set is full. A store without a cap always returns true.
+- Keep the calls quick: the activity store is called on every tracked request, and its methods are async and are awaited each time.
+- An open count left behind by a server that stops is never closed, so a shared store should expire entries.
+
+Even with shared stores, these stay per server, and need no action:
+
+- The instant push of a backoffice message reaches only the editors connected to the server that sent it. The others
+  get the message from their next heartbeat, within about a minute.
+- The open tab count and the realtime connection state, which come from Umbraco's realtime connections.
+- The `IMemberMessageInbox`, which has its own registration (see [Messaging members](member-messaging.md)).
+- Member sign-out markers.
+
+No distributed store ships with the package.
 
 ## Before you go live
 
@@ -264,8 +297,10 @@ Every message sent is written to Umbraco's audit log, and a site can stop one wi
   proxy, and visitors with the same browser are counted as one. Configure ASP.NET Core's
   [forwarded headers](https://learn.microsoft.com/aspnet/core/host-and-deploy/proxy-load-balancer) so the real client
   IP is used. The **Visitor IP addresses behind a proxy** health check looks for this.
-- **Counts are per server.** Everything is held in memory, so on a load-balanced site each server shows the traffic it
-  handled. The same goes for queued messages.
+- **Counts are per server by default.** Everything is held in memory, so on a load-balanced site each server shows the
+  traffic it handled, and the same goes for sent backoffice messages. To share them, see
+  [Load-balanced sites](#load-balanced-sites).
+
 - **Nothing is persisted.** Restarting the site resets the counts and clears any queued messages.
 
 ## Troubleshooting

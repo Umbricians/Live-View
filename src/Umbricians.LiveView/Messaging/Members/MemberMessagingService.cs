@@ -117,7 +117,7 @@ internal sealed class MemberMessagingService
         IReadOnlyList<Guid> memberKeys = audience switch
         {
             MemberMessageAudience.Selected => selected,
-            MemberMessageAudience.AllOnline => _presence.AllOnline(),
+            MemberMessageAudience.AllOnline => await _presence.AllOnlineAsync(),
             _ => [],
         };
 

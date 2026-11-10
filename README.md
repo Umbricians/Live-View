@@ -16,8 +16,8 @@ sessions are active right now:
 - **Anything else** you plug in
 
 The chart refreshes every 2, 5, 10, 15 or 30 seconds (your choice is remembered per browser). Nothing is stored:
-the server keeps an in-memory set of recently active sessions, and the browser keeps the last 120 readings while
-the page is open.
+the server keeps an in-memory set of recently active sessions (by default; see
+[load-balanced sites](#8-load-balanced-sites)), and the browser keeps the last 120 readings while the page is open.
 
 Click a counter, or its legend entry, to take its line off the chart; both fade until you click either again.
 
@@ -70,7 +70,7 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
   is down, the count falls back to heartbeats, and a closed tab then drops off within about two and a half minutes.
 - Messages are pushed over Umbraco's server events (SignalR), so they arrive instantly. If a user's realtime
   connection is down, their next heartbeat picks the message up instead ("Delivery" column).
-- Messages are held in memory for 15 minutes, then discarded.
+- Messages are held for 15 minutes in the message store (in memory by default), then discarded.
 - Every message sent is recorded in [Umbraco's audit log](#7-before-and-after-a-message-is-sent): who sent it, to whom and its headline.
 
 ## Documentation
@@ -160,7 +160,8 @@ Web sessions are counted per visitor, not per tab: several tabs in the same brow
 User-Agent that identify the visitor, so they count once. Different browsers or devices count separately, while
 visitors behind one shared IP address using an identical browser version are counted as one.
 
-> Counts are per server. On a load-balanced site, each server sees only its own traffic.
+> By default counts are per server: on a load-balanced site, each server sees only its own traffic. See
+> [Load-balanced sites](docs/getting-started.md#load-balanced-sites) to share them.
 
 ## Health checks
 
@@ -308,21 +309,21 @@ public class LiveViewComposer : IComposer
 
 public class ChatHub(ILiveActivityTracker tracker) : Hub
 {
-    public override Task OnConnectedAsync()
+    public override async Task OnConnectedAsync()
     {
-        tracker.Touch("signalr", Context.ConnectionId);
-        return base.OnConnectedAsync();
+        await tracker.TouchAsync("signalr", Context.ConnectionId);
+        await base.OnConnectedAsync();
     }
 
-    public override Task OnDisconnectedAsync(Exception? exception)
+    public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        tracker.End("signalr", Context.ConnectionId);
-        return base.OnDisconnectedAsync(exception);
+        await tracker.EndAsync("signalr", Context.ConnectionId);
+        await base.OnDisconnectedAsync(exception);
     }
 }
 ```
 
-`BeginActivity(channel, key)` returns an `IDisposable` that keeps the session active until it is disposed.
+`BeginActivityAsync(channel, key)` returns an `IAsyncDisposable` that keeps the session active until it is disposed.
 
 `AddLiveViewChannel` with a built-in alias, such as `members`, restyles that channel. For each property, a value in
 `appsettings.json` wins, then a value set with `AddLiveViewChannel`, then the built-in default, whatever order
@@ -600,6 +601,27 @@ timeouts), so they suit logging a send or forwarding it elsewhere.
 Each message sent is also written to Umbraco's audit log (`IAuditService`, type `Notify`, entity type
 `Umbricians.LiveView`) under the sending user, with the audience and headline and, for member messages, which delivery methods delivered it
 and which failed (or that none did).
+
+### 8. Load-balanced sites
+
+By default each server keeps its own counts, online lists and sent backoffice messages in memory. To share them,
+register your own `ILiveViewActivityStore` (sessions, users, tabs, members and MCP callers) and
+`IBackofficeMessageStore` (backoffice messages), which replace the in-memory ones whichever composer runs first:
+
+```csharp
+public class LiveViewStoresComposer : IComposer
+{
+    public void Compose(IUmbracoBuilder builder)
+    {
+        builder.Services.AddSingleton<ILiveViewActivityStore, RedisActivityStore>();
+        builder.Services.AddSingleton<IBackofficeMessageStore, RedisBackofficeMessageStore>();
+    }
+}
+```
+
+`RedisActivityStore` and `RedisBackofficeMessageStore` are your own classes; no distributed store ships with the
+package. See [Load-balanced sites](docs/getting-started.md#load-balanced-sites) for what each store must do and what
+stays per server.
 
 ## API
 

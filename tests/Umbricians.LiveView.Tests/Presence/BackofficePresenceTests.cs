@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.Extensions.Time.Testing;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Tests.Presence;
 
@@ -12,65 +13,68 @@ public class BackofficePresenceTests
     private readonly LiveViewOptions _options = new();
     private readonly BackofficePresence _presence;
 
-    public BackofficePresenceTests() =>
-        _presence = new BackofficePresence(_directory, new StaticOptionsMonitor<LiveViewOptions>(_options), _clock);
-
-    [Fact]
-    public void A_user_seen_is_online()
+    public BackofficePresenceTests()
     {
-        Guid alice = _directory.Add("Alice");
-
-        _presence.Seen(SignedIn(alice));
-
-        Assert.Equal(1, _presence.CountOnline());
-        Assert.Equal([alice], _presence.AllOnline());
+        var options = new StaticOptionsMonitor<LiveViewOptions>(_options);
+        _presence = new BackofficePresence(new InMemoryActivityStore(options), _directory, options, _clock);
     }
 
     [Fact]
-    public void Requests_that_are_not_signed_in_are_ignored()
+    public async Task A_user_seen_is_online()
     {
-        _presence.Seen(new ClaimsPrincipal(new ClaimsIdentity()));
-        _presence.Seen(new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", Guid.NewGuid().ToString())])));
+        Guid alice = _directory.Add("Alice");
 
-        Assert.Equal(0, _presence.CountOnline());
+        await _presence.SeenAsync(SignedIn(alice));
+
+        Assert.Equal(1, await _presence.CountOnlineAsync());
+        Assert.Equal([alice], await _presence.AllOnlineAsync());
     }
 
     [Fact]
-    public void A_user_without_an_open_tab_goes_offline_once_the_activity_window_passes()
+    public async Task Requests_that_are_not_signed_in_are_ignored()
+    {
+        await _presence.SeenAsync(new ClaimsPrincipal(new ClaimsIdentity()));
+        await _presence.SeenAsync(new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", Guid.NewGuid().ToString())])));
+
+        Assert.Equal(0, await _presence.CountOnlineAsync());
+    }
+
+    [Fact]
+    public async Task A_user_without_an_open_tab_goes_offline_once_the_activity_window_passes()
     {
         Guid alice = _directory.Add("Alice");
-        _presence.Seen(SignedIn(alice));
+        await _presence.SeenAsync(SignedIn(alice));
 
         _clock.Advance(TimeSpan.FromSeconds(299));
-        Assert.Equal(1, _presence.CountOnline());
+        Assert.Equal(1, await _presence.CountOnlineAsync());
 
         _clock.Advance(TimeSpan.FromSeconds(2));
-        Assert.Equal(0, _presence.CountOnline());
+        Assert.Equal(0, await _presence.CountOnlineAsync());
     }
 
     [Fact]
-    public void The_backoffice_channel_can_set_its_own_window()
+    public async Task The_backoffice_channel_can_set_its_own_window()
     {
         _options.Channels[Constants.Channels.Backoffice] = new LiveViewChannelOptions { ActivityWindowSeconds = 30 };
         Guid alice = _directory.Add("Alice");
-        _presence.Seen(SignedIn(alice));
+        await _presence.SeenAsync(SignedIn(alice));
 
         _clock.Advance(TimeSpan.FromSeconds(31));
 
-        Assert.Equal(0, _presence.CountOnline());
+        Assert.Equal(0, await _presence.CountOnlineAsync());
     }
 
     [Fact]
     public async Task An_idle_editor_with_an_open_tab_stays_online_while_it_sends_heartbeats()
     {
         Guid alice = _directory.Add("Alice");
-        _presence.TabHeartbeat(alice, "tab-1");
-        _presence.TabHeartbeat(alice, "tab-2");
+        await _presence.TabHeartbeatAsync(alice, "tab-1");
+        await _presence.TabHeartbeatAsync(alice, "tab-2");
 
         for (int minute = 0; minute < 10; minute++)
         {
             _clock.Advance(TimeSpan.FromSeconds(60));
-            _presence.TabHeartbeat(alice, "tab-1");
+            await _presence.TabHeartbeatAsync(alice, "tab-1");
         }
 
         (int total, IReadOnlyList<OnlineBackofficeUser> page) = await _presence.PageAsync(0, 10);
@@ -83,27 +87,27 @@ public class BackofficePresenceTests
     public async Task A_closed_tab_stops_counting_straight_away()
     {
         Guid alice = _directory.Add("Alice");
-        _presence.TabHeartbeat(alice, "tab-1");
-        _presence.TabHeartbeat(alice, "tab-2");
+        await _presence.TabHeartbeatAsync(alice, "tab-1");
+        await _presence.TabHeartbeatAsync(alice, "tab-2");
 
-        _presence.TabClosed(alice, "tab-1");
+        await _presence.TabClosedAsync(alice, "tab-1");
 
         (_, IReadOnlyList<OnlineBackofficeUser> page) = await _presence.PageAsync(0, 10);
         Assert.Equal(1, Assert.Single(page).OpenTabs);
     }
 
     [Fact]
-    public void A_tab_that_stops_sending_heartbeats_times_out_and_then_the_window_applies()
+    public async Task A_tab_that_stops_sending_heartbeats_times_out_and_then_the_window_applies()
     {
         _options.Channels[Constants.Channels.Backoffice] = new LiveViewChannelOptions { ActivityWindowSeconds = 30 };
         Guid alice = _directory.Add("Alice");
-        _presence.TabHeartbeat(alice, "tab-1");
+        await _presence.TabHeartbeatAsync(alice, "tab-1");
 
         _clock.Advance(BackofficePresence.TabTimeout);
-        Assert.Equal(1, _presence.CountOnline());
+        Assert.Equal(1, await _presence.CountOnlineAsync());
 
         _clock.Advance(TimeSpan.FromSeconds(1));
-        Assert.Equal(0, _presence.CountOnline());
+        Assert.Equal(0, await _presence.CountOnlineAsync());
     }
 
     [Fact]
@@ -112,7 +116,7 @@ public class BackofficePresenceTests
         Guid alice = _directory.Add("Alice");
         for (int tab = 0; tab <= BackofficePresence.MaxTabsPerUser; tab++)
         {
-            _presence.TabHeartbeat(alice, $"tab-{tab}");
+            await _presence.TabHeartbeatAsync(alice, $"tab-{tab}");
         }
 
         (_, IReadOnlyList<OnlineBackofficeUser> page) = await _presence.PageAsync(0, 10);
@@ -124,9 +128,9 @@ public class BackofficePresenceTests
     {
         Guid alice = _directory.Add("Alice");
         Guid bob = _directory.Add("Bob");
-        _presence.TabHeartbeat(alice, "tab-1");
-        _presence.TabHeartbeat(bob, "tab-1");
-        _presence.TabHeartbeat(bob, "tab-2");
+        await _presence.TabHeartbeatAsync(alice, "tab-1");
+        await _presence.TabHeartbeatAsync(bob, "tab-1");
+        await _presence.TabHeartbeatAsync(bob, "tab-2");
         _directory.SetConnections(alice, 3);
 
         (_, IReadOnlyList<OnlineBackofficeUser> page) = await _presence.PageAsync(0, 10);
@@ -145,11 +149,11 @@ public class BackofficePresenceTests
         Guid carol = _directory.Add("Carol");
         foreach (Guid user in new[] { alice, bob, carol })
         {
-            _presence.Seen(SignedIn(user));
+            await _presence.SeenAsync(SignedIn(user));
             _clock.Advance(TimeSpan.FromSeconds(1));
         }
 
-        _presence.Seen(SignedIn(alice));
+        await _presence.SeenAsync(SignedIn(alice));
 
         (int total, IReadOnlyList<OnlineBackofficeUser> first) = await _presence.PageAsync(0, 2);
         (_, IReadOnlyList<OnlineBackofficeUser> second) = await _presence.PageAsync(2, 2);
@@ -164,7 +168,7 @@ public class BackofficePresenceTests
     public async Task Rows_carry_the_users_details()
     {
         Guid alice = _directory.Add("Alice", "alice@example.test");
-        _presence.Seen(SignedIn(alice));
+        await _presence.SeenAsync(SignedIn(alice));
 
         (_, IReadOnlyList<OnlineBackofficeUser> page) = await _presence.PageAsync(0, 10);
 
@@ -181,7 +185,7 @@ public class BackofficePresenceTests
         Guid dave = _directory.Add("Dave");
         foreach (Guid user in new[] { alice, bob, carol, dave })
         {
-            _presence.TabHeartbeat(user, "tab-1");
+            await _presence.TabHeartbeatAsync(user, "tab-1");
             _clock.Advance(TimeSpan.FromSeconds(1));
         }
 
@@ -192,33 +196,33 @@ public class BackofficePresenceTests
 
         Assert.Equal(2, total);
         Assert.Equal(["Bob", "Alice"], page.Select(u => u.Name));
-        Assert.Equal(2, _presence.CountOnline());
+        Assert.Equal(2, await _presence.CountOnlineAsync());
     }
 
     [Fact]
-    public void A_forgotten_user_is_offline_even_with_an_open_tab()
+    public async Task A_forgotten_user_is_offline_even_with_an_open_tab()
     {
         Guid alice = _directory.Add("Alice");
-        _presence.TabHeartbeat(alice, "tab-1");
+        await _presence.TabHeartbeatAsync(alice, "tab-1");
 
-        _presence.Forget(alice);
+        await _presence.ForgetAsync(alice);
 
-        Assert.Equal(0, _presence.CountOnline());
+        Assert.Equal(0, await _presence.CountOnlineAsync());
     }
 
     [Fact]
-    public void All_online_includes_users_on_every_page_newest_arrivals_first()
+    public async Task All_online_includes_users_on_every_page_newest_arrivals_first()
     {
         Guid alice = _directory.Add("Alice");
         Guid bob = _directory.Add("Bob");
         Guid carol = _directory.Add("Carol");
-        _presence.Seen(SignedIn(alice));
+        await _presence.SeenAsync(SignedIn(alice));
         _clock.Advance(TimeSpan.FromSeconds(1));
-        _presence.TabHeartbeat(bob, "tab-1");
+        await _presence.TabHeartbeatAsync(bob, "tab-1");
         _clock.Advance(TimeSpan.FromSeconds(1));
-        _presence.Seen(SignedIn(carol));
+        await _presence.SeenAsync(SignedIn(carol));
 
-        Assert.Equal([carol, bob, alice], _presence.AllOnline());
+        Assert.Equal([carol, bob, alice], await _presence.AllOnlineAsync());
     }
 
     [Fact]
@@ -227,23 +231,23 @@ public class BackofficePresenceTests
         Guid alice = _directory.Add("Alice");
         Guid bob = _directory.Add("Bob");
         Guid carol = _directory.Add("Carol");
-        _presence.TabHeartbeat(alice, "tab-1");
-        _presence.Seen(SignedIn(bob));
-        _presence.Seen(SignedIn(carol));
+        await _presence.TabHeartbeatAsync(alice, "tab-1");
+        await _presence.SeenAsync(SignedIn(bob));
+        await _presence.SeenAsync(SignedIn(carol));
 
         // Bob's window passes; Alice keeps her tab open and Carol keeps working.
         for (int minute = 0; minute < 6; minute++)
         {
             _clock.Advance(TimeSpan.FromSeconds(60));
-            _presence.TabHeartbeat(alice, "tab-1");
-            _presence.Seen(SignedIn(carol));
+            await _presence.TabHeartbeatAsync(alice, "tab-1");
+            await _presence.SeenAsync(SignedIn(carol));
         }
 
         (int total, IReadOnlyList<OnlineBackofficeUser> page) = await _presence.PageAsync(0, 10);
 
         Assert.Equal(2, total);
-        Assert.Equal(total, _presence.CountOnline());
-        Assert.Equal(page.Select(u => u.Key), _presence.AllOnline());
+        Assert.Equal(total, await _presence.CountOnlineAsync());
+        Assert.Equal(page.Select(u => u.Key), await _presence.AllOnlineAsync());
     }
 
     [Fact]
@@ -252,8 +256,8 @@ public class BackofficePresenceTests
         string[] sizes = ["/media/a.jpg?width=30", "/media/a.jpg?width=60"];
         Guid alice = _directory.Add("Alice", avatarUrls: sizes);
         Guid bob = _directory.Add("Bob");
-        _presence.Seen(SignedIn(alice));
-        _presence.Seen(SignedIn(bob));
+        await _presence.SeenAsync(SignedIn(alice));
+        await _presence.SeenAsync(SignedIn(bob));
 
         (_, IReadOnlyList<OnlineBackofficeUser> page) = await _presence.PageAsync(0, 10);
 

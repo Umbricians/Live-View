@@ -2,12 +2,20 @@
 
 The words this codebase uses for its domain. Code, docs and reviews should use them as defined here.
 
+## Activity store
+
+Where the tracker and the presence modules keep who is active: sessions per channel, backoffice users and their tabs,
+members and MCP callers. It holds data only, with no rules: the modules decide the windows and who is online, and
+pass the cutoff times in. In memory on each server unless a site replaces it, e.g. to share it between load-balanced
+servers.
+
 ## Backoffice messenger
 
 The module that sends a one-off message to backoffice users. It owns the send rules: the **message content**, who
 **everyone online** means at the moment of sending (users in the backoffice; an MCP caller only on MCP can't see a
 backoffice message), and that the **sender** is never one of the recipients. It also says how many users a message to
-everyone online would reach, so the users table's count and the delivery always agree. Before delivering it publishes a sending notification a site can cancel (the reason comes back as why the message wasn't sent), and afterwards a sent notification.
+everyone online would reach, so the users table's count and the delivery always agree. Before delivering it publishes a sending notification a site can cancel (the reason comes back as why the message wasn't sent), and afterwards a sent notification. It keeps the messages it sends
+in the **message store**.
 
 ## Backoffice presence
 
@@ -90,6 +98,11 @@ message sent by no known backoffice user is not audited.
 What every message says, to backoffice users or members alike: a headline (required, up to 200 characters), a
 message (up to 2000) and its type (Information, Warning, Urgent or Good news). Text is trimmed before it is checked.
 Both messaging modules check it the same way, and both dialogs share the same fields for it.
+
+## Message store
+
+Where sent backoffice messages wait to be fetched by their recipients' backoffice, and who each one has been
+delivered to. In memory on each server unless a site replaces it.
 
 ## Metric provider
 

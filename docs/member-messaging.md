@@ -486,7 +486,7 @@ dashboard, such as "queued for sending".
 ### `MemberMessageSendingNotification` and `MemberMessageSentNotification`
 
 Published through `IEventAggregator` before and after a message is sent; see
-[Before and after a message is sent](../README.md#6-before-and-after-a-message-is-sent). Cancelling the sending
+[Before and after a message is sent](../README.md#7-before-and-after-a-message-is-sent). Cancelling the sending
 notification stops the message.
 
 | Property | On | Meaning |

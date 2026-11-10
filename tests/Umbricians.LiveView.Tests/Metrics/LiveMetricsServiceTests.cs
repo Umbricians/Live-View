@@ -4,6 +4,7 @@ using Microsoft.Extensions.Time.Testing;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Metrics;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 using Umbricians.LiveView.Tracking;
 
 namespace Umbricians.LiveView.Tests.Metrics;
@@ -119,10 +120,11 @@ public class LiveMetricsServiceTests
     private Task<IReadOnlyList<LiveMetricReading>> Snapshot(params ILiveMetricProvider[] providers)
     {
         var monitor = new StaticOptionsMonitor<LiveViewOptions>(_options);
+        var store = new InMemoryActivityStore(monitor);
         return new LiveMetricsService(
-            new LiveActivityTracker(monitor, _clock),
-            new BackofficePresence(new InMemoryBackofficeUserDirectory(), monitor, _clock),
-            new MemberPresence(new InMemoryMemberDirectory(), monitor, _clock),
+            new LiveActivityTracker(store, monitor, _clock),
+            new BackofficePresence(store, new InMemoryBackofficeUserDirectory(), monitor, _clock),
+            new MemberPresence(store, new InMemoryMemberDirectory(), monitor, _clock),
             providers.Length > 0 ? providers : [_queue],
             monitor,
             NullLogger<LiveMetricsService>.Instance).GetSnapshotAsync(CancellationToken.None);

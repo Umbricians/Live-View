@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 using Umbricians.LiveView.Tracking;
 
 namespace Umbricians.LiveView.Tests.Tracking;
@@ -40,12 +41,13 @@ public class LiveActivityMiddlewareTests
     private LiveActivityMiddleware BuildMiddleware(bool trackingEnabled)
     {
         var options = new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions { TrackingEnabled = trackingEnabled });
+        var store = new InMemoryActivityStore(options);
         var users = new InMemoryBackofficeUserDirectory();
         var members = new InMemoryMemberDirectory();
-        var backoffice = new BackofficePresence(users, options, _clock);
-        var memberPresence = new MemberPresence(members, options, _clock);
+        var backoffice = new BackofficePresence(store, users, options, _clock);
+        var memberPresence = new MemberPresence(store, members, options, _clock);
         var callers = new McpCallers(backoffice, memberPresence, users, members, _clock, NullLogger<McpCallers>.Instance);
         return new LiveActivityMiddleware(
-            new RequestClassifier(options, [], []), new LiveActivityTracker(options, _clock), backoffice, memberPresence, callers, _detector);
+            new RequestClassifier(options, [], []), new LiveActivityTracker(store, options, _clock), backoffice, memberPresence, callers, _detector);
     }
 }

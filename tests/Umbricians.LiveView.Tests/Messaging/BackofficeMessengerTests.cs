@@ -6,6 +6,7 @@ using Umbraco.Cms.Core.ServerEvents;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Tests.Messaging;
 
@@ -21,8 +22,9 @@ public class BackofficeMessengerTests
 
     public BackofficeMessengerTests()
     {
-        _presence = new BackofficePresence(_directory, new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions()), _clock);
-        _messenger = new BackofficeMessenger(_router, _presence, _events, _clock);
+        var options = new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions());
+        _presence = new BackofficePresence(new InMemoryActivityStore(options), _directory, options, _clock);
+        _messenger = new BackofficeMessenger(_router, _presence, new InMemoryBackofficeMessageStore(_clock), _events, _clock);
         _me = _directory.Add("Me");
     }
 
@@ -39,7 +41,7 @@ public class BackofficeMessengerTests
         Assert.Equal(2, sent.Recipients);
         Assert.Equal([alice, bob], _router.Notified.Select(n => n.UserKey));
         Assert.All(_router.Notified, n => Assert.Equal(sent.Message.Key, n.Event.Key));
-        Assert.Equal("Me", _messenger.Receive(sent.Message.Key, alice)?.SenderName);
+        Assert.Equal("Me", (await _messenger.ReceiveAsync(sent.Message.Key, alice))?.SenderName);
     }
 
     [Fact]
@@ -51,7 +53,7 @@ public class BackofficeMessengerTests
 
         Assert.Equal(1, sent.Recipients);
         Assert.Equal([alice], _router.Notified.Select(n => n.UserKey));
-        Assert.Null(_messenger.Receive(sent.Message.Key, _me));
+        Assert.Null(await _messenger.ReceiveAsync(sent.Message.Key, _me));
     }
 
     [Fact]
@@ -60,11 +62,11 @@ public class BackofficeMessengerTests
         Guid alice = _directory.Add("Alice");
         Guid bob = _directory.Add("Bob");
         Guid notSelected = _directory.Add("Carol");
-        _presence.Seen(SignedIn(_me));
-        _presence.Seen(SignedIn(alice));
+        await _presence.SeenAsync(SignedIn(_me));
+        await _presence.SeenAsync(SignedIn(alice));
         BackofficeMessageRequest request = Request(userKeys: [notSelected], allOnline: true);
 
-        _presence.Seen(SignedIn(bob));
+        await _presence.SeenAsync(SignedIn(bob));
         BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(request, Me));
 
         Assert.Equal(2, sent.Recipients);
@@ -74,11 +76,11 @@ public class BackofficeMessengerTests
     [Fact]
     public async Task The_all_online_count_matches_who_a_message_to_everyone_online_reaches()
     {
-        _presence.Seen(SignedIn(_me));
-        _presence.Seen(SignedIn(_directory.Add("Alice")));
-        _presence.Seen(SignedIn(_directory.Add("Bob")));
+        await _presence.SeenAsync(SignedIn(_me));
+        await _presence.SeenAsync(SignedIn(_directory.Add("Alice")));
+        await _presence.SeenAsync(SignedIn(_directory.Add("Bob")));
 
-        int counted = _messenger.CountAllOnlineRecipients(_me);
+        int counted = await _messenger.CountAllOnlineRecipientsAsync(_me);
         BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(Request(allOnline: true), Me));
 
         Assert.Equal(2, counted);
@@ -86,25 +88,25 @@ public class BackofficeMessengerTests
     }
 
     [Fact]
-    public void The_all_online_count_includes_everyone_when_the_sender_is_not_online()
+    public async Task The_all_online_count_includes_everyone_when_the_sender_is_not_online()
     {
-        _presence.Seen(SignedIn(_directory.Add("Alice")));
+        await _presence.SeenAsync(SignedIn(_directory.Add("Alice")));
 
-        Assert.Equal(1, _messenger.CountAllOnlineRecipients(_me));
-        Assert.Equal(1, _messenger.CountAllOnlineRecipients(null));
+        Assert.Equal(1, await _messenger.CountAllOnlineRecipientsAsync(_me));
+        Assert.Equal(1, await _messenger.CountAllOnlineRecipientsAsync(null));
     }
 
     [Fact]
     public async Task Selected_users_who_have_gone_offline_are_still_sent_to()
     {
         Guid alice = _directory.Add("Alice");
-        _presence.Seen(SignedIn(alice));
+        await _presence.SeenAsync(SignedIn(alice));
         _clock.Advance(TimeSpan.FromHours(1));
 
         BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(Request(userKeys: [alice]), Me));
 
-        Assert.Equal(0, _presence.CountOnline());
-        Assert.Equal([sent.Message.Key], _messenger.GetUndelivered(alice));
+        Assert.Equal(0, await _presence.CountOnlineAsync());
+        Assert.Equal([sent.Message.Key], await _messenger.GetUndeliveredAsync(alice));
     }
 
     [Fact]
@@ -179,7 +181,7 @@ public class BackofficeMessengerTests
     [Fact]
     public async Task A_message_with_nobody_but_the_sender_to_go_to_is_rejected_and_not_delivered()
     {
-        _presence.Seen(SignedIn(_me));
+        await _presence.SeenAsync(SignedIn(_me));
 
         BackofficeSendResult selected = await _messenger.SendAsync(Request(userKeys: [_me]), Me);
         BackofficeSendResult allOnline = await _messenger.SendAsync(Request(allOnline: true), Me);
@@ -189,7 +191,7 @@ public class BackofficeMessengerTests
         Assert.IsType<BackofficeSendResult.Rejected>(allOnline);
         Assert.IsType<BackofficeSendResult.Rejected>(nobody);
         Assert.Empty(_router.Notified);
-        Assert.Empty(_messenger.GetUndelivered(_me));
+        Assert.Empty(await _messenger.GetUndeliveredAsync(_me));
     }
 
     [Fact]
@@ -208,7 +210,7 @@ public class BackofficeMessengerTests
 
         Assert.Equal("Not during the release freeze.", Assert.IsType<BackofficeSendResult.Rejected>(result).Reason);
         Assert.Empty(_router.Notified);
-        Assert.Empty(_messenger.GetUndelivered(alice));
+        Assert.Empty(await _messenger.GetUndeliveredAsync(alice));
         Assert.Empty(_events.Published.OfType<BackofficeMessageSentNotification>());
     }
 

@@ -5,6 +5,7 @@ using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Tests.Messaging;
 
@@ -23,7 +24,8 @@ public class MemberMessagingServiceTests
 
     public MemberMessagingServiceTests()
     {
-        _presence = new MemberPresence(_directory, new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions()), _clock);
+        var options = new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions());
+        _presence = new MemberPresence(new InMemoryActivityStore(options), _directory, options, _clock);
         _messaging = new MemberMessagingService([_banner], _presence, _events, _clock, NullLogger<MemberMessagingService>.Instance);
     }
 
@@ -57,8 +59,8 @@ public class MemberMessagingServiceTests
     {
         Guid ann = _directory.Add(1, "Ann");
         Guid bob = _directory.Add(2, "Bob");
-        _presence.McpSeen(ann);
-        _presence.McpSeen(bob);
+        await _presence.McpSeenAsync(ann);
+        await _presence.McpSeenAsync(bob);
 
         var sent = Assert.IsType<MemberSendResult.Sent>(await SendAsync(Request(audience: "allOnline")));
 
@@ -145,7 +147,7 @@ public class MemberMessagingServiceTests
     public async Task Sending_comes_before_delivery_with_the_message_its_delivery_methods_and_its_sender()
     {
         Guid ann = _directory.Add(1, "Ann");
-        _presence.McpSeen(ann);
+        await _presence.McpSeenAsync(ann);
         _events.OnPublish = n =>
         {
             if (n is MemberMessageSendingNotification)

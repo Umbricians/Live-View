@@ -1,25 +1,9 @@
-using System.Collections.Concurrent;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models.ServerEvents;
 using Umbraco.Cms.Core.ServerEvents;
 using Umbricians.LiveView.Presence;
 
 namespace Umbricians.LiveView.Messaging;
-
-/// <summary>A message sent to backoffice users.</summary>
-/// <param name="Key">Unique id for the message.</param>
-/// <param name="Headline">The short title shown in bold.</param>
-/// <param name="Message">The text under the headline; may be empty.</param>
-/// <param name="Color">How it is styled: <c>default</c> (information), <c>positive</c> (good news), <c>warning</c> or <c>danger</c> (urgent).</param>
-/// <param name="SenderName">The name of the backoffice user who sent it, if known.</param>
-/// <param name="SentAt">When it was sent.</param>
-public sealed record BackofficeMessage(
-    Guid Key,
-    string Headline,
-    string Message,
-    string Color,
-    string? SenderName,
-    DateTimeOffset SentAt);
 
 /// <summary>A message as the dashboard sends it: text untrimmed, colour unchecked, recipients not yet worked out.</summary>
 internal sealed record BackofficeMessageRequest(
@@ -51,9 +35,10 @@ internal abstract record BackofficeSendResult
 /// moment of sending, and that the sender is never a recipient. Selected users are sent to as chosen, even if they have since gone
 /// offline, and pick the message up if they come back within its lifetime.
 /// Sites can stop or follow a send with <see cref="BackofficeMessageSendingNotification"/> and <see cref="BackofficeMessageSentNotification"/>.
-/// Server events only carry a key, so the message is held in memory and each recipient's backoffice fetches it
-/// by key. Recipients whose realtime connection is down pick it up from their next heartbeat instead.
-/// Messages are discarded after <see cref="Lifetime"/>.
+/// Server events only carry a key, so the message is held in the <see cref="IBackofficeMessageStore"/> and each
+/// recipient's backoffice fetches it by key. Recipients whose realtime connection is down pick it up from their next
+/// heartbeat instead. On a load-balanced site only the recipients connected to this server get the instant push; the
+/// others pick the message up from their next heartbeat. Messages are discarded after <see cref="Lifetime"/>.
 /// </remarks>
 internal sealed class BackofficeMessenger
 {
@@ -64,16 +49,22 @@ internal sealed class BackofficeMessenger
 
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
 
-    private readonly ConcurrentDictionary<Guid, Entry> _messages = new();
     private readonly IServerEventRouter _router;
     private readonly BackofficePresence _presence;
+    private readonly IBackofficeMessageStore _store;
     private readonly IEventAggregator _eventAggregator;
     private readonly TimeProvider _timeProvider;
 
-    public BackofficeMessenger(IServerEventRouter router, BackofficePresence presence, IEventAggregator eventAggregator, TimeProvider timeProvider)
+    public BackofficeMessenger(
+        IServerEventRouter router,
+        BackofficePresence presence,
+        IBackofficeMessageStore store,
+        IEventAggregator eventAggregator,
+        TimeProvider timeProvider)
     {
         _router = router;
         _presence = presence;
+        _store = store;
         _eventAggregator = eventAggregator;
         _timeProvider = timeProvider;
     }
@@ -82,7 +73,8 @@ internal sealed class BackofficeMessenger
     /// How many users a message to everyone online would reach right now: everyone in the backoffice but the sender.
     /// Users only on MCP are left out, since the message is shown in a backoffice tab.
     /// </summary>
-    internal int CountAllOnlineRecipients(Guid? senderKey) => _presence.AllInBackoffice().Count(k => k != senderKey);
+    internal async Task<int> CountAllOnlineRecipientsAsync(Guid? senderKey) =>
+        (await _presence.AllInBackofficeAsync()).Count(k => k != senderKey);
 
     /// <summary>Checks the message, works out its recipients and delivers it, or says why it can't be sent.</summary>
     internal async Task<BackofficeSendResult> SendAsync(BackofficeMessageRequest request, BackofficeSender sender)
@@ -93,7 +85,7 @@ internal sealed class BackofficeMessenger
         }
 
         // "All online" is resolved here rather than in the browser, which only ever holds one page of users.
-        Guid[] recipients = (request.AllOnline ? _presence.AllInBackoffice() : request.UserKeys ?? [])
+        Guid[] recipients = (request.AllOnline ? await _presence.AllInBackofficeAsync() : request.UserKeys ?? [])
             .Where(k => k != sender.Key)
             .Distinct()
             .ToArray();
@@ -102,8 +94,6 @@ internal sealed class BackofficeMessenger
         {
             return new BackofficeSendResult.Rejected($"Choose between 1 and {MaxRecipients} other users to send to.");
         }
-
-        Prune();
 
         var sent = new BackofficeMessage(
             Guid.NewGuid(), content.Headline, content.Message, content.Color, sender.Name, _timeProvider.GetUtcNow());
@@ -114,7 +104,7 @@ internal sealed class BackofficeMessenger
             return new BackofficeSendResult.Rejected(CancelledSend.Reason(sending.Messages));
         }
 
-        _messages[sent.Key] = new Entry(sent, new ConcurrentDictionary<Guid, bool>(recipients.Select(r => KeyValuePair.Create(r, false))));
+        await _store.AddAsync(sent, recipients, sent.SentAt + Lifetime);
 
         var serverEvent = new ServerEvent { EventSource = EventSource, EventType = EventType, Key = sent.Key };
         await Task.WhenAll(recipients.Select(r => _router.NotifyUserAsync(serverEvent, r)));
@@ -125,38 +115,8 @@ internal sealed class BackofficeMessenger
     }
 
     /// <summary>Returns the message if the user is a recipient, and marks it delivered to them.</summary>
-    public BackofficeMessage? Receive(Guid messageKey, Guid userKey)
-    {
-        if (!_messages.TryGetValue(messageKey, out Entry? entry) || !entry.Recipients.ContainsKey(userKey))
-        {
-            return null;
-        }
-
-        entry.Recipients[userKey] = true;
-        return entry.Message;
-    }
+    public Task<BackofficeMessage?> ReceiveAsync(Guid messageKey, Guid userKey) => _store.ReceiveAsync(messageKey, userKey);
 
     /// <summary>Keys of messages sent to the user that their backoffice has not fetched yet.</summary>
-    public IReadOnlyList<Guid> GetUndelivered(Guid userKey)
-    {
-        Prune();
-        return _messages.Values
-            .Where(e => e.Recipients.TryGetValue(userKey, out bool delivered) && !delivered)
-            .Select(e => e.Message.Key)
-            .ToList();
-    }
-
-    private void Prune()
-    {
-        DateTimeOffset cutoff = _timeProvider.GetUtcNow() - Lifetime;
-        foreach ((Guid key, Entry entry) in _messages)
-        {
-            if (entry.Message.SentAt < cutoff)
-            {
-                _messages.TryRemove(key, out _);
-            }
-        }
-    }
-
-    private sealed record Entry(BackofficeMessage Message, ConcurrentDictionary<Guid, bool> Recipients);
+    public Task<IReadOnlyList<Guid>> GetUndeliveredAsync(Guid userKey) => _store.GetUndeliveredAsync(userKey);
 }
