@@ -15,11 +15,15 @@ using Umbricians.LiveView.Security;
 
 namespace Umbricians.LiveView.Controllers;
 
+/// <summary>
+/// The Live View dashboard's API. Authorized by the Live View permissions, not by section access, so the dashboard
+/// works in whichever section its manifest shows it.
+/// </summary>
 [ApiController]
 [ApiVersion("1.0")]
 [ApiExplorerSettings(GroupName = "Live View")]
 [BackOfficeRoute("umbriciansliveview/api/v{version:apiVersion}")]
-[Authorize(Policy = AuthorizationPolicies.SectionAccessSettings)]
+[Authorize(Policy = AuthorizationPolicies.BackOfficeAccess)]
 [LiveViewPermission(Constants.Permissions.View)]
 [JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
 internal class LiveViewApiController : ControllerBase
@@ -83,8 +87,8 @@ internal class LiveViewApiController : ControllerBase
         {
             Total = total,
             Items = items,
-            AnyOnMcp = _presence.AnyOnMcp(),
-            Recipients = _messenger.CountAllOnlineRecipients(currentUserKey),
+            AnyOnMcp = await _presence.AnyOnMcpAsync(),
+            Recipients = await _messenger.CountAllOnlineRecipientsAsync(currentUserKey),
         };
     }
 
@@ -110,7 +114,7 @@ internal class LiveViewApiController : ControllerBase
             })
             .ToList();
 
-        return new OnlineMembersResponseModel { Total = total, Items = items, AnyOnMcp = _memberPresence.AnyOnMcp() };
+        return new OnlineMembersResponseModel { Total = total, Items = items, AnyOnMcp = await _memberPresence.AnyOnMcpAsync() };
     }
 
     /// <summary>

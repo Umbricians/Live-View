@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models;
 using Umbricians.LiveView.Presence;
 
@@ -13,8 +14,6 @@ internal sealed record MemberMessageRequest(
     IReadOnlyCollection<Guid>? MemberKeys,
     IReadOnlyCollection<string>? Senders,
     DateTimeOffset? ExpiresAt);
-
-internal sealed record MemberMessageSenderResult(string Alias, string Name, int? Delivered, string? Note, string? Error);
 
 internal sealed record MemberMessageSendResult(Guid Key, MemberMessageAudience Audience, int? Recipients, IReadOnlyList<MemberMessageSenderResult> Results);
 
@@ -35,6 +34,7 @@ internal abstract record MemberSendResult
 /// <remarks>
 /// It owns the send rules: the message content (see <see cref="MessageContent"/>), the audience, who "all online"
 /// means at the moment of sending, the delivery methods and when the message stops being shown.
+/// Sites can stop or follow a send with <see cref="MemberMessageSendingNotification"/> and <see cref="MemberMessageSentNotification"/>.
 /// </remarks>
 internal sealed class MemberMessagingService
 {
@@ -59,17 +59,20 @@ internal sealed class MemberMessagingService
 
     private readonly IReadOnlyList<IMemberMessageSender> _senders;
     private readonly MemberPresence _presence;
+    private readonly IEventAggregator _eventAggregator;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<MemberMessagingService> _logger;
 
     public MemberMessagingService(
         IEnumerable<IMemberMessageSender> senders,
         MemberPresence presence,
+        IEventAggregator eventAggregator,
         TimeProvider timeProvider,
         ILogger<MemberMessagingService> logger)
     {
         _senders = senders.ToList();
         _presence = presence;
+        _eventAggregator = eventAggregator;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -77,7 +80,7 @@ internal sealed class MemberMessagingService
     public IReadOnlyList<IMemberMessageSender> Senders => _senders;
 
     /// <summary>Checks the message, works out its recipients and hands it to the chosen senders, or says why it can't be sent.</summary>
-    public async Task<MemberSendResult> SendAsync(MemberMessageRequest request, string? senderName, CancellationToken cancellationToken)
+    public async Task<MemberSendResult> SendAsync(MemberMessageRequest request, BackofficeSender sender, CancellationToken cancellationToken)
     {
         if (!MessageContent.TryCreate(request.Headline, request.Message, request.Color, out MessageContent content))
         {
@@ -114,7 +117,7 @@ internal sealed class MemberMessagingService
         IReadOnlyList<Guid> memberKeys = audience switch
         {
             MemberMessageAudience.Selected => selected,
-            MemberMessageAudience.AllOnline => _presence.AllOnline(),
+            MemberMessageAudience.AllOnline => await _presence.AllOnlineAsync(),
             _ => [],
         };
 
@@ -125,19 +128,28 @@ internal sealed class MemberMessagingService
             Types[content.Color],
             audience,
             memberKeys,
-            senderName,
+            sender.Name,
             now,
             expiresAt);
+
+        var sending = new MemberMessageSendingNotification(message, chosen.Select(s => s.Alias).ToArray(), sender.Key, new EventMessages());
+        if (await _eventAggregator.PublishCancelableAsync(sending))
+        {
+            return new MemberSendResult.Rejected(CancelledSend.Reason(sending.Messages));
+        }
 
         MemberMessageSenderResult[] results = await Task.WhenAll(chosen.Select(s => SendWithAsync(s, message, cancellationToken)));
 
         _logger.LogInformation(
             "{SenderName} sent member message {MessageKey} to {Audience} ({Recipients}) via {Senders}",
-            senderName,
+            sender.Name,
             message.Key,
             message.Audience,
             message.Audience == MemberMessageAudience.AllMembers ? "every member" : $"{memberKeys.Count} members",
             string.Join(", ", chosen.Select(s => s.Alias)));
+
+        // Without the request's token, so closing the dialog doesn't skip the audit entry.
+        await _eventAggregator.PublishAsync(new MemberMessageSentNotification(message, results, sender.Key));
 
         return new MemberSendResult.Sent(new MemberMessageSendResult(
             message.Key,

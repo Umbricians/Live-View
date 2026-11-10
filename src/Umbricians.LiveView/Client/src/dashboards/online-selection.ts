@@ -11,6 +11,29 @@ export interface SelectionSummary {
   people: Array<Person>;
 }
 
+/** What the dashboard's footer needs from an online table to message whoever is picked in it. */
+export interface OnlineTableSelection {
+  readonly summary: SelectionSummary;
+  /** How many people are online in the table. */
+  readonly onlineCount: number;
+  /** How many people a message to everyone online reaches right now: the people online who can be messaged. */
+  readonly recipients: number;
+  /** Clears the selection, e.g. after a message has been sent. */
+  clear(): void;
+}
+
+/** Whether the footer needs telling: who the selection reaches, or how many are online, changed. */
+export function selectionChanged(
+  before: Pick<OnlineTableSelection, "summary" | "onlineCount">,
+  after: Pick<OnlineTableSelection, "summary" | "onlineCount">,
+): boolean {
+  return (
+    before.summary.allOnline !== after.summary.allOnline ||
+    before.summary.count !== after.summary.count ||
+    before.onlineCount !== after.onlineCount
+  );
+}
+
 /**
  * Who is picked in an online table. Picks survive paging, and "all online" covers people on pages that were never
  * loaded. Unticking someone while "all online" is on turns it into an explicit pick of the page minus them. Never
