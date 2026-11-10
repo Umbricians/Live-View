@@ -98,8 +98,10 @@ Live View adds three permissions to Umbraco's user groups, under **Users → Use
 | **Message members** | Select website members and send them a message, once a developer has [set up a delivery method](docs/member-messaging.md). |
 
 The **Administrators** group gets all three automatically when the package is installed or upgraded; other groups
-get none until you switch them on. The dashboard also needs access to the Settings section. Every backoffice user can
-receive messages. See [Permissions](docs/getting-started.md#permissions) for details.
+get none until you switch them on. The dashboard is in the Settings section, so a group also needs access to Settings to open it there. The API checks
+only these permissions, so a site can
+[show the dashboard in another section](docs/getting-started.md#showing-the-dashboard-in-another-section) with a
+manifest alone. Every backoffice user can receive messages. See [Permissions](docs/getting-started.md#permissions) for details.
 
 ## How sessions are counted
 
@@ -198,6 +200,16 @@ channel counts every path on those hosts. When `Hosts` is empty, any host matche
 channel always counts the signed-in member and always lets members count as web visitors too, so `SessionKeys` and
 `Exclusive` don't apply to it; its other settings do. The built-in `backoffice` channel always counts the signed-in
 backoffice user, so `SessionKeys` doesn't apply to it.
+
+The same settings restyle a line from a [custom metric provider](#3-a-custom-metric-provider), under the provider's
+`Alias`: `Name`, `Color` and `SortOrder` replace the provider's own values, and `"Enabled": false` takes the line off the
+chart and stops the provider being called. Anything left out keeps the provider's own value. `PathPrefixes`, `Hosts`,
+`ExcludePathPrefixes`, `SessionKeys`, `RequestPredicate`, `ActivityWindowSeconds`, `IgnoreStaticFiles` and `Exclusive` don't apply to a
+provider and are ignored.
+
+```json
+{ "Umbricians": { "LiveView": { "Channels": { "mcp-server": { "Name": "Remote MCP", "SortOrder": 15 } } } } }
+```
 
 `MemberAvatarProperty` names the member property that holds each member's picture; see
 [member avatars](#5-member-avatars).
@@ -331,6 +343,11 @@ Providers are called on every poll and given 2 seconds to answer. A slow or fail
 line rather than breaking the dashboard. See
 [ThreadPoolQueueMetric.cs](demo/Umbricians.LiveView.Demo/LiveView/ThreadPoolQueueMetric.cs) for a working example.
 
+Its line can be renamed, recoloured, reordered or switched off in `appsettings.json` under `Channels:mcp-server`, like
+any channel; see [Configuration](#configuration). A provider whose alias matches a channel, built-in or declared in
+code, replaces that channel: the channel stops counting requests, and the settings under that alias apply to the
+provider's line. Give it an alias no channel uses unless you mean to replace one.
+
 ### 4. Messaging members
 
 > The [Messaging members guide](docs/member-messaging.md) walks through this step by step, with complete banner,
@@ -429,10 +446,12 @@ All under `/umbraco/umbriciansliveview/api/v1/`.
 
 | Endpoint | Who can call it |
 |---|---|
-| `GET snapshot`, `GET backoffice-users`, `GET members`, `GET member-messaging` | Settings section and **View Live View** |
-| `POST messages` | as above, plus **Message backoffice users** |
-| `POST member-messages` | as above, plus **Message members** |
-| `GET heartbeat`, `GET messages/{key}` | any backoffice user (recipients only for a message) |
+| `GET snapshot`, `GET backoffice-users`, `GET members`, `GET member-messaging` | **View Live View** |
+| `POST messages` | **View Live View** and **Message backoffice users** |
+| `POST member-messages` | **View Live View** and **Message members** |
+| `GET heartbeat`, `DELETE heartbeat`, `GET messages/{key}` | any backoffice user (recipients only for a message) |
+
+Every endpoint needs a signed-in backoffice user. None checks section access.
 
 `GET snapshot` returns:
 

@@ -101,7 +101,7 @@ internal sealed class LiveViewOptionsDefaults(IEnumerable<LiveViewChannelRegistr
         }
     }
 
-    /// <summary>Adds the channel if it is missing, then copies in each value it still has empty.</summary>
+    /// <summary>Adds the channel if it is missing, then fills what it still has empty.</summary>
     private static void Fill(LiveViewOptions options, string alias, LiveViewChannelOptions defaults)
     {
         if (!options.Channels.TryGetValue(alias, out LiveViewChannelOptions? channel))
@@ -109,6 +109,12 @@ internal sealed class LiveViewOptionsDefaults(IEnumerable<LiveViewChannelRegistr
             options.Channels[alias] = channel = new LiveViewChannelOptions();
         }
 
+        FillGaps(channel, defaults);
+    }
+
+    /// <summary>Copies in each value the channel still has empty, so a value set earlier always wins.</summary>
+    internal static void FillGaps(LiveViewChannelOptions channel, LiveViewChannelOptions defaults)
+    {
         channel.Name ??= defaults.Name;
         channel.Color ??= defaults.Color;
         channel.SortOrder ??= defaults.SortOrder;

@@ -21,7 +21,8 @@ public class SessionKeySourceTests
     public SessionKeySourceTests() =>
         _classifier = new RequestClassifier(
             new StaticOptionsMonitor<LiveViewOptions>(_options),
-            [new TenantSource(), new TenantClaimSource(), new ClientImpostor()]);
+            [new TenantSource(), new TenantClaimSource(), new ClientImpostor()],
+            []);
 
     [Theory]
     [InlineData("User")]

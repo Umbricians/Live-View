@@ -9,7 +9,7 @@ namespace Umbricians.LiveView.Metrics;
 internal sealed record LiveMetricReading(string Alias, string Name, string? Color, double? Value, string? Error);
 
 /// <summary>
-/// Takes a snapshot of every enabled tracked channel and registered <see cref="ILiveMetricProvider"/>.
+/// Takes a snapshot of every enabled channel and metric provider line.
 /// </summary>
 internal sealed class LiveMetricsService
 {
@@ -40,14 +40,18 @@ internal sealed class LiveMetricsService
 
     public async Task<IReadOnlyList<LiveMetricReading>> GetSnapshotAsync(CancellationToken cancellationToken)
     {
-        var channels = ChannelSettings.InOrder(_options.CurrentValue)
+        LiveViewOptions options = _options.CurrentValue;
+        var channels = ChannelSettings.InOrder(options, _providers)
             .Where(c => c.Enabled)
             .Select(c => (Order: c.SortOrder, Reading: new LiveMetricReading(c.Alias, c.Name, c.Color, CountActive(c.Alias), null)));
 
-        var providers = await Task.WhenAll(_providers.Select(async p =>
-            (Order: p.SortOrder, Reading: await ReadAsync(p, cancellationToken))));
+        // A provider whose line is switched off is not asked for its value.
+        var lines = await Task.WhenAll(_providers
+            .Select(p => (Provider: p, Line: ChannelSettings.Of(options, p)))
+            .Where(l => l.Line.Enabled)
+            .Select(async l => (Order: l.Line.SortOrder, Reading: await ReadAsync(l.Provider, l.Line, cancellationToken))));
 
-        return channels.Concat(providers)
+        return channels.Concat(lines)
             .OrderBy(r => r.Order)
             .Select(r => r.Reading)
             .ToList();
@@ -61,7 +65,7 @@ internal sealed class LiveMetricsService
         _ => _tracker.CountActive(channel),
     };
 
-    private async Task<LiveMetricReading> ReadAsync(ILiveMetricProvider provider, CancellationToken cancellationToken)
+    private async Task<LiveMetricReading> ReadAsync(ILiveMetricProvider provider, ChannelSettings line, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(ProviderTimeout);
@@ -69,16 +73,16 @@ internal sealed class LiveMetricsService
         try
         {
             double value = await provider.GetValueAsync(timeout.Token).WaitAsync(timeout.Token);
-            return new LiveMetricReading(provider.Alias, provider.Name, provider.Color, value, null);
+            return new LiveMetricReading(line.Alias, line.Name, line.Color, value, null);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new LiveMetricReading(provider.Alias, provider.Name, provider.Color, null, "Timed out");
+            return new LiveMetricReading(line.Alias, line.Name, line.Color, null, "Timed out");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Live View metric provider {Alias} failed", provider.Alias);
-            return new LiveMetricReading(provider.Alias, provider.Name, provider.Color, null, "Failed");
+            return new LiveMetricReading(line.Alias, line.Name, line.Color, null, "Failed");
         }
     }
 }

@@ -11,7 +11,7 @@ public class RequestClassifierTests
     private readonly LiveViewOptions _options = new();
     private readonly RequestClassifier _classifier;
 
-    public RequestClassifierTests() => _classifier = new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options), []);
+    public RequestClassifierTests() => _classifier = new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options), [], []);
 
     [Theory]
     [InlineData("/api", true)]
@@ -63,6 +63,16 @@ public class RequestClassifierTests
 
         Assert.Empty(Channels(Get("/site.CSS")));
         Assert.Equal(["assets"], Channels(Get("/assets/site.css")));
+    }
+
+    [Fact]
+    public void Path_settings_under_a_metric_providers_alias_are_ignored()
+    {
+        Channel("queue", prefixes: ["/"], sortOrder: 10);
+        Channel("web", prefixes: ["/"], sortOrder: 20);
+        var classifier = new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options), [], [new StubMetricProvider("queue")]);
+
+        Assert.Equal(["web"], classifier.Classify(Get("/page").Request).Sessions.Select(s => s.Channel));
     }
 
     [Theory]

@@ -35,7 +35,7 @@ public class McpPresenceTests
         _backoffice = new BackofficePresence(_users, options, _clock);
         _memberPresence = new MemberPresence(_members, options, _clock);
         _callers = new McpCallers(_backoffice, _memberPresence, _users, _members, _clock, NullLogger<McpCallers>.Instance);
-        _middleware = new LiveActivityMiddleware(new RequestClassifier(options, []), new NoTracker(), _backoffice, _memberPresence, _callers);
+        _middleware = new LiveActivityMiddleware(new RequestClassifier(options, [], []), new NoTracker(), _backoffice, _memberPresence, _callers);
     }
 
     [Fact]

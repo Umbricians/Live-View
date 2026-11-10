@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Umbraco.Extensions;
 using Umbricians.LiveView.Configuration;
+using Umbricians.LiveView.Metrics;
 
 namespace Umbricians.LiveView.Tracking;
 
@@ -15,12 +16,17 @@ namespace Umbricians.LiveView.Tracking;
 internal sealed partial class RequestClassifier
 {
     private readonly IOptionsMonitor<LiveViewOptions> _options;
+    private readonly IEnumerable<ILiveMetricProvider> _providers;
 
     private readonly Dictionary<string, ILiveSessionKeySource> _sessionKeySources = new(StringComparer.OrdinalIgnoreCase);
 
-    public RequestClassifier(IOptionsMonitor<LiveViewOptions> options, IEnumerable<ILiveSessionKeySource> sessionKeySources)
+    public RequestClassifier(
+        IOptionsMonitor<LiveViewOptions> options,
+        IEnumerable<ILiveSessionKeySource> sessionKeySources,
+        IEnumerable<ILiveMetricProvider> providers)
     {
         _options = options;
+        _providers = providers;
 
         // The first registration of an alias wins, and the built-in names always mean the built-in sources.
         foreach (ILiveSessionKeySource source in sessionKeySources)
@@ -47,7 +53,7 @@ internal sealed partial class RequestClassifier
         var signedIn = new List<(string Channel, string[] Sources)>();
         bool memberSeen = false, backofficeSeen = false, mcpCall = false;
 
-        foreach ((string channel, string[] sources) in Match(request, options))
+        foreach ((string channel, string[] sources) in Match(request, options, _providers))
         {
             // Member and backoffice presence keep their lines themselves, always keyed on the signed-in member or user.
             if (channel == Constants.Channels.Members)
@@ -78,11 +84,12 @@ internal sealed partial class RequestClassifier
         return new RequestClassification(this, request, sessions, signedIn, memberSeen, backofficeSeen, mcpCall);
     }
 
-    private static IEnumerable<(string Channel, string[] Sources)> Match(HttpRequest request, LiveViewOptions options)
+    private static IEnumerable<(string Channel, string[] Sources)> Match(
+        HttpRequest request, LiveViewOptions options, IEnumerable<ILiveMetricProvider> providers)
     {
         string path = request.Path.Value ?? "/";
         bool isStaticFile = IsStaticFile(path, options.StaticFileExtensions);
-        foreach (ChannelSettings channel in ChannelSettings.InOrder(options))
+        foreach (ChannelSettings channel in ChannelSettings.InOrder(options, providers))
         {
             if (!channel.Enabled || !Matches(channel, request, path))
             {
