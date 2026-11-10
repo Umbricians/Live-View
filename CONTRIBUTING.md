@@ -38,6 +38,14 @@ bundle must be built first, and packing stops with an error if it is missing. Pa
 with the last release, so it is packed with the version CI uses, which comes after it (the script needs the release
 tags, which a clone fetches).
 
+Every pack also checks the README it generates for nuget.org, and fails naming each problem: a relative link, a link
+off the release's ref, or an HTML image or comment left in. When you change `build/nuget-readme.mjs`, run its
+tests too; the `build` check doesn't:
+
+```bash
+node --test "build/*.test.mjs"
+```
+
 In Git Bash on Windows, the bundle path argument gets rewritten into a Windows path, so run the smoke test there as
 `MSYS_NO_PATHCONV=1 node build/smoke-test.mjs …`. PowerShell and CI are unaffected.
 
