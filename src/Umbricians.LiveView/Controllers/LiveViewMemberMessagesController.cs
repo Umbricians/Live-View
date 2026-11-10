@@ -10,6 +10,7 @@ using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Web.Common.Routing;
 using Umbricians.LiveView.Configuration;
+using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Security;
 
@@ -69,6 +70,7 @@ internal class LiveViewMemberMessagesController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Send(SendMemberMessageRequestModel request, CancellationToken cancellationToken)
     {
+        IUser? currentUser = _security.BackOfficeSecurity?.CurrentUser;
         MemberSendResult result = await _messaging.SendAsync(
             new MemberMessageRequest(
                 request.Headline,
@@ -78,7 +80,7 @@ internal class LiveViewMemberMessagesController : ControllerBase
                 request.MemberKeys,
                 request.Senders,
                 request.ExpiresAt),
-            _security.BackOfficeSecurity?.CurrentUser?.Name,
+            new BackofficeSender(currentUser?.Key, currentUser?.Name),
             cancellationToken);
 
         return result switch

@@ -71,6 +71,7 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
 - Messages are pushed over Umbraco's server events (SignalR), so they arrive instantly. If a user's realtime
   connection is down, their next heartbeat picks the message up instead ("Delivery" column).
 - Messages are held in memory for 15 minutes, then discarded.
+- Every message sent is recorded in [Umbraco's audit log](#7-before-and-after-a-message-is-sent): who sent it, to whom and its headline.
 
 ## Documentation
 
@@ -545,6 +546,47 @@ package's static web assets; point a `paths` entry in the site's `tsconfig.json`
 ```json
 { "compilerOptions": { "paths": { "@umbricians/live-view": ["<path to>/App_Plugins/UmbriciansLiveView/types/index.d.ts"] } } }
 ```
+
+### 7. Before and after a message is sent
+
+Each send, to backoffice users or to members, publishes two Umbraco notifications through `IEventAggregator`:
+
+| Notification | Published | Carries |
+|---|---|---|
+| `BackofficeMessageSendingNotification` | before the message is delivered; can be cancelled | the message, its recipients, the sender |
+| `BackofficeMessageSentNotification` | after it has been pushed to each recipient's backoffice | the same |
+| `MemberMessageSendingNotification` | before the delivery methods run; can be cancelled | the message (its audience and member keys), the delivery methods' aliases, the sender |
+| `MemberMessageSentNotification` | after every delivery method has finished | the message, what each delivery method did, the sender |
+
+To stop a message, cancel the sending notification with an `EventMessage`. The dashboard shows the `EventMessage`'s
+message as the reason the message was not sent, and nothing is delivered:
+
+```csharp
+public class ReleaseFreezeHandler : INotificationHandler<MemberMessageSendingNotification>
+{
+    public void Handle(MemberMessageSendingNotification notification)
+    {
+        if (notification.Message.Audience == MemberMessageAudience.AllMembers)
+        {
+            notification.CancelOperation(new EventMessage(
+                "Live View",
+                "Messages to every member are paused during the release freeze.",
+                EventMessageType.Warning));
+        }
+    }
+}
+
+builder.AddNotificationHandler<MemberMessageSendingNotification, ReleaseFreezeHandler>();
+```
+
+A handler that cancels without an `EventMessage` still stops the message; the dashboard says a handler on the site did.
+
+The sent notifications carry the recipients and, for members, each delivery method's result (including failures and
+timeouts), so they suit logging a send or forwarding it elsewhere.
+
+Each message sent is also written to Umbraco's audit log (`IAuditService`, type `Notify`, entity type
+`Umbricians.LiveView`) under the sending user, with the audience and headline and, for member messages, which delivery methods delivered it
+and which failed (or that none did).
 
 ## API
 

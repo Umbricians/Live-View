@@ -7,7 +7,7 @@ The words this codebase uses for its domain. Code, docs and reviews should use t
 The module that sends a one-off message to backoffice users. It owns the send rules: the **message content**, who
 **everyone online** means at the moment of sending (users in the backoffice; an MCP caller only on MCP can't see a
 backoffice message), and that the **sender** is never one of the recipients. It also says how many users a message to
-everyone online would reach, so the users table's count and the delivery always agree.
+everyone online would reach, so the users table's count and the delivery always agree. Before delivering it publishes a sending notification a site can cancel (the reason comes back as why the message wasn't sent), and afterwards a sent notification.
 
 ## Backoffice presence
 
@@ -70,7 +70,7 @@ their key once, inside Member presence, and never leaves it.
 
 The module that sends a message to members through the site's member message senders. It owns the send rules: the
 **message content**, the audience (selected members, **everyone online** at the moment of sending, or every member),
-which senders deliver it, and when it stops being shown.
+which senders deliver it, and when it stops being shown. Before delivering it publishes a sending notification a site can cancel (the reason comes back as why the message wasn't sent), and afterwards a sent notification.
 
 ## Member presence
 
@@ -78,6 +78,12 @@ The module that knows which members are online. It is told when a member is **se
 when they **sign out**, and when they are an **MCP caller**, and it answers who is online: one page at a time, or
 all at once. It is the only source for both the members line on the chart and the members table, so the two
 always agree.
+
+## Message audit
+
+Every message sent, to backoffice users or members, is written to Umbraco's audit log by the sender's key, with the audience and headline. For a member message it names the delivery methods that
+delivered it and those that failed or timed out; if none delivered it, the entry says the message was not delivered. A
+message sent by no known backoffice user is not audited.
 
 ## Message content
 
