@@ -755,4 +755,5 @@ dotnet pack src/Umbricians.LiveView -c Release
 
 Packing stops with an error if the dashboard bundle has not been built.
 
-Release steps for maintainers are in [docs/RELEASING.md](docs/RELEASING.md).
+Branches follow Gitflow; see [CONTRIBUTING.md](CONTRIBUTING.md) for the branch flow and the build steps. Release
+steps for maintainers are in [docs/RELEASING.md](docs/RELEASING.md).
