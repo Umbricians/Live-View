@@ -22,6 +22,7 @@ Run the steps the `build` check runs before opening a pull request:
 cd src/Umbricians.LiveView/Client && npm ci && npm test && npm run build && cd -
 dotnet build Umbricians.LiveView.slnx -c Release
 dotnet test Umbricians.LiveView.slnx -c Release --no-build
+node build/smoke-test.mjs demo/Umbricians.LiveView.Demo /App_Plugins/UmbriciansLiveView/umbricians-live-view.js umbricians-live-view
 dotnet pack src/Umbricians.LiveView -c Release -o artifacts
 ```
 

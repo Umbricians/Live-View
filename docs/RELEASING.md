@@ -1,7 +1,8 @@
 # Releasing
 
-For maintainers. [`.github/workflows/build.yml`](../.github/workflows/build.yml) builds and packs on every push and
-pull request. Pushing a version tag publishes to NuGet:
+For maintainers. [`.github/workflows/build.yml`](../.github/workflows/build.yml) builds and packs every push to `main`
+and `develop` and every pull request. Pushing a version tag on `main`, or a pre-release tag on a `release/*` branch,
+publishes to NuGet:
 
 ```bash
 git tag v0.1.1
@@ -12,8 +13,9 @@ git push origin v0.1.1
 ```
 
 The tag sets the package version (`v1.2.3` publishes `1.2.3`, and `v1.3.0-beta.1` a pre-release). Only the plugin
-in `src/Umbricians.LiveView` is packed; the demo site is built as a check but never published. Once the package is
-on NuGet, the workflow creates a matching GitHub release with generated release notes and the `.nupkg` attached.
+in `src/Umbricians.LiveView` is packed; the demo site is built and smoke-tested but never published. Once the
+package is on NuGet, the workflow creates a matching GitHub release with generated release notes, starting at the
+last stable release, and the packages attached. Pull requests labelled `release-flow` are left out of the notes.
 
 nuget.org keeps the README a version was published with, so README changes reach the package page with the next
 release.

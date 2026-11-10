@@ -1,0 +1,6 @@
+# Generated release notes list the feature and fix pull requests, not the release, hotfix and back-merge ones.
+# Label those "release-flow".
+changelog:
+  exclude:
+    labels:
+      - release-flow
