@@ -330,6 +330,10 @@ request must be a front-end page view by a logged-in member. MCP and API paths d
 `/api` and `/umbraco/delivery/api`. The **Request counting** and **Channel paths** health checks find counting turned
 off and a channel whose paths an earlier channel counts first.
 
+**A setting seems to be ignored.** A value that can't work, such as a window of `0` seconds or a time zone the server
+doesn't know, is replaced by its default rather than stopping the site. Look in the log for a warning naming the
+setting; the [README](../README.md#configuration) lists them.
+
 **Web sessions look too low.** See forwarding the client IP in [Before you go live](#before-you-go-live); the
 **Visitor IP addresses behind a proxy** health check looks for it.
 

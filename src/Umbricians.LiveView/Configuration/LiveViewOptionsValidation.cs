@@ -2,14 +2,18 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Umbricians.LiveView.Messaging.Members;
 
 namespace Umbricians.LiveView.Configuration;
 
 /// <summary>
-/// Fills the dashboard defaults and replaces values that can't work with their defaults, logging a warning for
-/// each, so a mistake in appsettings never breaks the dashboard.
+/// Fills the dashboard defaults and replaces any value that can't work with its default, logging a warning for
+/// each, so a mistake in appsettings never stops the site or empties the dashboard. Failing at startup was considered
+/// and rejected: a dashboard setting shouldn't be able to take a whole site down (#38).
 /// </summary>
-internal sealed class LiveViewOptionsValidation(ILogger<LiveViewOptionsValidation> logger)
+internal sealed class LiveViewOptionsValidation(
+    IEnumerable<LiveViewChannelRegistration> registrations,
+    ILogger<LiveViewOptionsValidation> logger)
     : IPostConfigureOptions<LiveViewOptions>
 {
     private const string Section = Constants.ConfigurationSection;
@@ -21,6 +25,44 @@ internal sealed class LiveViewOptionsValidation(ILogger<LiveViewOptionsValidatio
 
     public void PostConfigure(string? name, LiveViewOptions options)
     {
+        LiveViewOptions defaults = new();
+
+        if (options.ActivityWindowSeconds <= 0)
+        {
+            WarnNotPositive($"{Section}:ActivityWindowSeconds", options.ActivityWindowSeconds, defaults.ActivityWindowSeconds);
+            options.ActivityWindowSeconds = defaults.ActivityWindowSeconds;
+        }
+
+        // Runs after the channel defaults are filled in, so a channel with no window of its own already has the one
+        // code or the built-in defaults give it; only a configured window can be wrong.
+        foreach ((string alias, LiveViewChannelOptions channel) in options.Channels)
+        {
+            if (channel.ActivityWindowSeconds <= 0)
+            {
+                int? fallback = DefaultWindow(alias);
+                WarnNotPositive(
+                    $"{Section}:Channels:{alias}:ActivityWindowSeconds",
+                    channel.ActivityWindowSeconds,
+                    fallback ?? options.ActivityWindowSeconds);
+                channel.ActivityWindowSeconds = fallback;
+            }
+        }
+
+        if (options.MaxSessionsPerChannel <= 0)
+        {
+            WarnNotPositive($"{Section}:MaxSessionsPerChannel", options.MaxSessionsPerChannel, defaults.MaxSessionsPerChannel);
+            options.MaxSessionsPerChannel = defaults.MaxSessionsPerChannel;
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.MessageTimeZone)
+            && MemberMessageExpiry.TimeZoneId(options.MessageTimeZone) is null)
+        {
+            logger.LogWarning(
+                "Live View setting {Setting} is {Value}, which is not a time zone this server knows; using each sender's own time zone instead.",
+                $"{Section}:MessageTimeZone", options.MessageTimeZone);
+            options.MessageTimeZone = null;
+        }
+
         if (options.BackofficeMessageLifetimeMinutes <= 0)
         {
             WarnNotPositive(
@@ -67,6 +109,19 @@ internal sealed class LiveViewOptionsValidation(ILogger<LiveViewOptionsValidatio
             dashboard.MaxReadings = LiveViewDashboardOptions.DefaultMaxReadings;
         }
     }
+
+    /// <summary>
+    /// The window a channel has when appsettings leaves it out, in the same order of precedence as
+    /// <see cref="LiveViewOptionsDefaults"/>: channels declared in code, then the built-in ones. Null means the
+    /// site-wide window.
+    /// </summary>
+    private int? DefaultWindow(string alias) =>
+        registrations
+            .Where(r => string.Equals(r.Alias, alias, StringComparison.OrdinalIgnoreCase))
+            .Select(r => r.Defaults)
+            .Append(LiveViewOptionsDefaults.BuiltInChannels.GetValueOrDefault(alias))
+            .Select(defaults => defaults?.ActivityWindowSeconds)
+            .FirstOrDefault(window => window > 0);
 
     private static int FirstChoice(LiveViewDashboardOptions dashboard) =>
         dashboard.RefreshIntervals.Contains(LiveViewDashboardOptions.PreferredRefreshInterval)
