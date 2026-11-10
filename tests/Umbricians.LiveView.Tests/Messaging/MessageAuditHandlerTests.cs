@@ -37,7 +37,7 @@ public class MessageAuditHandlerTests
     }
 
     [Fact]
-    public async Task A_member_message_to_every_member_is_audited_with_its_delivery_methods()
+    public async Task A_member_message_names_only_the_methods_that_delivered_it()
     {
         var message = new MemberMessage(
             Guid.NewGuid(), "Hello", "", MemberMessageType.Information, MemberMessageAudience.AllMembers, [], "Me",
@@ -50,8 +50,42 @@ public class MessageAuditHandlerTests
 
         await _handler.HandleAsync(new MemberMessageSentNotification(message, results, _sender), CancellationToken.None);
 
+        Assert.Equal("Sent a message to every member by Banner (Email failed): Hello", Assert.Single(_audit.Entries).Comment);
+    }
+
+    [Fact]
+    public async Task A_member_message_every_method_delivered_lists_them_all()
+    {
+        MemberMessage message = EveryMemberMessage();
+        MemberMessageSenderResult[] results = [new("banner", "Banner", 3, null, null), new("email", "Email", null, null, null)];
+
+        await _handler.HandleAsync(new MemberMessageSentNotification(message, results, _sender), CancellationToken.None);
+
         Assert.Equal("Sent a message to every member by Banner, Email: Hello", Assert.Single(_audit.Entries).Comment);
     }
+
+    [Fact]
+    public async Task A_member_message_no_method_delivered_is_audited_as_not_delivered()
+    {
+        MemberMessage message = EveryMemberMessage();
+        MemberMessageSenderResult[] results =
+        [
+            new("banner", "Banner", null, null, "Timed out"),
+            new("email", "Email", null, null, "Failed"),
+        ];
+
+        await _handler.HandleAsync(new MemberMessageSentNotification(message, results, _sender), CancellationToken.None);
+
+        AuditEntry entry = Assert.Single(_audit.Entries);
+        Assert.Equal("Message to every member not delivered (Banner timed out, Email failed): Hello", entry.Comment);
+        Assert.Equal(AuditType.Notify, entry.Type);
+        Assert.Equal(_sender, entry.UserKey);
+        Assert.Equal(message.Key.ToString(), entry.Parameters);
+    }
+
+    private static MemberMessage EveryMemberMessage() => new(
+        Guid.NewGuid(), "Hello", "", MemberMessageType.Information, MemberMessageAudience.AllMembers, [], "Me",
+        DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
 
     [Fact]
     public async Task A_message_with_no_known_sender_is_not_audited_and_does_not_fail()

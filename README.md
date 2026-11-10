@@ -399,7 +399,8 @@ The sent notifications carry the recipients and, for members, each delivery meth
 timeouts), so they suit logging a send or forwarding it elsewhere.
 
 Each message sent is also written to Umbraco's audit log (`IAuditService`, type `Notify`, entity type
-`Umbricians.LiveView`) under the sending user, with the audience and headline.
+`Umbricians.LiveView`) under the sending user, with the audience and headline and, for member messages, which delivery methods delivered it
+and which failed (or that none did).
 
 ## API
 

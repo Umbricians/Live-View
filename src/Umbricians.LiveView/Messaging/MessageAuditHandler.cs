@@ -9,7 +9,10 @@ using Umbricians.LiveView.Messaging.Members;
 
 namespace Umbricians.LiveView.Messaging;
 
-/// <summary>Writes every message sent to Umbraco's audit log, under the sending user.</summary>
+/// <summary>
+/// Writes every message sent to Umbraco's audit log, under the sending user, naming which delivery methods delivered a
+/// member message and which failed.
+/// </summary>
 internal sealed class MessageAuditHandler :
     INotificationAsyncHandler<BackofficeMessageSentNotification>,
     INotificationAsyncHandler<MemberMessageSentNotification>
@@ -43,8 +46,15 @@ internal sealed class MessageAuditHandler :
             MemberMessageAudience.AllOnline => count == 1 ? "1 online member" : $"{count} online members",
             _ => "every member",
         };
-        string methods = string.Join(", ", notification.Results.Select(r => r.Name));
-        return AuditAsync(notification.SenderKey, message.Key, $"Sent a message to {audience} by {methods}: {message.Headline}");
+        string[] delivered = notification.Results.Where(r => r.Error is null).Select(r => r.Name).ToArray();
+        string failed = string.Join(
+            ", ", notification.Results.Where(r => r.Error is not null).Select(r => $"{r.Name} {r.Error!.ToLowerInvariant()}"));
+        string comment = delivered.Length == 0
+            ? $"Message to {audience} not delivered ({failed}): {message.Headline}"
+            : failed.Length == 0
+                ? $"Sent a message to {audience} by {string.Join(", ", delivered)}: {message.Headline}"
+                : $"Sent a message to {audience} by {string.Join(", ", delivered)} ({failed}): {message.Headline}";
+        return AuditAsync(notification.SenderKey, message.Key, comment);
     }
 
     /// <summary>Never throws: the message has already gone, so a failed entry is only logged.</summary>

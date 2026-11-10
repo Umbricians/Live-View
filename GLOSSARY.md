@@ -61,7 +61,9 @@ always agree.
 
 ## Message audit
 
-Every message sent, to backoffice users or members, is written to Umbraco's audit log by the sender's key, with the audience and headline. A message sent by no known backoffice user is not audited.
+Every message sent, to backoffice users or members, is written to Umbraco's audit log by the sender's key, with the audience and headline. For a member message it names the delivery methods that
+delivered it and those that failed or timed out; if none delivered it, the entry says the message was not delivered. A
+message sent by no known backoffice user is not audited.
 
 ## Message content
 
