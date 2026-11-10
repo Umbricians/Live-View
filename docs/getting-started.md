@@ -142,6 +142,8 @@ Below the chart, **Backoffice users online** and **Members online** list who is 
 Crawlers, static files (CSS, JavaScript, images and so on) and the backoffice's own requests are not counted as web
 sessions.
 
+Each box is a panel; developers can add their own or hide one, see [Dashboard panels](../README.md#6-dashboard-panels).
+
 ## 4. Configure what is counted
 
 Everything is optional. Add a `Umbricians:LiveView` section to `appsettings.json` and set only what you want to

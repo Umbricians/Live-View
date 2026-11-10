@@ -211,7 +211,7 @@ provider and are ignored.
 
 ## Extending
 
-There are three ways to put your own data on the chart, from least to most code.
+Ways to add your own data and panels to the dashboard, from least to most code.
 
 ### 1. A path-based channel (no code)
 
@@ -376,6 +376,112 @@ refreshes, so keep it quick: it has two seconds, and a member whose provider fai
 their initials. The demo site's
 [DemoMemberAvatarProvider.cs](demo/Umbricians.LiveView.Demo/DemoMembers/DemoMemberAvatarProvider.cs) hands out a few
 bundled pictures.
+
+### 6. Dashboard panels
+
+Each box on the dashboard is a panel: an `umbriciansLiveViewPanel` extension, shown below the header in weight order,
+highest first. The built-in panels are:
+
+| Panel | Alias | Weight |
+|---|---|---|
+| Live activity | `Umbricians.LiveView.Panel.Activity` | 300 |
+| Backoffice users online | `Umbricians.LiveView.Panel.Users` | 200 |
+| Members online | `Umbricians.LiveView.Panel.Members` | 100 |
+
+**Adding one:** register it in an `App_Plugins/MySite/umbraco-package.json`, with a weight that puts it where you want
+it (150 places it between the two tables):
+
+```json
+{
+  "id": "MySite",
+  "name": "My site",
+  "version": "1.0.0",
+  "extensions": [
+    {
+      "type": "umbriciansLiveViewPanel",
+      "alias": "MySite.Panel.Orders",
+      "name": "My Site Orders Panel",
+      "element": "/App_Plugins/MySite/orders-panel.js",
+      "weight": 150
+    }
+  ]
+}
+```
+
+The element consumes the dashboard context from `@umbricians/live-view`. The context gives a panel two observables,
+`interval` (the refresh interval in seconds) and `paused`, so the panel refreshes and pauses with the chart. This one fetches a count from the site's own
+endpoint:
+
+```js
+import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
+import { html } from "@umbraco-cms/backoffice/external/lit";
+import { UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT } from "@umbricians/live-view";
+
+export default class OrdersPanel extends UmbLitElement {
+  static properties = { _count: { state: true } };
+
+  #interval = 5;
+  #paused = true;
+  #timer;
+
+  constructor() {
+    super();
+    this._count = undefined;
+    this.consumeContext(UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT, (context) => {
+      this.observe(context?.interval, (interval) => {
+        this.#interval = interval ?? 5;
+        this.#refresh();
+      });
+      this.observe(context?.paused, (paused) => {
+        this.#paused = paused ?? true;
+        this.#refresh();
+      });
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearTimeout(this.#timer);
+  }
+
+  // The only place a timer is started, so the two observers can never leave two running.
+  #refresh = async () => {
+    clearTimeout(this.#timer);
+    if (this.#paused || !this.isConnected) return;
+    this.#timer = setTimeout(this.#refresh, this.#interval * 1000);
+    const response = await fetch("/my-site/orders/open");
+    if (response.ok) this._count = (await response.json()).count;
+  };
+
+  render() {
+    return html`<uui-box headline="Open orders">${this._count ?? "–"}</uui-box>`;
+  }
+}
+
+customElements.define("my-site-orders-panel", OrdersPanel);
+```
+
+A panel can take `conditions` like any extension. The demo's
+[try-it-panel.js](demo/Umbricians.LiveView.Demo/wwwroot/App_Plugins/LiveViewDemo/try-it-panel.js) is a complete
+example.
+
+**Hiding or replacing a built-in:** in a `backofficeEntryPoint` of your own, exclude the panel's alias:
+
+```js
+export const onInit = (host, extensionRegistry) => extensionRegistry.exclude("Umbricians.LiveView.Panel.Members");
+```
+
+To replace a panel, register yours with `overwrites` set to its alias. To show one only to some users, add a condition
+with `extensionRegistry.appendCondition(alias, condition)`. "Message users…" and "Message members…" show only while
+their panel is shown.
+
+For a TypeScript site, the package ships declarations for `@umbricians/live-view` (the context token, the
+`UmbriciansLiveViewDashboardContext` interface and the `ManifestLiveViewPanel` manifest interface). They sit in `App_Plugins/UmbriciansLiveView/types/index.d.ts` among the
+package's static web assets; point a `paths` entry in the site's `tsconfig.json` at that file:
+
+```json
+{ "compilerOptions": { "paths": { "@umbricians/live-view": ["<path to>/App_Plugins/UmbriciansLiveView/types/index.d.ts"] } } }
+```
 
 ## API
 

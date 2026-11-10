@@ -32,6 +32,18 @@ reads a channel's settings reads them here. A **metric provider**'s line reads i
 but only whether it is shown, its name, colour and sort order: appsettings beat the provider's own values, which beat
 the defaults.
 
+## Dashboard context
+
+What the dashboard shares with its panels. Every panel follows its refresh interval and paused state; the package's own
+panels also share the readings and what the footer's message actions need from the online tables' selections. Sites'
+panels see only the refresh interval and paused state.
+
+## Dashboard panel
+
+One box on the Live View dashboard (Live activity, Backoffice users online, Members online, or one a site adds),
+registered as an `umbriciansLiveViewPanel` extension and shown in weight order. It refreshes and pauses with the chart
+through the **dashboard context**.
+
 ## Live View permissions
 
 The three user group permissions: View Live View, Message backoffice users and Message members. They alone decide what
