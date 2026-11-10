@@ -71,7 +71,7 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
 - Messages are pushed over Umbraco's server events (SignalR), so they arrive instantly. If a user's realtime
   connection is down, their next heartbeat picks the message up instead ("Delivery" column).
 - Messages are held in memory for 15 minutes, then discarded.
-- Every message sent is recorded in [Umbraco's audit log](#6-before-and-after-a-message-is-sent): who sent it, to whom and its headline.
+- Every message sent is recorded in [Umbraco's audit log](#7-before-and-after-a-message-is-sent): who sent it, to whom and its headline.
 
 ## Documentation
 
