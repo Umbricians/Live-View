@@ -2,12 +2,14 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Umbraco.Cms.Api.Common.Filters;
 using Umbraco.Cms.Api.Common.ViewModels.Pagination;
 using Umbraco.Cms.Core.Models.Membership;
 using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Web.Common.Routing;
+using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Metrics;
 using Umbricians.LiveView.Presence;
@@ -35,19 +37,38 @@ internal class LiveViewApiController : ControllerBase
     private readonly MemberPresence _memberPresence;
     private readonly BackofficeMessenger _messenger;
     private readonly IBackOfficeSecurityAccessor _security;
+    private readonly IOptionsMonitor<LiveViewOptions> _options;
 
     public LiveViewApiController(
         LiveMetricsService metrics,
         BackofficePresence presence,
         MemberPresence memberPresence,
         BackofficeMessenger messenger,
-        IBackOfficeSecurityAccessor security)
+        IBackOfficeSecurityAccessor security,
+        IOptionsMonitor<LiveViewOptions> options)
     {
         _metrics = metrics;
         _presence = presence;
         _memberPresence = memberPresence;
         _messenger = messenger;
         _security = security;
+        _options = options;
+    }
+
+    /// <summary>How the dashboard refreshes and how many readings its chart keeps, from the site's settings.</summary>
+    [HttpGet("dashboard-settings")]
+    [ProducesResponseType<DashboardSettingsResponseModel>(StatusCodes.Status200OK)]
+    public DashboardSettingsResponseModel DashboardSettings()
+    {
+        LiveViewDashboardOptions dashboard = _options.CurrentValue.Dashboard;
+        return new()
+        {
+            RefreshIntervals = dashboard.RefreshIntervals,
+
+            // Always set once the options are configured; see LiveViewOptionsValidation.
+            DefaultRefreshInterval = dashboard.DefaultRefreshInterval.GetValueOrDefault(),
+            MaxReadings = dashboard.MaxReadings,
+        };
     }
 
     [HttpGet("snapshot")]
@@ -161,6 +182,17 @@ internal class LiveViewApiController : ControllerBase
             user?.Name,
             user?.AllowedSections.Contains(Umbraco.Cms.Core.Constants.Applications.Users) == true);
     }
+}
+
+internal class DashboardSettingsResponseModel
+{
+    /// <summary>The refresh intervals offered, in seconds, shortest first.</summary>
+    public required IReadOnlyList<int> RefreshIntervals { get; init; }
+
+    /// <summary>The interval, in seconds, used until someone picks another.</summary>
+    public required int DefaultRefreshInterval { get; init; }
+
+    public required int MaxReadings { get; init; }
 }
 
 internal class LiveViewSnapshotResponseModel

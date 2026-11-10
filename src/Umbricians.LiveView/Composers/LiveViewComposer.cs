@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -20,10 +21,17 @@ namespace Umbricians.LiveView.Composers;
 
 public class LiveViewComposer : IComposer
 {
+    /// <summary>Binds the Live View section, then fills defaults and replaces unusable values.</summary>
+    internal static void AddOptions(IServiceCollection services, IConfiguration config)
+    {
+        services.AddOptions<LiveViewOptions>().Bind(config.GetSection(Constants.ConfigurationSection));
+        LiveViewOptionsDefaults.AddTo(services);
+        LiveViewOptionsValidation.AddTo(services);
+    }
+
     public void Compose(IUmbracoBuilder builder)
     {
-        builder.Services.AddOptions<LiveViewOptions>().Bind(builder.Config.GetSection(Constants.ConfigurationSection));
-        LiveViewOptionsDefaults.AddTo(builder.Services);
+        AddOptions(builder.Services, builder.Config);
 
         builder.Services.AddMvcCore().ConfigureApplicationPartManager(parts =>
             parts.FeatureProviders.Add(new LiveViewControllerFeatureProvider()));

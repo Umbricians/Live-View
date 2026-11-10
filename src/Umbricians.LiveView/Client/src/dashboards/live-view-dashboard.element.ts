@@ -5,11 +5,10 @@ import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
 import { umbOpenModal } from "@umbraco-cms/backoffice/modal";
 import { UMBRICIANS_SEND_MESSAGE_MODAL } from "../modals/send-message.modal-token.js";
 import { UMBRICIANS_SEND_MEMBER_MESSAGE_MODAL } from "../modals/send-member-message.modal-token.js";
-import type { MemberMessaging } from "../api/live-view.resource.js";
+import type { DashboardSettings, MemberMessaging } from "../api/live-view.resource.js";
 import { LIVE_VIEW_PANEL_TYPE } from "./constants.js";
 import { LiveViewDashboardContext } from "./live-view-dashboard.context.js";
 import type { OnlineTableSelection } from "./online-selection.js";
-import { INTERVALS } from "./refresh-interval.js";
 // Loaded with the dashboard so the built-in panels appear together.
 import "./live-view-activity.element.js";
 import "./live-view-users.element.js";
@@ -22,6 +21,8 @@ import { plural } from "../utils/format.js";
  */
 @customElement("umbricians-live-view-dashboard")
 export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitElement) {
+  /** The site's dashboard settings; the panels aren't shown until they are read. */
+  @state() private _settings?: DashboardSettings;
   @state() private _interval = 5;
   @state() private _paused = false;
   @state() private _lastUpdated?: Date;
@@ -47,7 +48,8 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
     this.consumeContext(UMB_NOTIFICATION_CONTEXT, (context) => (this.#notifications = context));
 
     const context = this.#context;
-    this.observe(context.interval, (interval) => (this._interval = interval));
+    this.observe(context.settings, (settings) => (this._settings = settings));
+    this.observe(context.interval,(interval) => (this._interval = interval));
     this.observe(context.paused, (paused) => (this._paused = paused));
     this.observe(context.error, (error) => (this._error = error));
     this.observe(context.snapshot, (snapshot) => (this._lastUpdated = snapshot ? new Date(snapshot.timestamp) : undefined));
@@ -143,7 +145,7 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
           <div class="controls">
             <uui-select
               label="Refresh interval"
-              .options=${INTERVALS.map((s) => ({ name: `Every ${s}s`, value: String(s), selected: s === this._interval }))}
+              .options=${(this._settings?.refreshIntervals ?? []).map((s) => ({ name: `Every ${s}s`, value: String(s), selected: s === this._interval }))}
               @change=${this.#onIntervalChange}></uui-select>
             <uui-button
               look="secondary"
@@ -159,7 +161,9 @@ export class UmbriciansLiveViewDashboardElement extends UmbElementMixin(LitEleme
         </div>
 
         <div class="content">
-          <umb-extension-slot type=${LIVE_VIEW_PANEL_TYPE}></umb-extension-slot>
+          ${this._settings
+            ? html`<umb-extension-slot type=${LIVE_VIEW_PANEL_TYPE}></umb-extension-slot>`
+            : html`<uui-loader-bar></uui-loader-bar>`}
         </div>
 
         ${canMessageUsers || canMessageMembers

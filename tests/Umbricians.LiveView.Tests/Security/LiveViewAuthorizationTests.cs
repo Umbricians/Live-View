@@ -72,6 +72,7 @@ public class LiveViewAuthorizationTests
 
         string[] expected =
         [
+            $"GET dashboard-settings: {Permissions.View}",
             $"GET snapshot: {Permissions.View}",
             $"GET backoffice-users: {Permissions.View}",
             $"GET members: {Permissions.View}",

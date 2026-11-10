@@ -15,9 +15,10 @@ sessions are active right now:
 - **API sessions**: callers of the Delivery API or your own `/api` endpoints
 - **Anything else** you plug in
 
-The chart refreshes every 2, 5, 10, 15 or 30 seconds (your choice is remembered per browser). Nothing is stored:
-the server keeps an in-memory set of recently active sessions (by default; see
+The chart refreshes every 2, 5, 10, 15 or 30 seconds by default (your choice is remembered per browser). Nothing is
+stored: the server keeps an in-memory set of recently active sessions (by default; see
 [load-balanced sites](#8-load-balanced-sites)), and the browser keeps the last 120 readings while the page is open.
+The refresh choices and the number of readings can be [configured](#configuration).
 
 Click a counter, or its legend entry, to take its line off the chart; both fade until you click either again.
 
@@ -72,7 +73,7 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
   is down, the count falls back to heartbeats, and a closed tab then drops off within about two and a half minutes.
 - Messages are pushed over Umbraco's server events (SignalR), so they arrive instantly. If a user's realtime
   connection is down, their next heartbeat picks the message up instead ("Delivery" column).
-- Messages are held for 15 minutes in the message store (in memory by default), then discarded.
+- Messages are held for 15 minutes (`BackofficeMessageLifetimeMinutes`) in the message store (in memory by default), then discarded.
 - Every message sent is recorded in [Umbraco's audit log](#7-before-and-after-a-message-is-sent): who sent it, to whom and its headline.
 
 ## Documentation
@@ -124,7 +125,7 @@ session key sources and keeps the session active for the length of the request a
 | `web` | everything else, except `/umbraco`, `/App_Plugins`, `/media` and static files | client IP + User-Agent | 300s |
 
 Because the session stays active for as long as a request is open, long-lived MCP streams (SSE) count while they
-are connected. Crawlers are ignored by default.
+are connected. Crawlers are ignored by default; add your own uptime monitors and the like with `BotUserAgents`.
 
 A site with several domains can count each on its own line with `Hosts`, and sessions can be keyed on anything the
 site's code works out, such as a tenant or API client id: see [Extending](#1-a-channel-for-requests).
@@ -192,6 +193,13 @@ Everything is optional. Override only what you need in `appsettings.json`:
       "MaxSessionsPerChannel": 100000,
       "MemberAvatarProperty": "avatar",
       "MessageTimeZone": "America/Denver",
+      "BackofficeMessageLifetimeMinutes": 15,
+      "BotUserAgents": [ "StatusCake" ],
+      "Dashboard": {
+        "RefreshIntervals": [ 2, 5, 10, 15, 30 ],
+        "DefaultRefreshInterval": 5,
+        "MaxReadings": 120
+      },
       "Channels": {
         "mcp": { "PathPrefixes": [ "/my-mcp" ] },
         "api": { "Enabled": false },
@@ -233,6 +241,19 @@ provider and are ignored.
 
 `MessageTimeZone` is the time zone a member message sent until "midnight tonight" expires in, as an IANA id such as
 `America/Denver` (a Windows id works too). Without it, midnight is the sending backoffice user's own.
+
+`BackofficeMessageLifetimeMinutes` (default 15) is how long a backoffice message waits for recipients whose realtime
+connection is down.
+
+`BotUserAgents` (default none) is text matched anywhere in the User-Agent, ignoring case, on top of the built-in
+crawler patterns, while `IgnoreBots` is on. Surrounding spaces and blank entries are ignored.
+
+`Dashboard` sets what the dashboard offers: `RefreshIntervals` in seconds, offered shortest first, each once (default 2, 5, 10, 15 and 30),
+`DefaultRefreshInterval` (default 5, or the shortest choice when 5 isn't offered; a browser whose remembered choice is
+no longer offered goes back to it) and `MaxReadings`, how many readings the chart keeps (default 120). If the dashboard can't read these settings, it uses the built-in ones and shows a warning.
+
+A value that can't work (a number that isn't positive, or a default interval that isn't one of the choices) is
+replaced by its default, with a warning in the log.
 
 ## Extending
 
@@ -631,7 +652,7 @@ All under `/umbraco/umbriciansliveview/api/v1/`.
 
 | Endpoint | Who can call it |
 |---|---|
-| `GET snapshot`, `GET backoffice-users`, `GET members`, `GET member-messaging` | **View Live View** |
+| `GET dashboard-settings`, `GET snapshot`, `GET backoffice-users`, `GET members`, `GET member-messaging` | **View Live View** |
 | `POST messages` | **View Live View** and **Message backoffice users**; sending to user groups also needs access to the Users section |
 | `GET message-recipients` | **View Live View**, **Message backoffice users** and access to the Users section |
 | `POST member-messages` | **View Live View** and **Message members** |

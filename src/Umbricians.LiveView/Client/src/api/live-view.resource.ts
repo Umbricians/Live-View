@@ -101,6 +101,16 @@ async function request<T>(
   return data as T;
 }
 
+export interface DashboardSettings {
+  /** Refresh intervals offered, in seconds, shortest first. */
+  refreshIntervals: Array<number>;
+  /** The interval, in seconds, used until someone picks another. */
+  defaultRefreshInterval: number;
+  maxReadings: number;
+}
+
+export const fetchDashboardSettings = () => request<DashboardSettings>("GET", "dashboard-settings");
+
 export const fetchSnapshot = (signal?: AbortSignal) => request<LiveViewSnapshot>("GET", "snapshot", { signal });
 
 export const fetchOnlineUsers = (skip: number, take: number, signal?: AbortSignal) =>

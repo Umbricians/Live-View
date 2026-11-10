@@ -12,7 +12,7 @@ import {
   type ChartDataset,
 } from "chart.js";
 import { color } from "chart.js/helpers";
-import type { LiveMetricReading, LiveViewSnapshot } from "../api/live-view.resource.js";
+import type { DashboardSettings, LiveMetricReading, LiveViewSnapshot } from "../api/live-view.resource.js";
 import { LIVE_VIEW_DASHBOARD_CONTEXT } from "./live-view-dashboard.context.js";
 import { MAX_READINGS, readingsAfter } from "./readings.js";
 
@@ -31,6 +31,8 @@ export class UmbriciansLiveViewActivityElement extends UmbElementMixin(LitElemen
   @state() private _metrics: Array<LiveMetricReading> = [];
   /** Aliases of the lines switched off from their tile or legend entry, for this visit. */
   @state() private _hidden = new Set<string>();
+  /** How many readings the chart keeps, from the site's dashboard settings. */
+  @state() private _maxReadings = MAX_READINGS;
 
   @query("canvas") private _canvas!: HTMLCanvasElement;
 
@@ -42,6 +44,9 @@ export class UmbriciansLiveViewActivityElement extends UmbElementMixin(LitElemen
   constructor() {
     super();
     this.consumeContext(LIVE_VIEW_DASHBOARD_CONTEXT, (context) => {
+      this.observe(context?.settings, (settings: DashboardSettings | undefined) => {
+        if (settings) this._maxReadings = settings.maxReadings;
+      });
       this.observe(context?.snapshot, (snapshot) => (this._metrics = snapshot?.metrics ?? []));
       this.observe(context?.readings, (readings) => {
         this.#readings = readings ?? [];
@@ -152,9 +157,10 @@ export class UmbriciansLiveViewActivityElement extends UmbElementMixin(LitElemen
       dataset.data.push(metrics.find((m) => m.alias === dataset.alias)?.value ?? null);
     }
 
-    if (labels.length > MAX_READINGS) {
-      labels.splice(0, labels.length - MAX_READINGS);
-      for (const dataset of datasets) dataset.data.splice(0, dataset.data.length - MAX_READINGS);
+    const max = this._maxReadings;
+    if (labels.length > max) {
+      labels.splice(0, labels.length - max);
+      for (const dataset of datasets) dataset.data.splice(0, dataset.data.length - max);
     }
 
     chart.update("none");
@@ -205,7 +211,7 @@ export class UmbriciansLiveViewActivityElement extends UmbElementMixin(LitElemen
 
         <div class="chart"><canvas></canvas></div>
         <p class="muted note">
-          A live snapshot only: nothing is stored, and the chart keeps the last ${MAX_READINGS} readings while this
+          A live snapshot only: nothing is stored, and the chart keeps the last ${this._maxReadings} readings while this
           page is open.
         </p>
       </uui-box>

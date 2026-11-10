@@ -1,6 +1,6 @@
 import type { LiveViewSnapshot } from "../api/live-view.resource.js";
 
-/** How many readings the chart keeps. */
+/** How many readings the chart keeps unless the site's dashboard settings say otherwise. */
 export const MAX_READINGS = 120;
 
 /** The readings with `reading` added, dropping the oldest beyond `max`. Never changes `readings` in place. */

@@ -110,8 +110,9 @@ section, **View Live View** and **Message backoffice users**.
 
 ## 3. What you are looking at
 
-The chart refreshes every 2, 5, 10, 15 or 30 seconds (the drop-down in the header; each browser remembers its choice)
-and keeps the last 120 readings while the page is open. Nothing is stored in the database.
+The chart refreshes every 2, 5, 10, 15 or 30 seconds by default (the drop-down in the header; each browser remembers
+its choice) and keeps the last 120 readings while the page is open. Both can be [configured](#4-configure-what-is-counted). Nothing is
+stored in the database.
 
 Click a counter above the chart, or its entry in the legend, to take that line off the chart: the line disappears and
 the counter and legend entry fade. Click either of them again to bring the line back. The line keeps recording while it is
@@ -177,10 +178,15 @@ endpoint, keyed on a client id header.
 |---|---|---|
 | `TrackingEnabled` | `true` | Turns request counting off entirely. Custom lines from code still show. |
 | `ActivityWindowSeconds` | `300` | How long a session counts as active after its last request. Each channel can override it. |
-| `IgnoreBots` | `true` | Ignores requests whose User-Agent looks like a crawler. |
+| `IgnoreBots` | `true` | Ignores requests whose User-Agent looks like a crawler, including any `BotUserAgents`. |
+| `BotUserAgents` | none | Text matched anywhere in the User-Agent, ignoring case, to treat as a crawler on top of the built-in patterns. Surrounding spaces and blank entries are ignored. |
 | `MaxSessionsPerChannel` | `100000` | Upper bound on entries the in-memory store holds per line (sessions, or people online), to protect the server from floods. |
 | `MemberAvatarProperty` | none | The alias of a member image property (media picker, image cropper or upload) to show as each member's picture. For other sources, see [Member avatars](../README.md#5-member-avatars). |
 | `MessageTimeZone` | the sender's own | The time zone "midnight tonight" means when messaging members, as an IANA id such as `America/Denver` (a Windows id works too). |
+| `BackofficeMessageLifetimeMinutes` | `15` | How long a backoffice message is kept for recipients to fetch. |
+| `Dashboard:RefreshIntervals` | `2, 5, 10, 15, 30` | The refresh intervals offered on the dashboard, in seconds, shortest first and each once. |
+| `Dashboard:DefaultRefreshInterval` | `5` | The interval a browser uses until someone picks another; one of the intervals offered. When 5 isn't offered, the shortest. |
+| `Dashboard:MaxReadings` | `120` | How many readings the chart keeps while the dashboard is open. |
 
 Each channel under `Channels` can set `Enabled`, `Name`, `Color`, `SortOrder`, `PathPrefixes`,
 `ExcludePathPrefixes`, `Hosts`, `SessionKeys` (`Header:<name>`, `Cookie:<name>`, `Authorization`, `User`, `Client`, or a

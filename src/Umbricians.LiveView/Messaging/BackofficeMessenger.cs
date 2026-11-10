@@ -1,6 +1,8 @@
+using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models.ServerEvents;
 using Umbraco.Cms.Core.ServerEvents;
+using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Presence;
 
 namespace Umbricians.LiveView.Messaging;
@@ -44,7 +46,7 @@ internal abstract record BackofficeSendResult
 /// Server events only carry a key, so the message is held in the <see cref="IBackofficeMessageStore"/> and each
 /// recipient's backoffice fetches it by key. Recipients whose realtime connection is down pick it up from their next
 /// heartbeat instead. On a load-balanced site only the recipients connected to this server get the instant push; the
-/// others pick the message up from their next heartbeat. Messages are discarded after <see cref="Lifetime"/>.
+/// others pick the message up from their next heartbeat. Messages are discarded after <see cref="LiveViewOptions.BackofficeMessageLifetimeMinutes"/>.
 /// </remarks>
 internal sealed class BackofficeMessenger
 {
@@ -55,13 +57,12 @@ internal sealed class BackofficeMessenger
     internal const int MaxUserGroups = 100;
     internal const string UserGroupsNeedUsersSection = "Choosing user groups needs access to the Users section.";
 
-    private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
-
     private readonly IServerEventRouter _router;
     private readonly BackofficePresence _presence;
     private readonly IBackofficeUserDirectory _directory;
     private readonly IBackofficeMessageStore _store;
     private readonly IEventAggregator _eventAggregator;
+    private readonly IOptionsMonitor<LiveViewOptions> _options;
     private readonly TimeProvider _timeProvider;
 
     public BackofficeMessenger(
@@ -70,6 +71,7 @@ internal sealed class BackofficeMessenger
         IBackofficeUserDirectory directory,
         IBackofficeMessageStore store,
         IEventAggregator eventAggregator,
+        IOptionsMonitor<LiveViewOptions> options,
         TimeProvider timeProvider)
     {
         _router = router;
@@ -77,6 +79,7 @@ internal sealed class BackofficeMessenger
         _directory = directory;
         _store = store;
         _eventAggregator = eventAggregator;
+        _options = options;
         _timeProvider = timeProvider;
     }
 
@@ -156,7 +159,7 @@ internal sealed class BackofficeMessenger
             return new BackofficeSendResult.Rejected(CancelledSend.Reason(sending.Messages));
         }
 
-        await _store.AddAsync(sent, recipients, sent.SentAt + Lifetime);
+        await _store.AddAsync(sent, recipients, sent.SentAt + TimeSpan.FromMinutes(_options.CurrentValue.BackofficeMessageLifetimeMinutes));
 
         var serverEvent = new ServerEvent { EventSource = EventSource, EventType = EventType, Key = sent.Key };
         await Task.WhenAll(recipients.Select(r => _router.NotifyUserAsync(serverEvent, r)));

@@ -13,7 +13,15 @@ import {
   LIVE_VIEW_PERMISSION_MESSAGE_MEMBERS,
   LIVE_VIEW_PERMISSION_MESSAGE_USERS,
 } from "../permissions/constants.js";
-import { fetchMemberMessaging, fetchSnapshot, type LiveViewSnapshot, type MemberMessaging } from "../api/live-view.resource.js";
+import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
+import {
+  fetchDashboardSettings,
+  fetchMemberMessaging,
+  fetchSnapshot,
+  type DashboardSettings,
+  type LiveViewSnapshot,
+  type MemberMessaging,
+} from "../api/live-view.resource.js";
 import {
   UMBRICIANS_LIVE_VIEW_DASHBOARD_CONTEXT,
   type UmbriciansLiveViewDashboardContext,
@@ -21,7 +29,15 @@ import {
 import { memberMessagingAvailable } from "./member-messaging.js";
 import type { OnlineTableSelection } from "./online-selection.js";
 import { addReading } from "./readings.js";
-import { DEFAULT_INTERVAL, toInterval } from "./refresh-interval.js";
+import { BUILT_IN_REFRESH_SETTINGS, toInterval } from "./refresh-interval.js";
+import { MAX_READINGS } from "./readings.js";
+
+/** The package defaults, used only if the site's dashboard settings can't be read. */
+const FALLBACK_SETTINGS: DashboardSettings = {
+  refreshIntervals: [...BUILT_IN_REFRESH_SETTINGS.refreshIntervals],
+  defaultRefreshInterval: BUILT_IN_REFRESH_SETTINGS.defaultRefreshInterval,
+  maxReadings: MAX_READINGS,
+};
 
 const STORAGE_KEY = "umbricians.liveView.interval";
 
@@ -36,7 +52,11 @@ export const LIVE_VIEW_DASHBOARD_CONTEXT = new UmbContextToken<LiveViewDashboard
  * the interval and paused state (`UmbriciansLiveViewDashboardContext`).
  */
 export class LiveViewDashboardContext extends UmbContextBase implements UmbriciansLiveViewDashboardContext {
-  readonly #interval = new UmbNumberState<number>(readStoredInterval());
+  readonly #settings = new UmbBasicState<DashboardSettings | undefined>(undefined);
+  /** The site's dashboard settings; undefined until they are read. Nothing polls and no panel is shown before then. */
+  readonly settings: Observable<DashboardSettings | undefined> = this.#settings.asObservable();
+
+  readonly #interval = new UmbNumberState<number>(FALLBACK_SETTINGS.defaultRefreshInterval);
   /** The refresh interval in seconds. */
   readonly interval: Observable<number> = this.#interval.asObservable();
 
@@ -73,9 +93,12 @@ export class LiveViewDashboardContext extends UmbContextBase implements Umbricia
 
   #timer?: number;
   #abort?: AbortController;
+  #connected = false;
+  #notifications?: typeof UMB_NOTIFICATION_CONTEXT.TYPE;
 
   constructor(host: UmbControllerHost) {
     super(host, LIVE_VIEW_DASHBOARD_CONTEXT);
+    this.consumeContext(UMB_NOTIFICATION_CONTEXT, (context) => (this.#notifications = context));
     this.consumeContext(UMB_CURRENT_USER_CONTEXT, (context) => {
       this.observe(context?.fallbackPermissions, (permissions) => {
         this.#canMessageUsers.setValue(permissions?.includes(LIVE_VIEW_PERMISSION_MESSAGE_USERS) ?? false);
@@ -86,7 +109,9 @@ export class LiveViewDashboardContext extends UmbContextBase implements Umbricia
 
   override hostConnected() {
     super.hostConnected();
-    this.#schedule(0);
+    this.#connected = true;
+    if (this.#settings.getValue()) this.#schedule(0);
+    else void this.#start();
     fetchMemberMessaging()
       .then((messaging) => this.#memberMessaging.setValue(messaging))
       .catch(() => this.#memberMessaging.setValue(undefined));
@@ -94,11 +119,41 @@ export class LiveViewDashboardContext extends UmbContextBase implements Umbricia
 
   override hostDisconnected() {
     super.hostDisconnected();
+    this.#connected = false;
     this.#stop();
   }
 
+  /**
+   * Reads the site's dashboard settings, then starts polling at the remembered interval if it is still offered. If
+   * they can't be read, the built-in settings are used and a warning says so.
+   */
+  async #start() {
+    let settings = FALLBACK_SETTINGS;
+    let failed = false;
+    try {
+      settings = await fetchDashboardSettings();
+    } catch {
+      failed = true;
+    }
+    if (!this.#connected) return;
+    if (failed) {
+      this.#notifications?.peek("warning", {
+        data: {
+          headline: "Dashboard settings not loaded",
+          message:
+            "Live View couldn't read this site's dashboard settings, so it is using the built-in refresh choices and chart length.",
+        },
+      });
+    }
+    this.#settings.setValue(settings);
+    this.#interval.setValue(readStoredInterval(settings));
+    this.#schedule(0);
+  }
+
   setRefreshInterval(seconds: number) {
-    this.#interval.setValue(toInterval(seconds));
+    const settings = this.#settings.getValue();
+    if (!settings) return;
+    this.#interval.setValue(toInterval(seconds, settings));
     try {
       localStorage.setItem(STORAGE_KEY, String(this.#interval.getValue()));
     } catch {
@@ -143,7 +198,7 @@ export class LiveViewDashboardContext extends UmbContextBase implements Umbricia
     try {
       const snapshot = await fetchSnapshot(this.#abort.signal);
       this.#snapshot.setValue(snapshot);
-      this.#readings.setValue(addReading(this.#readings.getValue(), snapshot));
+      this.#readings.setValue(addReading(this.#readings.getValue(), snapshot, this.#settings.getValue()?.maxReadings));
       this.#error.setValue(undefined);
     } catch (error) {
       if (this.#abort.signal.aborted) return;
@@ -154,10 +209,10 @@ export class LiveViewDashboardContext extends UmbContextBase implements Umbricia
   }
 }
 
-function readStoredInterval() {
+function readStoredInterval(settings: DashboardSettings) {
   try {
-    return toInterval(localStorage.getItem(STORAGE_KEY));
+    return toInterval(localStorage.getItem(STORAGE_KEY), settings);
   } catch {
-    return DEFAULT_INTERVAL;
+    return settings.defaultRefreshInterval;
   }
 }

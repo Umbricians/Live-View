@@ -133,8 +133,8 @@ public class SharedStoreTests
         Guid me = _users.Add("Me");
         Guid alice = _users.Add("Alice");
         Guid bob = _users.Add("Bob");
-        BackofficeMessenger a = new(new NoServerEvents(), NewBackoffice(), _users, store, new RecordingEventAggregator(), _clock);
-        BackofficeMessenger b = new(new NoServerEvents(), NewBackoffice(), _users, store, new RecordingEventAggregator(), _clock);
+        BackofficeMessenger a = new(new NoServerEvents(), NewBackoffice(), _users, store, new RecordingEventAggregator(), _options, _clock);
+        BackofficeMessenger b = new(new NoServerEvents(), NewBackoffice(), _users, store, new RecordingEventAggregator(), _options, _clock);
 
         var request = new BackofficeMessageRequest("Heads up", "Restarting soon", "info", [alice], null, AllOnline: false);
         var result = Assert.IsType<BackofficeSendResult.Sent>(await a.SendAsync(request, new BackofficeSender(me, "Me")));

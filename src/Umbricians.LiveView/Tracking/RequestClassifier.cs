@@ -11,7 +11,7 @@ namespace Umbricians.LiveView.Tracking;
 /// <summary>
 /// Decides which channels a request counts in, under what session key, and who it shows was seen. Requests are
 /// offered to the channels in sort order and counted by each whose paths, hosts and request predicate they match, up to the first exclusive
-/// one. Bots, <c>OPTIONS</c> and <c>HEAD</c> requests, and static files on channels that ignore them are not counted.
+/// one. Bots (the built-in patterns and the site's own <c>BotUserAgents</c>), <c>OPTIONS</c> and <c>HEAD</c> requests, and static files on channels that ignore them are not counted.
 /// </summary>
 internal sealed partial class RequestClassifier
 {
@@ -44,7 +44,7 @@ internal sealed partial class RequestClassifier
         if (!options.TrackingEnabled
             || HttpMethods.IsOptions(request.Method)
             || HttpMethods.IsHead(request.Method)
-            || (options.IgnoreBots && BotUserAgent().IsMatch(request.Headers.UserAgent.ToString())))
+            || (options.IgnoreBots && IsBot(request.Headers.UserAgent.ToString(), options.BotUserAgents)))
         {
             return RequestClassification.Untracked;
         }
@@ -82,6 +82,25 @@ internal sealed partial class RequestClassifier
         }
 
         return new RequestClassification(this, request, sessions, signedIn, memberSeen, backofficeSeen, mcpCall);
+    }
+
+    /// <summary>Whether the User-Agent matches a built-in crawler pattern or one of the site's own; blank entries match nothing.</summary>
+    private static bool IsBot(string userAgent, string[] extra)
+    {
+        if (BotUserAgent().IsMatch(userAgent))
+        {
+            return true;
+        }
+
+        foreach (string pattern in extra)
+        {
+            if (!string.IsNullOrWhiteSpace(pattern) && userAgent.Contains(pattern.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

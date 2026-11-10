@@ -12,6 +12,7 @@ namespace Umbricians.LiveView.Tests.Messaging;
 
 public class BackofficeMessengerTests
 {
+    private readonly LiveViewOptions _options = new();
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
     private readonly InMemoryBackofficeUserDirectory _directory = new();
     private readonly RecordingServerEventRouter _router = new();
@@ -22,9 +23,9 @@ public class BackofficeMessengerTests
 
     public BackofficeMessengerTests()
     {
-        var options = new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions());
+        var options = new StaticOptionsMonitor<LiveViewOptions>(_options);
         _presence = new BackofficePresence(new InMemoryActivityStore(options), _directory, options, _clock);
-        _messenger = new BackofficeMessenger(_router, _presence, _directory, new InMemoryBackofficeMessageStore(_clock), _events, _clock);
+        _messenger = new BackofficeMessenger(_router, _presence, _directory, new InMemoryBackofficeMessageStore(_clock), _events, options, _clock);
         _me = _directory.Add("Me");
     }
 
@@ -107,6 +108,33 @@ public class BackofficeMessengerTests
 
         Assert.Equal(0, await _presence.CountOnlineAsync());
         Assert.Equal([sent.Message.Key], await _messenger.GetUndeliveredAsync(alice));
+    }
+
+    [Fact]
+    public async Task A_message_is_kept_for_the_configured_lifetime_then_discarded()
+    {
+        _options.BackofficeMessageLifetimeMinutes = 5;
+        Guid alice = _directory.Add("Alice");
+        BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(Request(userKeys: [alice]), Me));
+
+        _clock.Advance(TimeSpan.FromMinutes(4));
+        Assert.Equal([sent.Message.Key], await _messenger.GetUndeliveredAsync(alice));
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        Assert.Empty(await _messenger.GetUndeliveredAsync(alice));
+    }
+
+    [Fact]
+    public async Task Messages_are_kept_for_fifteen_minutes_by_default()
+    {
+        Guid alice = _directory.Add("Alice");
+        BackofficeSendResult.Sent sent = AssertSent(await _messenger.SendAsync(Request(userKeys: [alice]), Me));
+
+        _clock.Advance(TimeSpan.FromMinutes(14));
+        Assert.Equal([sent.Message.Key], await _messenger.GetUndeliveredAsync(alice));
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        Assert.Empty(await _messenger.GetUndeliveredAsync(alice));
     }
 
     [Fact]
