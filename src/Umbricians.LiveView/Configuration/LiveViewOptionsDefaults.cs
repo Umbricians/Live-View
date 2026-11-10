@@ -120,6 +120,8 @@ internal sealed class LiveViewOptionsDefaults(IEnumerable<LiveViewChannelRegistr
         channel.SortOrder ??= defaults.SortOrder;
         channel.PathPrefixes ??= defaults.PathPrefixes;
         channel.ExcludePathPrefixes ??= defaults.ExcludePathPrefixes;
+        channel.Hosts ??= defaults.Hosts;
+        channel.RequestPredicate ??= defaults.RequestPredicate;
         channel.SessionKeys ??= defaults.SessionKeys;
         channel.ActivityWindowSeconds ??= defaults.ActivityWindowSeconds;
         channel.IgnoreStaticFiles ??= defaults.IgnoreStaticFiles;

@@ -101,7 +101,7 @@ public class LiveMetricsServiceTests
     private async Task AssertReplacedByProvider(StubMetricProvider provider, string path)
     {
         var monitor = new StaticOptionsMonitor<LiveViewOptions>(_options);
-        var classifier = new RequestClassifier(monitor, [provider]);
+        var classifier = new RequestClassifier(monitor, [], [provider]);
         var context = new DefaultHttpContext();
         context.Request.Method = HttpMethods.Get;
         context.Request.Path = path;

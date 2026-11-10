@@ -10,7 +10,7 @@ namespace Umbricians.LiveView.Tracking;
 
 /// <summary>
 /// Decides which channels a request counts in, under what session key, and who it shows was seen. Requests are
-/// offered to the channels in sort order and counted by each whose paths they fall under, up to the first exclusive
+/// offered to the channels in sort order and counted by each whose paths, hosts and request predicate they match, up to the first exclusive
 /// one. Bots, <c>OPTIONS</c> and <c>HEAD</c> requests, and static files on channels that ignore them are not counted.
 /// </summary>
 internal sealed partial class RequestClassifier
@@ -18,10 +18,24 @@ internal sealed partial class RequestClassifier
     private readonly IOptionsMonitor<LiveViewOptions> _options;
     private readonly IEnumerable<ILiveMetricProvider> _providers;
 
-    public RequestClassifier(IOptionsMonitor<LiveViewOptions> options, IEnumerable<ILiveMetricProvider> providers)
+    private readonly Dictionary<string, ILiveSessionKeySource> _sessionKeySources = new(StringComparer.OrdinalIgnoreCase);
+
+    public RequestClassifier(
+        IOptionsMonitor<LiveViewOptions> options,
+        IEnumerable<ILiveSessionKeySource> sessionKeySources,
+        IEnumerable<ILiveMetricProvider> providers)
     {
         _options = options;
         _providers = providers;
+
+        // The first registration of an alias wins, and the built-in names always mean the built-in sources.
+        foreach (ILiveSessionKeySource source in sessionKeySources)
+        {
+            if (!IsBuiltIn(source.Alias))
+            {
+                _sessionKeySources.TryAdd(source.Alias, source);
+            }
+        }
     }
 
     public RequestClassification Classify(HttpRequest request)
@@ -39,7 +53,7 @@ internal sealed partial class RequestClassifier
         var signedIn = new List<(string Channel, string[] Sources)>();
         bool memberSeen = false, backofficeSeen = false, mcpCall = false;
 
-        foreach ((string channel, string[] sources) in Match(request.Path.Value ?? "/", options, _providers))
+        foreach ((string channel, string[] sources) in Match(request, options, _providers))
         {
             // Member and backoffice presence keep their lines themselves, always keyed on the signed-in member or user.
             if (channel == Constants.Channels.Members)
@@ -56,8 +70,8 @@ internal sealed partial class RequestClassifier
 
             mcpCall |= channel == Constants.Channels.Mcp;
 
-            // The signed-in user is only known once authentication has run further down the pipeline.
-            if (sources.Contains(Constants.SessionKeySources.User, StringComparer.OrdinalIgnoreCase))
+            // Sources that use the signed-in user are only known once authentication has run further down the pipeline.
+            if (ReadOnceSignedIn(sources))
             {
                 signedIn.Add((channel, sources));
             }
@@ -67,18 +81,17 @@ internal sealed partial class RequestClassifier
             }
         }
 
-        return new RequestClassification(request, sessions, signedIn, memberSeen, backofficeSeen, mcpCall);
+        return new RequestClassification(this, request, sessions, signedIn, memberSeen, backofficeSeen, mcpCall);
     }
 
     private static IEnumerable<(string Channel, string[] Sources)> Match(
-        string path, LiveViewOptions options, IEnumerable<ILiveMetricProvider> providers)
+        HttpRequest request, LiveViewOptions options, IEnumerable<ILiveMetricProvider> providers)
     {
+        string path = request.Path.Value ?? "/";
         bool isStaticFile = IsStaticFile(path, options.StaticFileExtensions);
         foreach (ChannelSettings channel in ChannelSettings.InOrder(options, providers))
         {
-            if (!channel.Enabled
-                || !MatchesAny(path, channel.PathPrefixes)
-                || MatchesAny(path, channel.ExcludePathPrefixes))
+            if (!channel.Enabled || !Matches(channel, request, path))
             {
                 continue;
             }
@@ -93,6 +106,35 @@ internal sealed partial class RequestClassifier
                 yield break;
             }
         }
+    }
+
+    /// <summary>
+    /// A channel counts requests when it has path prefixes, hosts, a request predicate, or any mix of them. A request
+    /// must then fall under one of its path prefixes (when it has any) and outside its excluded ones, be for one of its
+    /// hosts (when it lists any), and pass its predicate (when it has one).
+    /// </summary>
+    private static bool Matches(ChannelSettings channel, HttpRequest request, string path) =>
+        (channel.PathPrefixes.Length > 0 || channel.Hosts.Length > 0 || channel.RequestPredicate is not null)
+        && (channel.PathPrefixes.Length == 0 || MatchesAny(path, channel.PathPrefixes))
+        && !MatchesAny(path, channel.ExcludePathPrefixes)
+        && (channel.Hosts.Length == 0 || MatchesHost(request.Host, channel.Hosts))
+        && (channel.RequestPredicate is null || channel.RequestPredicate(request.HttpContext));
+
+    /// <summary>The host without its port, matched exactly or, for a <c>*.</c> pattern, as any subdomain.</summary>
+    private static bool MatchesHost(HostString requestHost, string[] hosts)
+    {
+        string host = requestHost.HasValue ? requestHost.Host : "";
+        foreach (string pattern in hosts)
+        {
+            if (pattern.StartsWith("*.", StringComparison.Ordinal)
+                    ? host.EndsWith(pattern[1..], StringComparison.OrdinalIgnoreCase)
+                    : host.Equals(pattern, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool MatchesAny(string path, string[] prefixes)
@@ -122,7 +164,7 @@ internal sealed partial class RequestClassifier
     }
 
     /// <summary>The first source that has a value, prefixed with the source so values from different sources never collide.</summary>
-    internal static string? SessionKey(HttpRequest request, string[] sources)
+    internal string? SessionKey(HttpRequest request, string[] sources)
     {
         foreach (string source in sources)
         {
@@ -137,10 +179,10 @@ internal sealed partial class RequestClassifier
     }
 
     /// <summary>
-    /// Reads one session-key source, matched without regard to case. Returns the source in its canonical casing,
+    /// Reads one session-key source, a built-in one or one the site registered, matched without regard to case. Returns the source in its canonical casing,
     /// so the same session keys the same way however the source was written in configuration.
     /// </summary>
-    private static (string Source, string? Value) ResolveSource(HttpRequest request, string source)
+    private (string Source, string? Value) ResolveSource(HttpRequest request, string source)
     {
         if (source.Equals(Constants.SessionKeySources.User, StringComparison.OrdinalIgnoreCase))
         {
@@ -170,8 +212,24 @@ internal sealed partial class RequestClassifier
             return (Constants.SessionKeySources.CookiePrefix + name, request.Cookies[name]);
         }
 
+        if (_sessionKeySources.TryGetValue(source, out ILiveSessionKeySource? custom))
+        {
+            return (custom.Alias, custom.GetSessionKey(request.HttpContext));
+        }
+
         return (source, null);
     }
+
+    private bool ReadOnceSignedIn(string[] sources) =>
+        sources.Any(s => s.Equals(Constants.SessionKeySources.User, StringComparison.OrdinalIgnoreCase)
+            || (_sessionKeySources.TryGetValue(s, out ILiveSessionKeySource? custom) && custom.UsesSignedInUser));
+
+    private static bool IsBuiltIn(string source) =>
+        source.Equals(Constants.SessionKeySources.User, StringComparison.OrdinalIgnoreCase)
+        || source.Equals(Constants.SessionKeySources.Client, StringComparison.OrdinalIgnoreCase)
+        || source.Equals(Constants.SessionKeySources.Authorization, StringComparison.OrdinalIgnoreCase)
+        || source.StartsWith(Constants.SessionKeySources.HeaderPrefix, StringComparison.OrdinalIgnoreCase)
+        || source.StartsWith(Constants.SessionKeySources.CookiePrefix, StringComparison.OrdinalIgnoreCase);
 
     private static string? ResolveUserId(ClaimsPrincipal user) =>
         user.Identity?.IsAuthenticated == true
@@ -188,12 +246,14 @@ internal sealed record ChannelSession(string Channel, string SessionKey);
 /// <summary>What the <see cref="RequestClassifier"/> made of one request.</summary>
 internal sealed class RequestClassification
 {
-    public static readonly RequestClassification Untracked = new(null, [], [], false, false, false);
+    public static readonly RequestClassification Untracked = new(null, null, [], [], false, false, false);
 
+    private readonly RequestClassifier? _classifier;
     private readonly HttpRequest? _request;
     private readonly IReadOnlyList<(string Channel, string[] Sources)> _signedIn;
 
     internal RequestClassification(
+        RequestClassifier? classifier,
         HttpRequest? request,
         IReadOnlyList<ChannelSession> sessions,
         IReadOnlyList<(string Channel, string[] Sources)> signedIn,
@@ -201,6 +261,7 @@ internal sealed class RequestClassification
         bool backofficeSeen,
         bool mcpCall)
     {
+        _classifier = classifier;
         _request = request;
         _signedIn = signedIn;
         Sessions = sessions;
@@ -224,14 +285,14 @@ internal sealed class RequestClassification
     public bool IsTracked => Sessions.Count > 0 || _signedIn.Count > 0 || MemberSeen || BackofficeSeen || McpCall;
 
     /// <summary>
-    /// Sessions of channels keyed on the signed-in user, read once authentication has run. A channel whose sources
+    /// Sessions of channels with a source that uses the signed-in user, read once authentication has run. A channel whose sources
     /// all come up empty is left out.
     /// </summary>
     public IEnumerable<ChannelSession> SignedInSessions()
     {
         foreach ((string channel, string[] sources) in _signedIn)
         {
-            if (RequestClassifier.SessionKey(_request!, sources) is { } sessionKey)
+            if (_classifier!.SessionKey(_request!, sources) is { } sessionKey)
             {
                 yield return new ChannelSession(channel, sessionKey);
             }

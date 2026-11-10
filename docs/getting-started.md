@@ -182,7 +182,8 @@ endpoint, keyed on a client id header.
 | `MessageTimeZone` | the sender's own | The time zone "midnight tonight" means when messaging members, as an IANA id such as `America/Denver` (a Windows id works too). |
 
 Each channel under `Channels` can set `Enabled`, `Name`, `Color`, `SortOrder`, `PathPrefixes`,
-`ExcludePathPrefixes`, `SessionKeys` (`Header:<name>`, `Cookie:<name>`, `Authorization`, `User` or `Client`),
+`ExcludePathPrefixes`, `Hosts`, `SessionKeys` (`Header:<name>`, `Cookie:<name>`, `Authorization`, `User`, `Client`, or a
+source your code registers),
 `ActivityWindowSeconds`, `IgnoreStaticFiles` and `Exclusive`. The built-in channels (`web`, `members`, `backoffice`,
 `mcp`, `api`) keep their defaults for anything you leave out. `SessionKeys` and `Exclusive` don't apply to
 `members`, which always counts the signed-in member and also counts them as a web visitor. `SessionKeys` doesn't
@@ -195,7 +196,9 @@ don't apply to it.
 
 Anything the site can count can go on the chart. Pick the approach that fits:
 
-- **Requests to certain paths:** add a channel in `appsettings.json`, as above. No code needed.
+- **Requests to certain paths or hosts:** add a channel in `appsettings.json`, as above. No code needed. To match
+  requests in code, or key sessions on something only your code knows, see
+  [A channel for requests](../README.md#1-a-channel-for-requests).
 - **Sessions your code knows about**, such as SignalR connections: declare a channel with
   `builder.AddLiveViewChannel(...)` and call `ILiveActivityTracker.Touch` / `End` from your code.
 - **Any number you can work out on demand**, such as a queue length or a count from another service: implement
