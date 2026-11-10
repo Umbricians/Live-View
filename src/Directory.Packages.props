@@ -4,7 +4,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Built against the latest Umbraco 17 minor; sites on 17.8+ (including 18) resolve their own newer versions. -->
+    <!-- The lowest Umbraco 17 version the package supports; sites on newer versions resolve their own.
+         .github/dependabot.yml ignores each of these, so a new one goes in its list too. -->
     <PackageVersion Include="Umbraco.Cms.Api.Common" Version="17.8.0" />
     <PackageVersion Include="Umbraco.Cms.Api.Management" Version="17.8.0" />
     <PackageVersion Include="Umbraco.Cms.Web.Common" Version="17.8.0" />

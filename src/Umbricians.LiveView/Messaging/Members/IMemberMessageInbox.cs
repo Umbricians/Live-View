@@ -13,11 +13,13 @@ namespace Umbricians.LiveView.Messaging.Members;
 /// </remarks>
 public interface IMemberMessageInbox
 {
+    /// <summary>Holds the message for its recipients until it expires.</summary>
     void Add(MemberMessage message);
 
     /// <summary>Unexpired messages for the member that they have not marked read, oldest first.</summary>
     IReadOnlyList<MemberMessage> GetUnread(Guid memberKey);
 
+    /// <summary>Stops the message being returned as unread for the member, once it has been shown to them.</summary>
     void MarkRead(Guid memberKey, Guid messageKey);
 }
 

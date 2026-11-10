@@ -36,12 +36,20 @@ public interface IMemberMessageSender
 /// <summary>How the dashboard presents the message, which senders can map to their own styling.</summary>
 public enum MemberMessageType
 {
+    /// <summary>General news, such as a new feature.</summary>
     Information,
+
+    /// <summary>Something members should know about, such as planned maintenance.</summary>
     Warning,
+
+    /// <summary>Something members need to act on now.</summary>
     Urgent,
+
+    /// <summary>Good news, such as a problem fixed.</summary>
     GoodNews,
 }
 
+/// <summary>Who a member message is for, as chosen on the dashboard.</summary>
 public enum MemberMessageAudience
 {
     /// <summary>Members picked on the dashboard. <see cref="MemberMessage.MemberKeys"/> lists them.</summary>
@@ -58,7 +66,13 @@ public enum MemberMessageAudience
 }
 
 /// <param name="Key">Unique id for the message, the same for every sender.</param>
+/// <param name="Headline">The headline, up to 200 characters of plain text.</param>
 /// <param name="Body">Plain text; may be empty.</param>
+/// <param name="Type">How the dashboard presents the message, to map to the sender's own styling.</param>
+/// <param name="Audience">Who the message is for.</param>
+/// <param name="MemberKeys">The keys of the members it is for, or empty for <see cref="MemberMessageAudience.AllMembers"/>.</param>
+/// <param name="SenderName">The name of the backoffice user who sent it, or null when it has no sender.</param>
+/// <param name="SentAt">When it was sent.</param>
 /// <param name="ExpiresAt">When the message stops being relevant, e.g. once a restart has happened.</param>
 public sealed record MemberMessage(
     Guid Key,
