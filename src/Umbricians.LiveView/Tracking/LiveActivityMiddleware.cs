@@ -5,7 +5,8 @@ namespace Umbricians.LiveView.Tracking;
 
 /// <summary>
 /// Counts each request as the <see cref="RequestClassifier"/> describes it. Sessions stay active for the length of
-/// the request, so long-lived streams (MCP over SSE, for one) count while they are open.
+/// the request, so long-lived streams (MCP over SSE, for one) count while they are open. Also notes requests from a
+/// proxy whose forwarded headers weren't applied.
 /// </summary>
 internal sealed class LiveActivityMiddleware : IMiddleware
 {
@@ -14,23 +15,28 @@ internal sealed class LiveActivityMiddleware : IMiddleware
     private readonly BackofficePresence _backofficePresence;
     private readonly MemberPresence _memberPresence;
     private readonly McpCallers _mcpCallers;
+    private readonly UnforwardedProxyDetector _proxyDetector;
 
     public LiveActivityMiddleware(
         RequestClassifier classifier,
         ILiveActivityTracker tracker,
         BackofficePresence backofficePresence,
         MemberPresence memberPresence,
-        McpCallers mcpCallers)
+        McpCallers mcpCallers,
+        UnforwardedProxyDetector proxyDetector)
     {
         _classifier = classifier;
         _tracker = tracker;
         _backofficePresence = backofficePresence;
         _memberPresence = memberPresence;
         _mcpCallers = mcpCallers;
+        _proxyDetector = proxyDetector;
     }
 
     public async Task InvokeAsync(HttpContext context, RequestDelegate next)
     {
+        _proxyDetector.Observe(context);
+
         RequestClassification request = _classifier.Classify(context.Request);
         if (!request.IsTracked)
         {

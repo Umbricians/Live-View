@@ -30,6 +30,7 @@ public class LiveViewComposer : IComposer
         builder.Services.TryAddSingleton(TimeProvider.System);
         AddStores(builder.Services);
         builder.Services.AddSingleton<RequestClassifier>();
+        builder.Services.AddSingleton<UnforwardedProxyDetector>();
         builder.Services.AddSingleton<LiveActivityMiddleware>();
         builder.Services.AddSingleton<LiveMetricsService>();
         builder.Services.AddSingleton<IBackofficeUserDirectory, UmbracoBackofficeUserDirectory>();
