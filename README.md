@@ -290,8 +290,14 @@ crawler patterns, while `IgnoreBots` is on. Surrounding spaces and blank entries
 `DefaultRefreshInterval` (default 5, or the shortest choice when 5 isn't offered; a browser whose remembered choice is
 no longer offered goes back to it) and `MaxReadings`, how many readings the chart keeps (default 120). If the dashboard can't read these settings, it uses the built-in ones and shows a warning.
 
-A value that can't work (a number that isn't positive, or a default interval that isn't one of the choices) is
-replaced by its default, with a warning in the log.
+A value that can't work never stops the site. It is replaced by its default, with a warning in the log naming the
+setting:
+
+- a number that isn't positive: `ActivityWindowSeconds`, `MaxSessionsPerChannel`, `BackofficeMessageLifetimeMinutes`,
+  `Dashboard:RefreshIntervals` or `Dashboard:MaxReadings`. A channel's `ActivityWindowSeconds` falls back to the
+  window `AddLiveViewChannel` gave it, then its built-in window, then the site-wide `ActivityWindowSeconds`;
+- a `Dashboard:DefaultRefreshInterval` that isn't one of the `RefreshIntervals`;
+- a `MessageTimeZone` the server doesn't know, which is ignored, so midnight is each sender's own.
 
 ## Extending
 
