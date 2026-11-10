@@ -23,11 +23,20 @@ cd src/Umbricians.LiveView/Client && npm ci && npm test && npm run build && cd -
 dotnet build Umbricians.LiveView.slnx -c Release
 dotnet test Umbricians.LiveView.slnx -c Release --no-build
 node build/smoke-test.mjs demo/Umbricians.LiveView.Demo /App_Plugins/UmbriciansLiveView/umbricians-live-view.js umbricians-live-view
-dotnet pack src/Umbricians.LiveView -c Release -o artifacts
+dotnet pack src/Umbricians.LiveView -c Release -o artifacts -p:Version=$(node build/package-version.mjs src/Umbricians.LiveView/Umbricians.LiveView.csproj)
+```
+
+In PowerShell, pack with:
+
+```powershell
+$version = node build/package-version.mjs src/Umbricians.LiveView/Umbricians.LiveView.csproj
+dotnet pack src/Umbricians.LiveView -c Release -o artifacts -p:Version=$version
 ```
 
 The solution includes the demo site, so `dotnet build` builds it too. Pack with a build, as above: the dashboard
-bundle must be built first, and packing stops with an error if it is missing.
+bundle must be built first, and packing stops with an error if it is missing. Package validation compares the package
+with the last release, so it is packed with the version CI uses, which comes after it (the script needs the release
+tags, which a clone fetches).
 
 In Git Bash on Windows, the bundle path argument gets rewritten into a Windows path, so run the smoke test there as
 `MSYS_NO_PATHCONV=1 node build/smoke-test.mjs …`. PowerShell and CI are unaffected.

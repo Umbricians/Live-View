@@ -756,10 +756,11 @@ The demo also has a stand-in MCP endpoint (not a real MCP server) for trying the
 To package, build the client first, then:
 
 ```bash
-dotnet pack src/Umbricians.LiveView -c Release
+dotnet pack src/Umbricians.LiveView -c Release -p:Version=$(node build/package-version.mjs src/Umbricians.LiveView/Umbricians.LiveView.csproj)
 ```
 
-Packing stops with an error if the dashboard bundle has not been built.
+Packing stops with an error if the dashboard bundle has not been built. Package validation compares the package with
+the last release, so it is packed with the version CI uses, which comes after it.
 
 Branches follow Gitflow; see [CONTRIBUTING.md](CONTRIBUTING.md) for the branch flow and the build steps. Release
 steps for maintainers are in [docs/RELEASING.md](docs/RELEASING.md).
