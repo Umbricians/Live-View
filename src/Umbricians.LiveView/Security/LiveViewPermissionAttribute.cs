@@ -42,7 +42,7 @@ internal sealed class LiveViewPermissionAttribute : TypeFilterAttribute
     }
 }
 
-public static class LiveViewPermissions
+internal static class LiveViewPermissions
 {
     /// <summary>Whether any of the user's groups grants the permission.</summary>
     public static bool Has(IUser? user, string permission) =>
