@@ -1,7 +1,17 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Umbraco.Cms.Core.Cache;
+using Umbraco.Cms.Core.Events;
+using Umbraco.Cms.Core.IO;
+using Umbraco.Cms.Core.Media;
+using Umbraco.Cms.Core.PublishedCache;
+using Umbraco.Cms.Core.Routing;
+using Umbraco.Cms.Core.ServerEvents;
+using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Web.Common.ApplicationBuilder;
 using Umbricians.LiveView.Composers;
 using Umbricians.LiveView.Configuration;
@@ -9,7 +19,9 @@ using Umbricians.LiveView.Controllers;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Presence;
+using Umbricians.LiveView.Metrics;
 using Umbricians.LiveView.Storage;
+using Umbricians.LiveView.Tracking;
 
 namespace Umbricians.LiveView.Tests.Composers;
 
@@ -69,7 +81,88 @@ public class ServiceCollectionExtensionsTests
         { typeof(IBackofficeMessageStore), typeof(InMemoryBackofficeMessageStore), typeof(SharedBackofficeMessageStore) },
         { typeof(IMemberAvatarProvider), typeof(PropertyMemberAvatarProvider), typeof(SiteAvatarProvider) },
         { typeof(IMemberMessageInbox), typeof(MemberMessageInbox), typeof(SiteInbox) },
+        { typeof(ILiveActivityTracker), typeof(LiveActivityTracker), typeof(SiteTracker) },
     };
+
+    public static TheoryData<Type> Services => new()
+    {
+        typeof(RequestClassifier),
+        typeof(UnforwardedProxyDetector),
+        typeof(LiveActivityMiddleware),
+        typeof(LiveMetricsService),
+        typeof(IBackofficeUserDirectory),
+        typeof(IMemberDirectory),
+        typeof(BackofficePresence),
+        typeof(MemberPresence),
+        typeof(McpCallers),
+        typeof(ILiveViewPresence),
+        typeof(BackofficeMessenger),
+        typeof(MemberMessagingService),
+        typeof(ILiveViewActivityStore),
+        typeof(IBackofficeMessageStore),
+        typeof(ILiveActivityTracker),
+        typeof(IMemberAvatarProvider),
+        typeof(IMemberMessageInbox),
+    };
+
+    // A registration that went missing, or a constructor that gained a dependency nothing registers, would
+    // otherwise only fail on the site's first tracked request or dashboard load.
+    [Theory]
+    [MemberData(nameof(Services))]
+    public void Every_service_resolves_with_only_Umbracos_services_added(Type service)
+    {
+        using ServiceProvider provider = WithUmbracoServices().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
+        Assert.NotNull(provider.GetService(service));
+    }
+
+    [Fact]
+    public void Live_View_presence_is_the_MCP_callers_service()
+    {
+        using ServiceProvider provider = WithUmbracoServices().BuildServiceProvider();
+
+        Assert.Same(provider.GetRequiredService<McpCallers>(), provider.GetRequiredService<ILiveViewPresence>());
+    }
+
+    [Fact]
+    public void The_directories_read_from_Umbraco()
+    {
+        using ServiceProvider provider = WithUmbracoServices().BuildServiceProvider();
+
+        Assert.IsType<UmbracoBackofficeUserDirectory>(provider.GetRequiredService<IBackofficeUserDirectory>());
+        Assert.IsType<UmbracoMemberDirectory>(provider.GetRequiredService<IMemberDirectory>());
+    }
+
+    /// <summary>
+    /// <c>AddLiveView</c> plus stand-ins for the Umbraco services Live View takes. The constructors only keep them,
+    /// so the stand-ins throw if anything is called on them.
+    /// </summary>
+    private static ServiceCollection WithUmbracoServices()
+    {
+        ServiceCollection services = AddLiveView();
+        services.AddLogging();
+        services.AddSingleton<IServerEventRouter>(new NullServerEventRouter());
+        services.AddSingleton<IEventAggregator>(new RecordingEventAggregator());
+        services.AddSingleton(AppCaches.NoCache);
+        services.AddSingleton((MediaFileManager)RuntimeHelpers.GetUninitializedObject(typeof(MediaFileManager)));
+        services.AddSingleton(NotCalled<IUserService>());
+        services.AddSingleton(NotCalled<IUserGroupService>());
+        services.AddSingleton(NotCalled<IUserConnectionManager>());
+        services.AddSingleton(NotCalled<IImageUrlGenerator>());
+        services.AddSingleton(NotCalled<IIdKeyMap>());
+        services.AddSingleton(NotCalled<IMemberService>());
+        services.AddSingleton(NotCalled<IPublishedMemberCache>());
+        services.AddSingleton(NotCalled<IPublishedUrlProvider>());
+        return services;
+    }
+
+    private static T NotCalled<T>() where T : class => DispatchProxy.Create<T, NotCalledProxy>();
+
+    public class NotCalledProxy : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
+            throw new InvalidOperationException($"{targetMethod?.DeclaringType?.Name}.{targetMethod?.Name} was called on a stand-in.");
+    }
 
     [Theory]
     [MemberData(nameof(Replaceable))]
@@ -102,6 +195,17 @@ public class ServiceCollectionExtensionsTests
     {
         public Task<string?> GetAvatarUrlAsync(Umbraco.Cms.Core.Models.IMember member, CancellationToken cancellationToken) =>
             Task.FromResult<string?>(null);
+    }
+
+    private sealed class SiteTracker : ILiveActivityTracker
+    {
+        public Task TouchAsync(string channel, string sessionKey) => Task.CompletedTask;
+
+        public Task<IAsyncDisposable> BeginActivityAsync(string channel, string sessionKey) => throw new NotSupportedException();
+
+        public Task EndAsync(string channel, string sessionKey) => Task.CompletedTask;
+
+        public Task<int> CountActiveAsync(string channel) => Task.FromResult(0);
     }
 
     private sealed class SiteInbox : IMemberMessageInbox
