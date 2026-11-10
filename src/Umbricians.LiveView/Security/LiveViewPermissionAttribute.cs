@@ -8,14 +8,20 @@ namespace Umbricians.LiveView.Security;
 
 /// <summary>
 /// Requires the current backoffice user to have a Live View permission through at least one of their user groups.
-/// Apply alongside the controller's authorization policy, which signs the user in.
+/// Apply alongside <c>AuthorizationPolicies.BackOfficeAccess</c>, which signs the user in; no section access is needed.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
 internal sealed class LiveViewPermissionAttribute : TypeFilterAttribute
 {
     /// <param name="permission">One of <see cref="Constants.Permissions"/>.</param>
     public LiveViewPermissionAttribute(string permission)
-        : base(typeof(LiveViewPermissionFilter)) => Arguments = [permission];
+        : base(typeof(LiveViewPermissionFilter))
+    {
+        Permission = permission;
+        Arguments = [permission];
+    }
+
+    public string Permission { get; }
 
     private sealed class LiveViewPermissionFilter(string permission, IBackOfficeSecurityAccessor security) : IAuthorizationFilter
     {

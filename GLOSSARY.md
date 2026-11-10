@@ -38,6 +38,12 @@ activity window and so on. Appsettings beat channels declared in code, which bea
 still empty then gets the package defaults (counted by client, a window of `ActivityWindowSeconds`). Everything that
 reads a channel's settings reads them here.
 
+## Live View permissions
+
+The three user group permissions: View Live View, Message backoffice users and Message members. They alone decide what
+a backoffice user can do with Live View, on the dashboard and through its API; section access doesn't. Where the
+dashboard appears is decided by its manifest: Settings, unless a site shows it elsewhere.
+
 ## MCP caller
 
 A backoffice user or member using an MCP endpoint. Requests to an MCP endpoint the site hosts are matched to the
