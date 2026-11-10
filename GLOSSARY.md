@@ -124,7 +124,8 @@ leaves a member online on MCP.
 The module that decides which **channels** a request counts in, under what session key, and who it shows was seen:
 a member (for **Member presence**), a backoffice user (for **Backoffice presence**) or an **MCP caller**. It owns
 every rule about which requests count: path prefixes and exclusions, hosts and request predicates, sort order and
-exclusive channels, static files, bots, and the **session key sources**, including those a site registers. The tracking middleware only acts on what it decides.
+exclusive channels, static files, bots, and the **session key sources**, including those a site registers. The tracking middleware only acts on what it decides. It also finds
+**unreachable channels**.
 
 ## Session key source
 
@@ -137,3 +138,10 @@ signed-in user are read once authentication has run.
 
 A short-lived note Member presence keeps when a member signs out, so the sign-out request itself, which still
 carries the member's identity, does not mark them online again.
+
+## Unreachable channel
+
+A channel with paths whose every path is counted first by an earlier exclusive channel, so it never counts a request.
+Channels limited to hosts or by a request predicate are never reported, as they may count requests the earlier
+channel does not.
+The request classifier finds them; the Channel paths health check reports them.

@@ -76,7 +76,7 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
 ## Documentation
 
 - **[Getting started](docs/getting-started.md)**: install, find the dashboard, configure what is counted, add your
-  own lines, and what to check before going live.
+  own lines, what to check before going live and the health checks to run.
 - **[Messaging members](docs/member-messaging.md)**: let the dashboard message your website's members, with complete
   banner, SignalR pop-up and email examples.
 
@@ -161,6 +161,19 @@ User-Agent that identify the visitor, so they count once. Different browsers or 
 visitors behind one shared IP address using an identical browser version are counted as one.
 
 > Counts are per server. On a load-balanced site, each server sees only its own traffic.
+
+## Health checks
+
+Live View adds a **Live View** group to **Settings → Health Check** that looks for common misconfigurations. Each check
+can be turned off through Umbraco's `Umbraco:CMS:HealthChecks:DisabledChecks`.
+
+- **Visitor IP addresses behind a proxy**: requests from a proxy whose forwarded headers aren't applied.
+- **Request counting**: `TrackingEnabled` turned off.
+- **Member messaging**: a group may message members, but no member message sender is registered.
+- **Member avatar property**: `MemberAvatarProperty` names a property no member type has.
+- **Channel paths**: a channel whose paths an earlier exclusive channel counts first.
+
+See [Before you go live](docs/getting-started.md#before-you-go-live).
 
 ## Configuration
 

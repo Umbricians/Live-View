@@ -247,11 +247,23 @@ Every message sent is written to Umbraco's audit log, and a site can stop one wi
 
 ## Before you go live
 
+- **Run the Live View health checks.** In **Settings → Health Check**, open **Live View** and click **Check group**.
+
+  | Check | Looks for | Id |
+  |---|---|---|
+  | **Visitor IP addresses behind a proxy** | Requests with `X-Forwarded-For` from a private or loopback address (a heuristic, judged on requests since the site started). | `6b1f0d3e-8a52-4c7e-9f14-2d6a7c3e5b81` |
+  | **Request counting** | `TrackingEnabled` is `false`. | `a3c97e20-51d4-4b8a-8e6f-0f2b9d47c6a3` |
+  | **Member messaging** | A group other than Administrators has **Message members** but no member message sender is registered. | `4e8d2b71-c0a6-4f39-b5d2-7a1e6c9f3d04` |
+  | **Member avatar property** | `MemberAvatarProperty` names a property no member type has. | `d75a1c48-9e3b-4062-a8f1-5c2e7b0d9a16` |
+  | **Channel paths** | A channel whose paths an earlier exclusive channel counts first. | `2f6c8e95-7b14-4d3a-9c50-e1a8d4b6f272` |
+
+  A check that doesn't apply to your site can be turned off by adding its id to Umbraco's
+  `Umbraco:CMS:HealthChecks:DisabledChecks`.
 - **Behind a proxy or load balancer, forward the client IP.** Web sessions are told apart by IP address and
   User-Agent. If the site sits behind a reverse proxy, CDN or load balancer, every request appears to come from the
   proxy, and visitors with the same browser are counted as one. Configure ASP.NET Core's
   [forwarded headers](https://learn.microsoft.com/aspnet/core/host-and-deploy/proxy-load-balancer) so the real client
-  IP is used.
+  IP is used. The **Visitor IP addresses behind a proxy** health check looks for this.
 - **Counts are per server.** Everything is held in memory, so on a load-balanced site each server shows the traffic it
   handled. The same goes for queued messages.
 - **Nothing is persisted.** Restarting the site resets the counts and clears any queued messages.
@@ -264,13 +276,19 @@ your site shows it in) and the
 dashboard tabs are crowded. Permission changes apply after the user reloads the backoffice.
 
 **There are no checkboxes or Message buttons.** The user's groups need **Message backoffice users** or
-**Message members**. Members can only be messaged once a developer has set up a delivery method.
+**Message members**. Members can only be messaged once a developer has set up a delivery method; the **Member messaging** health check says
+whether one is registered.
 
 **A line stays at zero.** Requests must reach the site through the paths the channel watches. For members, the
 request must be a front-end page view by a logged-in member. MCP and API paths default to `/mcp`, `/umbraco/mcp`,
-`/api` and `/umbraco/delivery/api`.
+`/api` and `/umbraco/delivery/api`. The **Request counting** and **Channel paths** health checks find counting turned
+off and a channel whose paths an earlier channel counts first.
 
-**Web sessions look too low.** See forwarding the client IP, above.
+**Web sessions look too low.** See forwarding the client IP in [Before you go live](#before-you-go-live); the
+**Visitor IP addresses behind a proxy** health check looks for it.
+
+**Members show initials instead of pictures.** `MemberAvatarProperty` must be the alias of an image property on the
+member type, unless the site has its own avatar provider. The **Member avatar property** health check confirms it.
 
 **The chart stops updating.** The dashboard uses your backoffice session. If you were signed out, sign in again and
 the dashboard resumes.
