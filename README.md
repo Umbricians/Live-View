@@ -727,6 +727,8 @@ demo/Umbricians.LiveView.Demo    Umbraco 17.8 site on SQLite that references the
 tests/Umbricians.LiveView.Tests  xUnit tests, run with `dotnet test`
 ```
 
+Building the client needs Node 26.
+
 ```bash
 cd src/Umbricians.LiveView/Client && npm install && npm run build
 ```
