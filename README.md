@@ -43,8 +43,9 @@ online, or every member of the site, using whichever of the site's delivery meth
 
 **Relevant for** sets when the message stops being shown: **15 minutes**, **1 hour**, **Midnight tonight**,
 **24 hours**, **7 days**, or **Custom…**, which takes hours and minutes, from 1 minute up to 30 days. The line below
-it shows the exact time in your language and culture, for example "Stops being shown Sun, Nov 1, 12:00 AM Denver time (in 3 hr 48 min)". Midnight
-is in the [`MessageTimeZone`](#configuration) if the site sets one, otherwise in your own browser's time zone.
+it shows the exact time in your language and culture, for example "Stops being shown Sun, Nov 1, 12:00 AM Denver
+time (in 3 h 48 min)". Midnight is in the [`MessageTimeZone`](#configuration) if the site sets one, otherwise in your
+own browser's time zone.
 
 ![The Message members slide-out with Relevant for set to Midnight tonight and the time it stops being shown](docs/images/live-view-message-members.png)
 

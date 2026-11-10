@@ -3,7 +3,7 @@ import { UmbModalBaseElement } from "@umbraco-cms/backoffice/modal";
 import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
 import type { UUIBooleanInputEvent, UUIRadioGroupEvent, UUISelectEvent } from "@umbraco-cms/backoffice/external/uui";
 import { sendMemberMessage, type MemberAudience } from "../api/live-view.resource.js";
-import { describeError } from "../utils/format.js";
+import { describeError } from "../api/request-error.js";
 import { LONGEST_MINUTES, durationParts, nextMidnight, timeZoneCity } from "../utils/expiry.js";
 import type {
   UmbriciansSendMemberMessageModalData,
@@ -16,7 +16,12 @@ type Lifetime = number | "midnight" | "custom";
 
 type LifetimeChoice = { amount: number; unit: "minute" | "hour" | "day" } | "midnight" | "custom";
 
-const MINUTES_IN = { minute: 1, hour: 60, day: 60 * 24 };
+const DURATION_TERMS = {
+  day: "umbriciansLiveView_durationDays",
+  hour: "umbriciansLiveView_durationHours",
+  minute: "umbriciansLiveView_durationMinutes",
+} as const;
+const MINUTES_IN ={ minute: 1, hour: 60, day: 60 * 24 };
 
 const LIFETIMES: Array<LifetimeChoice> = [
   { amount: 15, unit: "minute" },
@@ -167,7 +172,7 @@ export class UmbriciansLiveViewSendMemberMessageModalElement extends UmbModalBas
     const zone = city ? this.localize.term("umbriciansLiveView_zoneTime", city) : this.localize.term("umbriciansLiveView_yourTime");
     const duration = this.localize.list(
       durationParts(expiresAt.getTime() - this._now).map((part) =>
-        this.localize.number(part.value, { style: "unit", unit: part.unit, unitDisplay: "short" }),
+        this.localize.term(DURATION_TERMS[part.unit], part.value),
       ),
       { type: "unit", style: "narrow" },
     );

@@ -32,7 +32,7 @@ import type { UmbriciansLiveViewUsersElement } from "./live-view-users.element.j
 import type { UmbriciansLiveViewMembersElement } from "./live-view-members.element.js";
 import "./live-view-users.element.js";
 import "./live-view-members.element.js";
-import { describeError } from "../utils/format.js";
+import { describeError } from "../api/request-error.js";
 
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend);
 

@@ -40,6 +40,12 @@ test("counted terms read right for one and for more", () => {
   assert.equal(term("sendToMembers")(2), "Send to 2 members");
   assert.equal(term("allOnlineUsersSelected")(1), "All 1 online user is selected.");
   assert.equal(term("allOnlineUsersSelected")(2), "All 2 online users are selected.");
+  assert.equal(term("secondsAgo")(42), "42s ago");
+  assert.equal(term("minutesAgo")(3), "3 min ago");
+  assert.equal(term("durationDays")(1), "1 day");
+  assert.equal(term("durationDays")(3), "3 days");
+  assert.equal(term("durationHours")(3), "3 h");
+  assert.equal(term("durationMinutes")(48), "48 min");
 });
 
 test("a sender's error is lowercased", () => {

@@ -2,7 +2,7 @@ import { css, html, customElement, state, repeat, nothing } from "@umbraco-cms/b
 import { UmbModalBaseElement } from "@umbraco-cms/backoffice/modal";
 import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
 import { sendMessage } from "../api/live-view.resource.js";
-import { describeError } from "../utils/format.js";
+import { describeError } from "../api/request-error.js";
 import { hasHeadline, newMessage, renderMessageFields, sendColor, trimmed } from "./message-fields.js";
 import type {
   UmbriciansSendMessageModalData,

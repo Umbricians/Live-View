@@ -63,6 +63,8 @@ export default {
     withinMinute: "Within 1 min",
     withinMinuteTitle: "Receives messages with its next heartbeat",
     justNow: "Just now",
+    secondsAgo: (seconds: number) => `${seconds}s ago`,
+    minutesAgo: (minutes: number) => `${minutes} min ago`,
     selectAllOnline: (count: number) => `Select all ${count} online`,
     allOnlineUsersSelected: (count: number) =>
       `All ${count} ${count === 1 ? "online user is" : "online users are"} selected.`,
@@ -122,6 +124,9 @@ export default {
     hoursUnit: "hours",
     minutesUnit: "minutes",
     lifetimeOutOfRange: (days: number) => `Enter between 1 minute and ${days} days.`,
+    durationDays: (days: number) => `${days} ${days === 1 ? "day" : "days"}`,
+    durationHours: (hours: number) => `${hours} h`,
+    durationMinutes: (minutes: number) => `${minutes} min`,
     stopsBeingShown: (at: string, zone: string, duration: string) =>
       `Stops being shown ${at} ${zone} (in ${duration}).`,
     zoneTime: (city: string) => `${city} time`,

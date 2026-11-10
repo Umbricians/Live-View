@@ -1,4 +1,5 @@
 import { umbHttpClient } from "@umbraco-cms/backoffice/http-client";
+import { LiveViewRequestError } from "./request-error.js";
 
 export interface LiveMetricReading {
   alias: string;
@@ -70,19 +71,6 @@ export interface BackofficeMessage {
   color: MessageColor;
   senderName: string | null;
   sentAt: string;
-}
-
-/** A failed Live View call: the HTTP status (undefined when there was no response) and the server's own explanation. */
-export class LiveViewRequestError extends Error {
-  status: number | undefined;
-  detail: string | undefined;
-
-  constructor(status: number | undefined, detail: string | undefined) {
-    // The message is for logs; the dashboard words the failure for the user from the status and detail.
-    super(detail || `Live View request failed (${status ?? "no response"})`);
-    this.status = status;
-    this.detail = detail;
-  }
 }
 
 const BASE_URL = "/umbraco/umbriciansliveview/api/v1/";
