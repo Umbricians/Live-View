@@ -6,8 +6,8 @@ namespace Umbricians.LiveView.Tests.HealthChecks;
 /// <summary>What the Member messaging check says about senders and the groups allowed to use them.</summary>
 public class MemberMessagingCheckTests
 {
-    private static readonly (string Alias, string Name) Editors = ("editors", "Editors");
-    private static readonly (string Alias, string Name) Administrators = ("admin", "Administrators");
+    private static readonly (Guid Key, string Name) Editors = (Guid.NewGuid(), "Editors");
+    private static readonly (Guid Key, string Name) Administrators = (Umbraco.Cms.Core.Constants.Security.AdminGroupKey, "Administrators");
 
     [Fact]
     public void Senders_and_a_group_with_the_permission_is_a_success()
@@ -43,6 +43,15 @@ public class MemberMessagingCheckTests
         Assert.Equal(StatusResultType.Info, MemberMessagingCheck.Status([], [Administrators]).ResultType);
     }
 
+    // Administrators is recognised by its key, which never changes, not by its name or alias, which can.
+    [Fact]
+    public void A_group_only_named_like_administrators_with_the_permission_and_no_senders_is_a_warning()
+    {
+        HealthCheckStatus status = MemberMessagingCheck.Status([], [(Guid.NewGuid(), "Administrators")]);
+
+        Assert.Equal(StatusResultType.Warning, status.ResultType);
+    }
+
     [Fact]
     public void No_senders_and_no_groups_is_info()
     {
@@ -52,7 +61,7 @@ public class MemberMessagingCheckTests
     [Fact]
     public void Group_names_are_html_encoded()
     {
-        HealthCheckStatus status = MemberMessagingCheck.Status([], [("x", "<b>Editors</b>")]);
+        HealthCheckStatus status = MemberMessagingCheck.Status([], [(Guid.NewGuid(), "<b>Editors</b>")]);
 
         Assert.Contains("&lt;b&gt;", status.Message);
         Assert.DoesNotContain("<b>Editors", status.Message);

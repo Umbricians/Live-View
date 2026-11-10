@@ -33,7 +33,7 @@ public class GrantLiveViewPermissionsToAdministrators : AsyncMigrationBase
 
     protected override async Task MigrateAsync()
     {
-        IUserGroup? administrators = await _userGroupService.GetAsync(Umbraco.Cms.Core.Constants.Security.AdminGroupAlias);
+        IUserGroup? administrators = await _userGroupService.GetAsync(Umbraco.Cms.Core.Constants.Security.AdminGroupKey);
         if (administrators is null)
         {
             return;
