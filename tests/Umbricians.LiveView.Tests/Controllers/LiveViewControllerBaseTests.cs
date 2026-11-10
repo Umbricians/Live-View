@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Umbraco.Cms.Api.Common.Attributes;
+using Umbraco.Cms.Api.Common.Filters;
 using Umbraco.Cms.Web.Common.Authorization;
 using Umbricians.LiveView.Controllers;
 
@@ -24,6 +25,15 @@ public class LiveViewControllerBaseTests
         var mapToApi = typeof(LiveViewControllerBase).GetCustomAttribute<MapToApiAttribute>();
 
         Assert.Equal(Constants.ApiName, mapToApi?.ApiName);
+    }
+
+    // Without it the endpoints fall back to MVC's JSON settings, which change the casing the client reads.
+    [Fact]
+    public void Uses_the_backoffice_json_settings_on_every_controller()
+    {
+        var jsonOptions = typeof(LiveViewControllerBase).GetCustomAttribute<JsonOptionsNameAttribute>();
+
+        Assert.Equal(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice, jsonOptions?.JsonOptionsName);
     }
 
     // The feature provider registers every controller in the assembly, so one that skipped the base would be
