@@ -3,6 +3,7 @@ using Umbraco.Cms.Core.DependencyInjection;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Metrics;
+using Umbricians.LiveView.Tracking;
 
 namespace Umbricians.LiveView.Extensions;
 
@@ -28,8 +29,20 @@ public static class LiveViewBuilderExtensions
     }
 
     /// <summary>
-    /// Declares a tracked channel. Give it <see cref="LiveViewChannelOptions.PathPrefixes"/> to have requests
-    /// counted automatically, or leave them empty and feed it from code with
+    /// Adds a session key source of the site's own, which channels use by listing its alias in
+    /// <see cref="LiveViewChannelOptions.SessionKeys"/>.
+    /// </summary>
+    public static IUmbracoBuilder AddLiveViewSessionKeySource<TSource>(this IUmbracoBuilder builder)
+        where TSource : class, ILiveSessionKeySource
+    {
+        builder.Services.AddSingleton<ILiveSessionKeySource, TSource>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Declares a tracked channel. Give it <see cref="LiveViewChannelOptions.PathPrefixes"/>,
+    /// <see cref="LiveViewChannelOptions.Hosts"/>, a <see cref="LiveViewChannelOptions.RequestPredicate"/>, or any mix
+    /// of them, to have requests counted automatically, or none of them and feed it from code with
     /// <see cref="Tracking.ILiveActivityTracker"/>. Values set in appsettings still take precedence. Use the alias
     /// of a built-in channel to restyle it: values set here take precedence over its built-in defaults.
     /// </summary>

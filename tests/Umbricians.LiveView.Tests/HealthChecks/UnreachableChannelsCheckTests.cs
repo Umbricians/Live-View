@@ -50,5 +50,5 @@ public class UnreachableChannelsCheckTests
     }
 
     private async Task<IEnumerable<HealthCheckStatus>> Run() =>
-        await new UnreachableChannelsCheck(new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options))).GetStatusAsync();
+        await new UnreachableChannelsCheck(new RequestClassifier(new StaticOptionsMonitor<LiveViewOptions>(_options), [], [])).GetStatusAsync();
 }

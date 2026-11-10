@@ -46,6 +46,6 @@ public class LiveActivityMiddlewareTests
         var memberPresence = new MemberPresence(members, options, _clock);
         var callers = new McpCallers(backoffice, memberPresence, users, members, _clock, NullLogger<McpCallers>.Instance);
         return new LiveActivityMiddleware(
-            new RequestClassifier(options), new LiveActivityTracker(options, _clock), backoffice, memberPresence, callers, _detector);
+            new RequestClassifier(options, [], []), new LiveActivityTracker(options, _clock), backoffice, memberPresence, callers, _detector);
     }
 }

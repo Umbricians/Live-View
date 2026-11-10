@@ -1,4 +1,7 @@
 using Microsoft.Extensions.Options;
+using Umbraco.Cms.Core.Events;
+using Umbraco.Cms.Core.Notifications;
+using Umbricians.LiveView.Metrics;
 using Umbricians.LiveView.Presence;
 
 namespace Umbricians.LiveView.Tests;
@@ -61,4 +64,90 @@ internal sealed class StaticOptionsMonitor<T>(T value) : IOptionsMonitor<T>
     public T Get(string? name) => value;
 
     public IDisposable? OnChange(Action<T, string?> listener) => null;
+}
+
+/// <summary>Records what is published, and lets a test act as a site's handler by running code on each notification.</summary>
+internal sealed class RecordingEventAggregator : IEventAggregator
+{
+    public List<INotification> Published { get; } = [];
+
+    /// <summary>Runs after each notification is recorded, like a handler: set <c>Cancel</c> on a cancelable one to stop it.</summary>
+    public Action<INotification>? OnPublish { get; set; }
+
+    public T Single<T>() where T : INotification => Assert.Single(Published.OfType<T>());
+
+    public Task PublishAsync<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
+        where TNotification : INotification
+    {
+        Publish(notification);
+        return Task.CompletedTask;
+    }
+
+    public Task PublishAsync<TNotification>(IEnumerable<TNotification> notifications, CancellationToken cancellationToken = default)
+        where TNotification : INotification
+    {
+        foreach (TNotification notification in notifications)
+        {
+            Publish(notification);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public void Publish<TNotification>(TNotification notification)
+        where TNotification : INotification
+    {
+        Published.Add(notification);
+        OnPublish?.Invoke(notification);
+    }
+
+    public void Publish<TNotification>(IEnumerable<TNotification> notifications)
+        where TNotification : INotification
+    {
+        foreach (TNotification notification in notifications)
+        {
+            Publish(notification);
+        }
+    }
+
+    void IEventAggregator.Publish<TNotification, TNotificationHandler>(IEnumerable<TNotification> notifications) =>
+        throw new NotSupportedException();
+
+    Task IEventAggregator.PublishAsync<TNotification, TNotificationHandler>(
+        IEnumerable<TNotification> notifications, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public bool PublishCancelable<TCancelableNotification>(TCancelableNotification notification)
+        where TCancelableNotification : ICancelableNotification
+    {
+        Publish(notification);
+        return notification.Cancel;
+    }
+
+    public async Task<bool> PublishCancelableAsync<TCancelableNotification>(TCancelableNotification notification)
+        where TCancelableNotification : ICancelableNotification
+    {
+        await PublishAsync(notification);
+        return notification.Cancel;
+    }
+}
+
+/// <summary>A metric provider with fixed values that counts how often it is asked for its value.</summary>
+internal sealed class StubMetricProvider(string alias, string name = "Stub", string? color = null, int sortOrder = 1000, double value = 0) : ILiveMetricProvider
+{
+    public int Calls { get; private set; }
+
+    public string Alias => alias;
+
+    public string Name => name;
+
+    public string? Color => color;
+
+    public int SortOrder => sortOrder;
+
+    public Task<double> GetValueAsync(CancellationToken cancellationToken)
+    {
+        Calls++;
+        return Task.FromResult(value);
+    }
 }

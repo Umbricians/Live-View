@@ -1,11 +1,19 @@
 using System.Collections.Concurrent;
+using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models.ServerEvents;
 using Umbraco.Cms.Core.ServerEvents;
 using Umbricians.LiveView.Presence;
 
 namespace Umbricians.LiveView.Messaging;
 
-internal sealed record BackofficeMessage(
+/// <summary>A message sent to backoffice users.</summary>
+/// <param name="Key">Unique id for the message.</param>
+/// <param name="Headline">The short title shown in bold.</param>
+/// <param name="Message">The text under the headline; may be empty.</param>
+/// <param name="Color">How it is styled: <c>default</c> (information), <c>positive</c> (good news), <c>warning</c> or <c>danger</c> (urgent).</param>
+/// <param name="SenderName">The name of the backoffice user who sent it, if known.</param>
+/// <param name="SentAt">When it was sent.</param>
+public sealed record BackofficeMessage(
     Guid Key,
     string Headline,
     string Message,
@@ -21,7 +29,7 @@ internal sealed record BackofficeMessageRequest(
     IReadOnlyCollection<Guid>? UserKeys,
     bool AllOnline);
 
-/// <summary>The backoffice user sending a message, who is never one of its recipients.</summary>
+/// <summary>The backoffice user sending a message.</summary>
 internal sealed record BackofficeSender(Guid? Key, string? Name);
 
 internal abstract record BackofficeSendResult
@@ -42,6 +50,7 @@ internal abstract record BackofficeSendResult
 /// It owns the send rules: the message content (see <see cref="MessageContent"/>), who "all online" means at the
 /// moment of sending, and that the sender is never a recipient. Selected users are sent to as chosen, even if they have since gone
 /// offline, and pick the message up if they come back within its lifetime.
+/// Sites can stop or follow a send with <see cref="BackofficeMessageSendingNotification"/> and <see cref="BackofficeMessageSentNotification"/>.
 /// Server events only carry a key, so the message is held in memory and each recipient's backoffice fetches it
 /// by key. Recipients whose realtime connection is down pick it up from their next heartbeat instead.
 /// Messages are discarded after <see cref="Lifetime"/>.
@@ -58,12 +67,14 @@ internal sealed class BackofficeMessenger
     private readonly ConcurrentDictionary<Guid, Entry> _messages = new();
     private readonly IServerEventRouter _router;
     private readonly BackofficePresence _presence;
+    private readonly IEventAggregator _eventAggregator;
     private readonly TimeProvider _timeProvider;
 
-    public BackofficeMessenger(IServerEventRouter router, BackofficePresence presence, TimeProvider timeProvider)
+    public BackofficeMessenger(IServerEventRouter router, BackofficePresence presence, IEventAggregator eventAggregator, TimeProvider timeProvider)
     {
         _router = router;
         _presence = presence;
+        _eventAggregator = eventAggregator;
         _timeProvider = timeProvider;
     }
 
@@ -96,10 +107,19 @@ internal sealed class BackofficeMessenger
 
         var sent = new BackofficeMessage(
             Guid.NewGuid(), content.Headline, content.Message, content.Color, sender.Name, _timeProvider.GetUtcNow());
+
+        var sending = new BackofficeMessageSendingNotification(sent, recipients, sender.Key, new EventMessages());
+        if (await _eventAggregator.PublishCancelableAsync(sending))
+        {
+            return new BackofficeSendResult.Rejected(CancelledSend.Reason(sending.Messages));
+        }
+
         _messages[sent.Key] = new Entry(sent, new ConcurrentDictionary<Guid, bool>(recipients.Select(r => KeyValuePair.Create(r, false))));
 
         var serverEvent = new ServerEvent { EventSource = EventSource, EventType = EventType, Key = sent.Key };
         await Task.WhenAll(recipients.Select(r => _router.NotifyUserAsync(serverEvent, r)));
+
+        await _eventAggregator.PublishAsync(new BackofficeMessageSentNotification(sent, recipients, sender.Key));
 
         return new BackofficeSendResult.Sent(sent, recipients.Length);
     }

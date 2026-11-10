@@ -6,7 +6,8 @@ public static class Constants
 
     /// <summary>
     /// User group permissions, granted in Users → User groups → Permissions → Live View. They are stored with the
-    /// group's other permissions; the backoffice registers matching <c>entityUserPermission</c> extensions.
+    /// group's other permissions; the backoffice registers matching <c>entityUserPermission</c> extensions. The dashboard's API checks these, not
+    /// section access.
     /// </summary>
     public static class Permissions
     {
