@@ -29,6 +29,9 @@ dotnet pack src/Umbricians.LiveView -c Release -o artifacts
 The solution includes the demo site, so `dotnet build` builds it too. Pack with a build, as above: the dashboard
 bundle must be built first, and packing stops with an error if it is missing.
 
+In Git Bash on Windows, the bundle path argument gets rewritten into a Windows path, so run the smoke test there as
+`MSYS_NO_PATHCONV=1 node build/smoke-test.mjs …`. PowerShell and CI are unaffected.
+
 ## Pull requests
 
 Fill in the template: a summary of what changed, the evidence it works, and the merge danger. Link the issue it
