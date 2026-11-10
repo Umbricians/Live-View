@@ -15,19 +15,22 @@ public class SessionKeySourceTests
 {
     private const string Channel = "test";
 
-    private readonly LiveViewOptions _options = new();
-    private readonly RequestClassifier _classifier;
+    private LiveViewOptions _options;
+    private RequestClassifier _classifier;
 
-    public SessionKeySourceTests() =>
+    [SetUp]
+    public void SetUp()
+    {
+        _options = new LiveViewOptions();
         _classifier = new RequestClassifier(
             new StaticOptionsMonitor<LiveViewOptions>(_options),
             [new TenantSource(), new TenantClaimSource(), new ClientImpostor()],
             []);
+    }
 
-    [Theory]
-    [InlineData("User")]
-    [InlineData("user")]
-    [InlineData("USER")]
+    [TestCase("User")]
+    [TestCase("user")]
+    [TestCase("USER")]
     public void The_user_source_matches_any_casing(string source)
     {
         Guid userKey = Guid.NewGuid();
@@ -37,76 +40,71 @@ public class SessionKeySourceTests
         // Authentication runs further down the pipeline, so the user is only known once it has.
         context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", userKey.ToString())], "Test"));
 
-        Assert.Empty(request.Sessions);
-        Assert.Equal([new ChannelSession(Channel, $"User:{userKey}")], request.SignedInSessions());
+        Assert.That(request.Sessions, Is.Empty);
+        Assert.That(request.SignedInSessions(), Is.EqualTo([new ChannelSession(Channel, $"User:{userKey}")]));
     }
 
-    [Theory]
-    [InlineData("Client")]
-    [InlineData("client")]
+    [TestCase("Client")]
+    [TestCase("client")]
     public void The_client_source_matches_any_casing(string source)
     {
         DefaultHttpContext context = Request(source);
         context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.7");
         context.Request.Headers.UserAgent = "Browser/1.0";
 
-        Assert.Equal(["Client:203.0.113.7|Browser/1.0"], SessionKeys(context));
+        Assert.That(SessionKeys(context), Is.EqualTo(["Client:203.0.113.7|Browser/1.0"]));
     }
 
-    [Theory]
-    [InlineData("Authorization")]
-    [InlineData("authorization")]
+    [TestCase("Authorization")]
+    [TestCase("authorization")]
     public void The_authorization_source_matches_any_casing(string source)
     {
         DefaultHttpContext context = Request(source);
         context.Request.Headers.Authorization = "Bearer abc";
 
-        Assert.Equal(["Authorization:Bearer abc"], SessionKeys(context));
+        Assert.That(SessionKeys(context), Is.EqualTo(["Authorization:Bearer abc"]));
     }
 
-    [Theory]
-    [InlineData("Header:Mcp-Session-Id")]
-    [InlineData("header:Mcp-Session-Id")]
+    [TestCase("Header:Mcp-Session-Id")]
+    [TestCase("header:Mcp-Session-Id")]
     public void The_header_prefix_matches_any_casing(string source)
     {
         DefaultHttpContext context = Request(source);
         context.Request.Headers["Mcp-Session-Id"] = "s1";
 
-        Assert.Equal(["Header:Mcp-Session-Id:s1"], SessionKeys(context));
+        Assert.That(SessionKeys(context), Is.EqualTo(["Header:Mcp-Session-Id:s1"]));
     }
 
-    [Theory]
-    [InlineData("Cookie:_ga")]
-    [InlineData("COOKIE:_ga")]
+    [TestCase("Cookie:_ga")]
+    [TestCase("COOKIE:_ga")]
     public void The_cookie_prefix_matches_any_casing(string source)
     {
         DefaultHttpContext context = Request(source);
         context.Request.Headers.Cookie = "_ga=g1";
 
-        Assert.Equal(["Cookie:_ga:g1"], SessionKeys(context));
+        Assert.That(SessionKeys(context), Is.EqualTo(["Cookie:_ga:g1"]));
     }
 
-    [Theory]
-    [InlineData("Tenant")]
-    [InlineData("tenant")]
+    [TestCase("Tenant")]
+    [TestCase("tenant")]
     public void A_registered_source_matches_any_casing(string source)
     {
         DefaultHttpContext context = Request(source);
         context.Items["tenant"] = "acme";
 
-        Assert.Equal(["Tenant:acme"], SessionKeys(context));
+        Assert.That(SessionKeys(context), Is.EqualTo(["Tenant:acme"]));
     }
 
-    [Fact]
+    [Test]
     public void A_later_source_is_used_when_a_registered_source_has_no_value()
     {
         DefaultHttpContext context = Request("Tenant", "Client");
         context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.7");
 
-        Assert.Equal(["Client:203.0.113.7|"], SessionKeys(context));
+        Assert.That(SessionKeys(context), Is.EqualTo(["Client:203.0.113.7|"]));
     }
 
-    [Fact]
+    [Test]
     public void A_registered_source_that_uses_the_signed_in_user_is_read_once_authentication_has_run()
     {
         DefaultHttpContext context = Request("TenantClaim");
@@ -114,18 +112,18 @@ public class SessionKeySourceTests
         RequestClassification request = _classifier.Classify(context.Request);
         context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("tenant", "acme")], "Test"));
 
-        Assert.Empty(request.Sessions);
-        Assert.Equal([new ChannelSession(Channel, "TenantClaim:acme")], request.SignedInSessions());
+        Assert.That(request.Sessions, Is.Empty);
+        Assert.That(request.SignedInSessions(), Is.EqualTo([new ChannelSession(Channel, "TenantClaim:acme")]));
     }
 
-    [Fact]
+    [Test]
     public void A_built_in_source_name_always_means_the_built_in_source()
     {
         DefaultHttpContext context = Request("Client");
         context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.7");
         context.Request.Headers.UserAgent = "Browser/1.0";
 
-        Assert.Equal(["Client:203.0.113.7|Browser/1.0"], SessionKeys(context));
+        Assert.That(SessionKeys(context), Is.EqualTo(["Client:203.0.113.7|Browser/1.0"]));
     }
 
     private IEnumerable<string> SessionKeys(DefaultHttpContext context) =>

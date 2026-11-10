@@ -28,7 +28,7 @@ namespace Umbricians.LiveView.Tests.Composers;
 /// <summary>What the composer registers, through <c>AddLiveView</c> on a plain service collection.</summary>
 public class ServiceCollectionExtensionsTests
 {
-    [Fact]
+    [Test]
     public void Binds_the_options_from_the_Live_View_section()
     {
         IConfigurationRoot config = new ConfigurationBuilder()
@@ -40,30 +40,30 @@ public class ServiceCollectionExtensionsTests
 
         LiveViewOptions options = services.BuildServiceProvider().GetRequiredService<IOptions<LiveViewOptions>>().Value;
 
-        Assert.Equal(120, options.ActivityWindowSeconds);
+        Assert.That(options.ActivityWindowSeconds, Is.EqualTo(120));
     }
 
-    [Fact]
+    [Test]
     public void Lets_MVC_find_the_internal_controllers()
     {
         ServiceCollection services = AddLiveView();
 
         var parts = (ApplicationPartManager)services.Last(d => d.ServiceType == typeof(ApplicationPartManager)).ImplementationInstance!;
 
-        Assert.Contains(parts.FeatureProviders, provider => provider is LiveViewControllerFeatureProvider);
+        Assert.That(parts.FeatureProviders, Has.Some.InstanceOf<LiveViewControllerFeatureProvider>());
     }
 
-    [Fact]
+    [Test]
     public void Adds_the_tracking_middleware_through_a_pipeline_filter_named_after_the_package()
     {
         ServiceCollection services = AddLiveView();
 
         UmbracoPipelineOptions options = services.BuildServiceProvider().GetRequiredService<IOptions<UmbracoPipelineOptions>>().Value;
 
-        Assert.Contains(options.PipelineFilters, filter => filter.Name == "Umbricians.LiveView");
+        Assert.That(options.PipelineFilters, Has.Some.Matches<IUmbracoPipelineFilter>(filter => filter.Name == "Umbricians.LiveView"));
     }
 
-    [Fact]
+    [Test]
     public void Uses_the_system_clock_unless_the_site_registers_its_own()
     {
         var siteClock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider();
@@ -71,21 +71,21 @@ public class ServiceCollectionExtensionsTests
         services.AddSingleton<TimeProvider>(siteClock);
         services.AddLiveView(new ConfigurationBuilder().Build());
 
-        Assert.Same(TimeProvider.System, Resolved(AddLiveView(), typeof(TimeProvider)).ImplementationInstance);
-        Assert.Same(siteClock, Resolved(services, typeof(TimeProvider)).ImplementationInstance);
+        Assert.That(Resolved(AddLiveView(), typeof(TimeProvider)).ImplementationInstance, Is.SameAs(TimeProvider.System));
+        Assert.That(Resolved(services, typeof(TimeProvider)).ImplementationInstance, Is.SameAs(siteClock));
     }
 
-    public static TheoryData<Type, Type, Type> Replaceable => new()
-    {
-        { typeof(ILiveViewActivityStore), typeof(InMemoryActivityStore), typeof(SharedActivityStore) },
-        { typeof(IBackofficeMessageStore), typeof(InMemoryBackofficeMessageStore), typeof(SharedBackofficeMessageStore) },
-        { typeof(IMemberAvatarProvider), typeof(PropertyMemberAvatarProvider), typeof(SiteAvatarProvider) },
-        { typeof(IMemberMessageInbox), typeof(MemberMessageInbox), typeof(SiteInbox) },
-        { typeof(ILiveActivityTracker), typeof(LiveActivityTracker), typeof(SiteTracker) },
-    };
+    public static IEnumerable<TestCaseData> Replaceable =>
+    [
+        new(typeof(ILiveViewActivityStore), typeof(InMemoryActivityStore), typeof(SharedActivityStore)),
+        new(typeof(IBackofficeMessageStore), typeof(InMemoryBackofficeMessageStore), typeof(SharedBackofficeMessageStore)),
+        new(typeof(IMemberAvatarProvider), typeof(PropertyMemberAvatarProvider), typeof(SiteAvatarProvider)),
+        new(typeof(IMemberMessageInbox), typeof(MemberMessageInbox), typeof(SiteInbox)),
+        new(typeof(ILiveActivityTracker), typeof(LiveActivityTracker), typeof(SiteTracker)),
+    ];
 
-    public static TheoryData<Type> Services => new()
-    {
+    public static IEnumerable<Type> Services =>
+    [
         typeof(RequestClassifier),
         typeof(UnforwardedProxyDetector),
         typeof(LiveActivityMiddleware),
@@ -103,34 +103,33 @@ public class ServiceCollectionExtensionsTests
         typeof(ILiveActivityTracker),
         typeof(IMemberAvatarProvider),
         typeof(IMemberMessageInbox),
-    };
+    ];
 
     // A registration that went missing, or a constructor that gained a dependency nothing registers, would
     // otherwise only fail on the site's first tracked request or dashboard load.
-    [Theory]
-    [MemberData(nameof(Services))]
+    [TestCaseSource(nameof(Services))]
     public void Every_service_resolves_with_only_Umbracos_services_added(Type service)
     {
         using ServiceProvider provider = WithUmbracoServices().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
-        Assert.NotNull(provider.GetService(service));
+        Assert.That(provider.GetService(service), Is.Not.Null);
     }
 
-    [Fact]
+    [Test]
     public void Live_View_presence_is_the_MCP_callers_service()
     {
         using ServiceProvider provider = WithUmbracoServices().BuildServiceProvider();
 
-        Assert.Same(provider.GetRequiredService<McpCallers>(), provider.GetRequiredService<ILiveViewPresence>());
+        Assert.That(provider.GetRequiredService<ILiveViewPresence>(), Is.SameAs(provider.GetRequiredService<McpCallers>()));
     }
 
-    [Fact]
+    [Test]
     public void The_directories_read_from_Umbraco()
     {
         using ServiceProvider provider = WithUmbracoServices().BuildServiceProvider();
 
-        Assert.IsType<UmbracoBackofficeUserDirectory>(provider.GetRequiredService<IBackofficeUserDirectory>());
-        Assert.IsType<UmbracoMemberDirectory>(provider.GetRequiredService<IMemberDirectory>());
+        Assert.That(provider.GetRequiredService<IBackofficeUserDirectory>(), Is.TypeOf<UmbracoBackofficeUserDirectory>());
+        Assert.That(provider.GetRequiredService<IMemberDirectory>(), Is.TypeOf<UmbracoMemberDirectory>());
     }
 
     /// <summary>
@@ -164,8 +163,7 @@ public class ServiceCollectionExtensionsTests
             throw new InvalidOperationException($"{targetMethod?.DeclaringType?.Name}.{targetMethod?.Name} was called on a stand-in.");
     }
 
-    [Theory]
-    [MemberData(nameof(Replaceable))]
+    [TestCaseSource(nameof(Replaceable))]
     public void A_sites_own_implementation_wins_whichever_order_it_is_registered_in(Type service, Type ours, Type sites)
     {
         var before = new ServiceCollection();
@@ -175,9 +173,9 @@ public class ServiceCollectionExtensionsTests
         ServiceCollection after = AddLiveView();
         after.AddSingleton(service, sites);
 
-        Assert.Equal(ours, Resolved(AddLiveView(), service).ImplementationType);
-        Assert.Equal(sites, Resolved(before, service).ImplementationType);
-        Assert.Equal(sites, Resolved(after, service).ImplementationType);
+        Assert.That(Resolved(AddLiveView(), service).ImplementationType, Is.EqualTo(ours));
+        Assert.That(Resolved(before, service).ImplementationType, Is.EqualTo(sites));
+        Assert.That(Resolved(after, service).ImplementationType, Is.EqualTo(sites));
     }
 
     private static ServiceCollection AddLiveView()

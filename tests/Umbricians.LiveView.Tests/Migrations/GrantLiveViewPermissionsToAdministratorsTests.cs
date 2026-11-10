@@ -9,18 +9,18 @@ namespace Umbricians.LiveView.Tests.Migrations;
 /// <summary>The install step that gives the Administrators group every Live View permission.</summary>
 public class GrantLiveViewPermissionsToAdministratorsTests
 {
-    [Fact]
+    [Test]
     public async Task Grants_every_permission_to_the_group_with_the_administrators_key()
     {
         var groups = new UserGroups(new UserGroupProxy.Group(Umbraco.Cms.Core.Constants.Security.AdminGroupKey, "renamed-admin"));
 
         await Run(groups);
 
-        Assert.Equal(Constants.Permissions.All.Order(), groups.Administrators!.Permissions.Order());
-        Assert.Equal(1, groups.Updates);
+        Assert.That(groups.Administrators!.Permissions.Order(), Is.EqualTo(Constants.Permissions.All.Order()));
+        Assert.That(groups.Updates, Is.EqualTo(1));
     }
 
-    [Fact]
+    [Test]
     public async Task Leaves_the_group_alone_when_it_already_has_every_permission()
     {
         var administrators = new UserGroupProxy.Group(Umbraco.Cms.Core.Constants.Security.AdminGroupKey, "admin");
@@ -29,27 +29,27 @@ public class GrantLiveViewPermissionsToAdministratorsTests
 
         await Run(groups);
 
-        Assert.Equal(0, groups.Updates);
+        Assert.That(groups.Updates, Is.Zero);
     }
 
-    [Fact]
+    [Test]
     public async Task Does_nothing_when_there_is_no_administrators_group()
     {
         var groups = new UserGroups(null);
 
         await Run(groups);
 
-        Assert.Equal(0, groups.Updates);
+        Assert.That(groups.Updates, Is.Zero);
     }
 
     private static Task Run(UserGroups groups) =>
-        new Step(StandIn.Create<IMigrationContext>(_ => null), StandIn.Create<IUserGroupService>(groups.Handle)).RunAsync();
+        new Step(StandIn.Create<IMigrationContext>(_ => null), StandIn.Create<IUserGroupService>(groups.Handle)).MigrateNowAsync();
 
     /// <summary>Calls the step's migration directly; Umbraco's runner needs a database.</summary>
     private sealed class Step(IMigrationContext context, IUserGroupService userGroups)
         : GrantLiveViewPermissionsToAdministrators(context, userGroups)
     {
-        public Task RunAsync() => MigrateAsync();
+        public Task MigrateNowAsync() => MigrateAsync();
     }
 
     /// <summary>A user group service that finds the Administrators group only by its key.</summary>

@@ -32,26 +32,26 @@ public class LiveViewAuthorizationTests
             .Where(method => method.GetCustomAttribute<HttpMethodAttribute>() is not null)
             .ToArray();
 
-    [Fact]
+    [Test]
     public void Every_controller_needs_a_signed_in_backoffice_user_and_no_section()
     {
         Type[] controllers = Controllers();
 
-        Assert.True(controllers.Length >= 3);
+        Assert.That(controllers.Length, Is.GreaterThanOrEqualTo(3));
         foreach (Type controller in controllers)
         {
             string[] policies = controller.GetCustomAttributes<AuthorizeAttribute>().Select(a => a.Policy!).ToArray();
-            Assert.Equal([AuthorizationPolicies.BackOfficeAccess], policies);
+            Assert.That(policies, Is.EqualTo([AuthorizationPolicies.BackOfficeAccess]));
 
             foreach (MethodInfo method in controller.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
             {
-                Assert.Empty(method.GetCustomAttributes<AuthorizeAttribute>());
-                Assert.Empty(method.GetCustomAttributes<AllowAnonymousAttribute>());
+                Assert.That(method.GetCustomAttributes<AuthorizeAttribute>(), Is.Empty);
+                Assert.That(method.GetCustomAttributes<AllowAnonymousAttribute>(), Is.Empty);
             }
         }
     }
 
-    [Fact]
+    [Test]
     public void Each_endpoint_needs_its_Live_View_permissions()
     {
         var actual = new List<string>();
@@ -85,18 +85,18 @@ public class LiveViewAuthorizationTests
             "GET messages/{key:guid}: ",
         ];
 
-        Assert.Equal(expected.Order(), actual.Order());
+        Assert.That(actual.Order(), Is.EqualTo(expected.Order()));
     }
 
-    [Fact]
+    [Test]
     public void A_user_with_the_permission_but_no_Settings_access_is_let_through()
     {
         IUser user = UserIn(Group("editors", ["content"], [Permissions.View]));
 
-        Assert.Null(Authorize(Permissions.View, user));
+        Assert.That(Authorize(Permissions.View, user), Is.Null);
     }
 
-    [Fact]
+    [Test]
     public void A_user_without_the_permission_is_refused()
     {
         IUser user = UserIn(Group("editors", ["content"], [Permissions.MessageUsers]));
@@ -104,15 +104,15 @@ public class LiveViewAuthorizationTests
         AssertForbidden(Authorize(Permissions.View, user));
     }
 
-    [Fact]
+    [Test]
     public void Any_one_of_the_users_groups_can_grant_the_permission()
     {
         IUser user = UserIn(Group("writers", ["content"], []), Group("watchers", ["content"], [Permissions.View]));
 
-        Assert.Null(Authorize(Permissions.View, user));
+        Assert.That(Authorize(Permissions.View, user), Is.Null);
     }
 
-    [Fact]
+    [Test]
     public void Settings_access_alone_is_not_enough()
     {
         IUser user = UserIn(Group("settings", ["settings"], []));
@@ -120,16 +120,18 @@ public class LiveViewAuthorizationTests
         AssertForbidden(Authorize(Permissions.View, user));
     }
 
-    [Fact]
+    [Test]
     public void No_signed_in_user_is_refused() =>
         AssertForbidden(Authorize(Permissions.View, null));
 
     private static void AssertForbidden(IActionResult? result)
     {
-        ObjectResult objectResult = Assert.IsType<ObjectResult>(result);
-        Assert.Equal(403, objectResult.StatusCode);
-        ProblemDetails problem = Assert.IsType<ProblemDetails>(objectResult.Value);
-        Assert.Equal(403, problem.Status);
+        Assert.That(result, Is.TypeOf<ObjectResult>());
+        var objectResult = (ObjectResult)result!;
+        Assert.That(objectResult.StatusCode, Is.EqualTo(403));
+        Assert.That(objectResult.Value, Is.TypeOf<ProblemDetails>());
+        var problem = (ProblemDetails)objectResult.Value!;
+        Assert.That(problem.Status, Is.EqualTo(403));
     }
 
     private static IActionResult? Authorize(string permission, IUser? user)

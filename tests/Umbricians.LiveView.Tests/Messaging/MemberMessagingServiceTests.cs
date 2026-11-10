@@ -14,47 +14,53 @@ namespace Umbricians.LiveView.Tests.Messaging;
 /// </summary>
 public class MemberMessagingServiceTests
 {
-    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
-    private readonly InMemoryMemberDirectory _directory = new();
-    private readonly RecordingSender _banner = new("banner");
-    private readonly RecordingEventAggregator _events = new();
-    private readonly Guid _meKey = Guid.NewGuid();
-    private readonly MemberPresence _presence;
-    private readonly MemberMessagingService _messaging;
+    private FakeTimeProvider _clock;
+    private InMemoryMemberDirectory _directory;
+    private RecordingSender _banner;
+    private RecordingEventAggregator _events;
+    private Guid _meKey;
+    private MemberPresence _presence;
+    private MemberMessagingService _messaging;
 
-    public MemberMessagingServiceTests()
+    [SetUp]
+    public void SetUp()
     {
+        _clock = new FakeTimeProvider(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
+        _directory = new InMemoryMemberDirectory();
+        _banner = new RecordingSender("banner");
+        _events = new RecordingEventAggregator();
+        _meKey = Guid.NewGuid();
         var options = new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions());
         _presence = new MemberPresence(new InMemoryActivityStore(options), _directory, options, _clock);
         _messaging = new MemberMessagingService([_banner], _presence, _events, _clock, NullLogger<MemberMessagingService>.Instance);
     }
 
-    [Fact]
+    [Test]
     public async Task A_message_is_trimmed_and_its_colour_becomes_its_type()
     {
         await SendAsync(Request(headline: "  Maintenance  ", message: " Tonight ", color: "danger"));
 
-        MemberMessage sent = Assert.Single(_banner.Sent);
-        Assert.Equal("Maintenance", sent.Headline);
-        Assert.Equal("Tonight", sent.Body);
-        Assert.Equal(MemberMessageType.Urgent, sent.Type);
+        Assert.That(_banner.Sent, Has.Exactly(1).Items);
+        MemberMessage sent = _banner.Sent.Single();
+        Assert.That(sent.Headline, Is.EqualTo("Maintenance"));
+        Assert.That(sent.Body, Is.EqualTo("Tonight"));
+        Assert.That(sent.Type, Is.EqualTo(MemberMessageType.Urgent));
     }
 
-    [Theory]
-    [InlineData(200, 2000, true)]
-    [InlineData(201, 0, false)]
-    [InlineData(0, 0, false)]
-    [InlineData(1, 2001, false)]
+    [TestCase(200, 2000, true)]
+    [TestCase(201, 0, false)]
+    [TestCase(0, 0, false)]
+    [TestCase(1, 2001, false)]
     public async Task Headlines_and_messages_must_fit_the_same_limits_as_backoffice_messages(
         int headlineLength, int messageLength, bool accepted)
     {
         MemberSendResult result = await SendAsync(
             Request(headline: new string('h', headlineLength), message: new string('m', messageLength)));
 
-        Assert.Equal(accepted, result is MemberSendResult.Sent);
+        Assert.That(result is MemberSendResult.Sent, Is.EqualTo(accepted));
     }
 
-    [Fact]
+    [Test]
     public async Task All_online_means_the_members_online_when_it_is_sent()
     {
         Guid ann = _directory.Add(1, "Ann");
@@ -62,54 +68,53 @@ public class MemberMessagingServiceTests
         await _presence.McpSeenAsync(ann);
         await _presence.McpSeenAsync(bob);
 
-        var sent = Assert.IsType<MemberSendResult.Sent>(await SendAsync(Request(audience: "allOnline")));
+        MemberSendResult.Sent sent = AssertSent(await SendAsync(Request(audience: "allOnline")));
 
-        Assert.Equal(2, sent.Result.Recipients);
-        Assert.Equal(new[] { ann, bob }.Order(), Assert.Single(_banner.Sent).MemberKeys.Order());
+        Assert.That(sent.Result.Recipients, Is.EqualTo(2));
+        Assert.That(_banner.Sent, Has.Exactly(1).Items);
+        Assert.That(_banner.Sent.Single().MemberKeys.Order(), Is.EqualTo(new[] { ann, bob }.Order()));
     }
 
-    [Theory]
-    [InlineData("everyone")]
-    [InlineData(null)]
+    [TestCase("everyone")]
+    [TestCase(null)]
     public async Task An_unknown_audience_is_rejected(string? audience)
     {
-        Assert.IsType<MemberSendResult.Rejected>(await SendAsync(Request(audience: audience)));
-        Assert.Empty(_banner.Sent);
+        Assert.That(await SendAsync(Request(audience: audience)), Is.TypeOf<MemberSendResult.Rejected>());
+        Assert.That(_banner.Sent, Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public async Task Selected_needs_someone_selected()
     {
-        Assert.IsType<MemberSendResult.Rejected>(await SendAsync(Request(audience: "selected", memberKeys: [])));
+        Assert.That(await SendAsync(Request(audience: "selected", memberKeys: [])), Is.TypeOf<MemberSendResult.Rejected>());
     }
 
-    [Fact]
+    [Test]
     public async Task A_member_selected_twice_is_sent_to_once()
     {
         Guid ann = Guid.NewGuid();
 
-        var sent = Assert.IsType<MemberSendResult.Sent>(
-            await SendAsync(Request(audience: "selected", memberKeys: [ann, ann])));
+        MemberSendResult.Sent sent = AssertSent(await SendAsync(Request(audience: "selected", memberKeys: [ann, ann])));
 
-        Assert.Equal(1, sent.Result.Recipients);
+        Assert.That(sent.Result.Recipients, Is.EqualTo(1));
     }
 
-    [Fact]
+    [Test]
     public async Task Only_delivery_methods_the_site_has_count()
     {
-        Assert.IsType<MemberSendResult.Rejected>(await SendAsync(Request(senders: ["email"])));
-        Assert.IsType<MemberSendResult.Sent>(await SendAsync(Request(senders: ["BANNER"])));
+        Assert.That(await SendAsync(Request(senders: ["email"])), Is.TypeOf<MemberSendResult.Rejected>());
+        Assert.That(await SendAsync(Request(senders: ["BANNER"])), Is.TypeOf<MemberSendResult.Sent>());
     }
 
-    [Fact]
+    [Test]
     public async Task A_message_must_stop_being_shown_in_the_future()
     {
-        Assert.IsType<MemberSendResult.Rejected>(await SendAsync(Request() with { ExpiresAt = _clock.GetUtcNow() }));
-        Assert.IsType<MemberSendResult.Rejected>(await SendAsync(Request() with { ExpiresAt = null }));
-        Assert.Empty(_banner.Sent);
+        Assert.That(await SendAsync(Request() with { ExpiresAt = _clock.GetUtcNow() }), Is.TypeOf<MemberSendResult.Rejected>());
+        Assert.That(await SendAsync(Request() with { ExpiresAt = null }), Is.TypeOf<MemberSendResult.Rejected>());
+        Assert.That(_banner.Sent, Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public async Task A_handler_can_stop_a_message_and_the_reason_comes_back()
     {
         _events.OnPublish = n =>
@@ -122,12 +127,12 @@ public class MemberMessagingServiceTests
 
         MemberSendResult result = await SendAsync(Request());
 
-        Assert.Equal("Not during the release freeze.", Assert.IsType<MemberSendResult.Rejected>(result).Reason);
-        Assert.Empty(_banner.Sent);
-        Assert.Empty(_events.Published.OfType<MemberMessageSentNotification>());
+        Assert.That(result, Is.TypeOf<MemberSendResult.Rejected>().With.Property(nameof(MemberSendResult.Rejected.Reason)).EqualTo("Not during the release freeze."));
+        Assert.That(_banner.Sent, Is.Empty);
+        Assert.That(_events.Published.OfType<MemberMessageSentNotification>(), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public async Task A_handler_that_cancels_without_a_reason_still_says_why()
     {
         _events.OnPublish = n =>
@@ -140,10 +145,10 @@ public class MemberMessagingServiceTests
 
         MemberSendResult result = await SendAsync(Request());
 
-        Assert.Equal(CancelledSend.DefaultReason, Assert.IsType<MemberSendResult.Rejected>(result).Reason);
+        Assert.That(result, Is.TypeOf<MemberSendResult.Rejected>().With.Property(nameof(MemberSendResult.Rejected.Reason)).EqualTo(CancelledSend.DefaultReason));
     }
 
-    [Fact]
+    [Test]
     public async Task Sending_comes_before_delivery_with_the_message_its_delivery_methods_and_its_sender()
     {
         Guid ann = _directory.Add(1, "Ann");
@@ -152,37 +157,45 @@ public class MemberMessagingServiceTests
         {
             if (n is MemberMessageSendingNotification)
             {
-                Assert.Empty(_banner.Sent);
+                Assert.That(_banner.Sent, Is.Empty);
             }
         };
 
         await SendAsync(Request(audience: "allOnline"));
 
         var sending = _events.Single<MemberMessageSendingNotification>();
-        Assert.Equal(["banner"], sending.DeliveryMethods);
-        Assert.Equal(_meKey, sending.SenderKey);
-        Assert.Equal([ann], sending.Message.MemberKeys);
+        Assert.That(sending.DeliveryMethods, Is.EqualTo(["banner"]));
+        Assert.That(sending.SenderKey, Is.EqualTo(_meKey));
+        Assert.That(sending.Message.MemberKeys, Is.EqualTo([ann]));
     }
 
-    [Fact]
+    [Test]
     public async Task Sent_comes_after_delivery_with_what_each_delivery_method_did()
     {
-        var sent = Assert.IsType<MemberSendResult.Sent>(await SendAsync(Request()));
+        MemberSendResult.Sent sent = AssertSent(await SendAsync(Request()));
 
-        var notification = Assert.IsType<MemberMessageSentNotification>(_events.Published.Last());
-        Assert.Equal(sent.Result.Key, notification.Message.Key);
-        Assert.Equal(_meKey, notification.SenderKey);
-        MemberMessageSenderResult result = Assert.Single(notification.Results);
-        Assert.Equal("banner", result.Alias);
-        Assert.Equal(sent.Result.Results[0].Delivered, result.Delivered);
+        Assert.That(_events.Published.Last(), Is.TypeOf<MemberMessageSentNotification>());
+        var notification = (MemberMessageSentNotification)_events.Published.Last();
+        Assert.That(notification.Message.Key, Is.EqualTo(sent.Result.Key));
+        Assert.That(notification.SenderKey, Is.EqualTo(_meKey));
+        Assert.That(notification.Results, Has.Exactly(1).Items);
+        MemberMessageSenderResult result = notification.Results.Single();
+        Assert.That(result.Alias, Is.EqualTo("banner"));
+        Assert.That(result.Delivered, Is.EqualTo(sent.Result.Results[0].Delivered));
     }
 
-    [Fact]
+    [Test]
     public async Task An_invalid_message_publishes_nothing()
     {
         await SendAsync(Request(headline: "   "));
 
-        Assert.Empty(_events.Published);
+        Assert.That(_events.Published, Is.Empty);
+    }
+
+    private static MemberSendResult.Sent AssertSent(MemberSendResult result)
+    {
+        Assert.That(result, Is.TypeOf<MemberSendResult.Sent>());
+        return (MemberSendResult.Sent)result;
     }
 
     private Task<MemberSendResult> SendAsync(MemberMessageRequest request) =>

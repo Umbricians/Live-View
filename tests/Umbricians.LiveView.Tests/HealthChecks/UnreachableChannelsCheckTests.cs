@@ -8,32 +8,41 @@ namespace Umbricians.LiveView.Tests.HealthChecks;
 /// <summary>What the Channel paths check reports for built-in and site channels.</summary>
 public class UnreachableChannelsCheckTests
 {
-    private readonly LiveViewOptions _options = new();
+    private LiveViewOptions _options;
 
-    public UnreachableChannelsCheckTests() => new LiveViewOptionsDefaults([]).PostConfigure(null, _options);
-
-    [Fact]
-    public async Task The_built_in_channels_are_all_reachable()
+    [SetUp]
+    public void SetUp()
     {
-        HealthCheckStatus status = Assert.Single(await Run());
-
-        Assert.Equal(StatusResultType.Success, status.ResultType);
+        _options = new LiveViewOptions();
+        new LiveViewOptionsDefaults([]).PostConfigure(null, _options);
     }
 
-    [Fact]
+    [Test]
+    public async Task The_built_in_channels_are_all_reachable()
+    {
+        IEnumerable<HealthCheckStatus> statuses = await Run();
+        Assert.That(statuses, Has.Exactly(1).Items);
+        HealthCheckStatus status = statuses.Single();
+
+        Assert.That(status.ResultType, Is.EqualTo(StatusResultType.Success));
+    }
+
+    [Test]
     public async Task A_channel_under_the_backoffice_paths_after_it_is_a_warning()
     {
         _options.Channels["shadow"] = new LiveViewChannelOptions { PathPrefixes = ["/umbraco/shadow"], SortOrder = 60 };
 
-        HealthCheckStatus status = Assert.Single(await Run());
+        IEnumerable<HealthCheckStatus> statuses = await Run();
+        Assert.That(statuses, Has.Exactly(1).Items);
+        HealthCheckStatus status = statuses.Single();
 
-        Assert.Equal(StatusResultType.Warning, status.ResultType);
-        Assert.Contains("shadow", status.Message);
-        Assert.Contains("backoffice", status.Message);
-        Assert.Contains("below 50", status.Message);
+        Assert.That(status.ResultType, Is.EqualTo(StatusResultType.Warning));
+        Assert.That(status.Message, Does.Contain("shadow"));
+        Assert.That(status.Message, Does.Contain("backoffice"));
+        Assert.That(status.Message, Does.Contain("below 50"));
     }
 
-    [Fact]
+    [Test]
     public async Task Channel_names_are_html_encoded()
     {
         _options.Channels["shadow"] = new LiveViewChannelOptions
@@ -43,10 +52,12 @@ public class UnreachableChannelsCheckTests
             SortOrder = 60,
         };
 
-        HealthCheckStatus status = Assert.Single(await Run());
+        IEnumerable<HealthCheckStatus> statuses = await Run();
+        Assert.That(statuses, Has.Exactly(1).Items);
+        HealthCheckStatus status = statuses.Single();
 
-        Assert.Contains("&lt;i&gt;Shadow", status.Message);
-        Assert.DoesNotContain("<i>", status.Message);
+        Assert.That(status.Message, Does.Contain("&lt;i&gt;Shadow"));
+        Assert.That(status.Message, Does.Not.Contain("<i>"));
     }
 
     private async Task<IEnumerable<HealthCheckStatus>> Run() =>

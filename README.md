@@ -724,7 +724,7 @@ Every endpoint needs a signed-in backoffice user. Apart from choosing user group
 ```
 src/Umbricians.LiveView          the package (Razor class library + Client/ TypeScript)
 demo/Umbricians.LiveView.Demo    Umbraco 17.8 site on SQLite that references the package
-tests/Umbricians.LiveView.Tests  xUnit tests, run with `dotnet test`
+tests/Umbricians.LiveView.Tests  NUnit tests, run with `dotnet test`
 ```
 
 ```bash
