@@ -34,7 +34,7 @@ public class LiveViewSwaggerDocumentTests
 
         new LiveViewSecurityRequirementsOperationFilter().Apply(operation, Context(nameof(DashboardController.Snapshot)));
 
-        Assert.That(operation.Security ?? [], Has.Some.Matches<OpenApiSecurityRequirement>(requirement => requirement.Keys.Any(scheme => scheme.Reference.Id == "Backoffice-User")));
+        Assert.That(operation.Security ?? [], Has.Some.Matches<OpenApiSecurityRequirement>(requirement => requirement?.Keys.Any(scheme => scheme.Reference.Id == "Backoffice-User") == true));
     }
 
     private static OperationFilterContext Context(string action)

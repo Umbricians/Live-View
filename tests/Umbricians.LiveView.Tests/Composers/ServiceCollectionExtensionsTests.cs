@@ -60,7 +60,7 @@ public class ServiceCollectionExtensionsTests
 
         UmbracoPipelineOptions options = services.BuildServiceProvider().GetRequiredService<IOptions<UmbracoPipelineOptions>>().Value;
 
-        Assert.That(options.PipelineFilters, Has.Some.Matches<IUmbracoPipelineFilter>(filter => filter.Name == "Umbricians.LiveView"));
+        Assert.That(options.PipelineFilters, Has.Some.Matches<IUmbracoPipelineFilter>(filter => filter?.Name == "Umbricians.LiveView"));
     }
 
     [Test]

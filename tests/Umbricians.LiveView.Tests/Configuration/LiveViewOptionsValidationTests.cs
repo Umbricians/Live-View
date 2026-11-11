@@ -57,7 +57,7 @@ public class LiveViewOptionsValidationTests
         LiveViewOptions options = Build(settings);
 
         Assert.That(options.Dashboard.DefaultRefreshInterval, Is.EqualTo(5));
-        Assert.That(_logger.Warnings, Has.Exactly(1).Matches<string>(w => w.Contains("Dashboard:DefaultRefreshInterval")));
+        Assert.That(_logger.Warnings, Has.Exactly(1).Matches(Does.Contain("Dashboard:DefaultRefreshInterval")));
     }
 
     [TestCase("BackofficeMessageLifetimeMinutes", "0")]
@@ -70,7 +70,7 @@ public class LiveViewOptionsValidationTests
         Assert.That(options.BackofficeMessageLifetimeMinutes, Is.EqualTo(15));
         Assert.That(options.Dashboard.MaxReadings, Is.EqualTo(120));
         Assert.That(options.Dashboard.RefreshIntervals, Is.EqualTo([2, 5, 10, 15, 30]));
-        Assert.That(_logger.Warnings, Has.Exactly(1).Matches<string>(w => w.Contains(setting.Replace(":0", ""))));
+        Assert.That(_logger.Warnings, Has.Exactly(1).Matches(Does.Contain(setting.Replace(":0", ""))));
         Assert.That(_logger.Warnings, Has.Exactly(1).Items);
     }
 
@@ -83,7 +83,7 @@ public class LiveViewOptionsValidationTests
 
         Assert.That(options.ActivityWindowSeconds, Is.EqualTo(300));
         Assert.That(options.MaxSessionsPerChannel, Is.EqualTo(100_000));
-        Assert.That(_logger.Warnings, Has.Exactly(1).Matches<string>(w => w.Contains(setting)));
+        Assert.That(_logger.Warnings, Has.Exactly(1).Matches(Does.Contain(setting)));
         Assert.That(_logger.Warnings, Has.Exactly(1).Items);
     }
 
@@ -93,7 +93,7 @@ public class LiveViewOptionsValidationTests
         LiveViewOptions options = Build(new() { ["Channels:api:ActivityWindowSeconds"] = "0" });
 
         Assert.That(options.Channels["api"].ActivityWindowSeconds, Is.EqualTo(60));
-        Assert.That(_logger.Warnings, Has.Exactly(1).Matches<string>(w => w.Contains("Channels:api:ActivityWindowSeconds")));
+        Assert.That(_logger.Warnings, Has.Exactly(1).Matches(Does.Contain("Channels:api:ActivityWindowSeconds")));
     }
 
     [Test]
@@ -104,7 +104,7 @@ public class LiveViewOptionsValidationTests
             builder => builder.AddLiveViewChannel("shop", "Shop", c => c.ActivityWindowSeconds = 120));
 
         Assert.That(options.Channels["shop"].ActivityWindowSeconds, Is.EqualTo(120));
-        Assert.That(_logger.Warnings, Has.Exactly(1).Matches<string>(w => w.Contains("Channels:shop:ActivityWindowSeconds") && w.Contains("120")));
+        Assert.That(_logger.Warnings, Has.Exactly(1).Matches(Does.Contain("Channels:shop:ActivityWindowSeconds").And.Contain("120")));
     }
 
     // Code takes precedence over the built-in defaults, so restyling the api channel in code moves its fallback too.
@@ -125,7 +125,7 @@ public class LiveViewOptionsValidationTests
             code: builder => builder.AddLiveViewChannel("api", "API calls", c => c.ActivityWindowSeconds = 0));
 
         Assert.That(options.Channels["api"].ActivityWindowSeconds, Is.EqualTo(60));
-        Assert.That(_logger.Warnings, Has.Exactly(1).Matches<string>(w => w.Contains("Channels:api:ActivityWindowSeconds")));
+        Assert.That(_logger.Warnings, Has.Exactly(1).Matches(Does.Contain("Channels:api:ActivityWindowSeconds")));
     }
 
     [Test]
@@ -140,7 +140,7 @@ public class LiveViewOptionsValidationTests
 
         Assert.That(options.Channels["shop"].ActivityWindowSeconds, Is.Null);
         Assert.That(ChannelSettings.Of(options, "shop").ActivityWindow, Is.EqualTo(TimeSpan.FromSeconds(120)));
-        Assert.That(_logger.Warnings, Has.Exactly(1).Matches<string>(w => w.Contains("Channels:shop:ActivityWindowSeconds") && w.Contains("120")));
+        Assert.That(_logger.Warnings, Has.Exactly(1).Matches(Does.Contain("Channels:shop:ActivityWindowSeconds").And.Contain("120")));
     }
 
     [Test]
@@ -149,7 +149,7 @@ public class LiveViewOptionsValidationTests
         LiveViewOptions options = Build(new() { ["MessageTimeZone"] = "Mars/Olympus_Mons" });
 
         Assert.That(options.MessageTimeZone, Is.Null);
-        Assert.That(_logger.Warnings, Has.Exactly(1).Matches<string>(w => w.Contains("MessageTimeZone")));
+        Assert.That(_logger.Warnings, Has.Exactly(1).Matches(Does.Contain("MessageTimeZone")));
     }
 
     [Test]
