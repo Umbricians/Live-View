@@ -29,7 +29,7 @@ public class LiveMetricsServiceTests
     {
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot();
 
-        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r.Alias == "queue"));
+        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r?.Alias == "queue"));
         LiveMetricReading queue = snapshot.Single(r => r.Alias == "queue");
         Assert.That(queue.Name, Is.EqualTo("Queue length"));
         Assert.That(queue.Color, Is.EqualTo("#8b5cf6"));
@@ -45,7 +45,7 @@ public class LiveMetricsServiceTests
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot();
 
         Assert.That(snapshot.Select(r => r.Alias).Where(a => a is "queue" or "web"), Is.EqualTo(["queue", "web"]));
-        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r.Alias == "queue"));
+        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r?.Alias == "queue"));
         LiveMetricReading queue = snapshot.Single(r => r.Alias == "queue");
         Assert.That(queue.Name, Is.EqualTo("Queued work"));
         Assert.That(queue.Color, Is.EqualTo("#000"));
@@ -61,7 +61,7 @@ public class LiveMetricsServiceTests
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot();
 
         Assert.That(snapshot.Select(r => r.Alias).Where(a => a is "queue" or "web"), Is.EqualTo(["web", "queue"]));
-        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r.Alias == "queue"));
+        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r?.Alias == "queue"));
         LiveMetricReading queue = snapshot.Single(r => r.Alias == "queue");
         Assert.That(queue.Name, Is.EqualTo("Queue length"));
         Assert.That(queue.Color, Is.EqualTo("#000"));
@@ -74,7 +74,7 @@ public class LiveMetricsServiceTests
 
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot();
 
-        Assert.That(snapshot, Has.None.Matches<LiveMetricReading>(r => r.Alias == "queue"));
+        Assert.That(snapshot, Has.None.Matches<LiveMetricReading>(r => r?.Alias == "queue"));
         Assert.That(_queue.Calls, Is.Zero);
     }
 
@@ -85,7 +85,7 @@ public class LiveMetricsServiceTests
 
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot();
 
-        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r.Alias.Equals("queue", StringComparison.OrdinalIgnoreCase)));
+        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => string.Equals(r?.Alias, "queue", StringComparison.OrdinalIgnoreCase)));
         LiveMetricReading line = snapshot.Single(r => r.Alias.Equals("queue", StringComparison.OrdinalIgnoreCase));
         Assert.That(line.Alias, Is.EqualTo("queue"));
         Assert.That(line.Name, Is.EqualTo("Queued work"));
@@ -124,7 +124,7 @@ public class LiveMetricsServiceTests
 
         IReadOnlyList<LiveMetricReading> snapshot = await Snapshot(provider);
 
-        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r.Alias == provider.Alias));
+        Assert.That(snapshot, Has.Exactly(1).Matches<LiveMetricReading>(r => r?.Alias == provider.Alias));
         LiveMetricReading line = snapshot.Single(r => r.Alias == provider.Alias);
         Assert.That(line.Value, Is.EqualTo(4));
         Assert.That(provider.Calls, Is.EqualTo(1));
