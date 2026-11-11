@@ -15,7 +15,7 @@ export default defineConfig({
     outDir: "../wwwroot/App_Plugins/UmbriciansLiveView", // your web component will be saved in this location
     emptyOutDir: true,
     sourcemap: true,
-    rollupOptions: {
+    rolldownOptions: {
       external: [/^@umbraco/],
     },
   },
