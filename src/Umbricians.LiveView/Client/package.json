@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "watch": "tsc && vite build --watch",
-    "build": "tsc && vite build && tsc -p tsconfig.types.json",
+    "build": "tsc && vite build && tsc -p tsconfig.types.json && node scripts/check-bundle.mjs",
     "test": "node --test --experimental-strip-types --import ./test/resolve-ts.mjs \"src/**/*.test.ts\""
   },
   "dependencies": {
@@ -14,7 +14,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@umbraco-cms/backoffice": "17.8.0",
-    "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.7"
   }
 }
