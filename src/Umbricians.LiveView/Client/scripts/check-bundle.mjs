@@ -3,7 +3,9 @@
 // - the bundle entry exports only `manifests`, because Umbraco registers every export of a bundle as an extension;
 // - every import is relative or from `@umbraco-cms/`, and no source map lists a source from node_modules/@umbraco*, so the
 //   backoffice's own modules are left external (once one is bundled, its own imports are relative);
-// - no decorated field is also a class field, which would shadow the accessor Lit's decorators put on the prototype.
+// - no decorated field is also a class field, which would shadow the accessor Lit's decorators put on the prototype,
+//   and no decorator is left as raw `@decorator` syntax (what Oxc emits when experimentalDecorators is off).
+// Each check fails rather than passing vacuously: on no decorated fields at all, and on no source maps at all.
 // Parses with Vite's own `parseAst` (Rolldown's Oxc parser, ESTree output), so it needs no dependency of its own.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -16,6 +18,7 @@ const bundleEntry = "umbricians-live-view.js";
 
 const problems = new Set();
 let decoratedFieldCount = 0;
+let sourceMapCount = 0;
 const files = readdirSync(outDir).filter((f) => f.endsWith(".js"));
 if (!files.includes(bundleEntry)) problems.add(`${bundleEntry} is missing from ${outDir}`);
 
@@ -26,6 +29,14 @@ for (const file of files) {
   checkSourceMap(file);
   checkDecoratedFields(file, ast);
 }
+
+// Some chunks legitimately have no map (Oxc's decorate helper, the re-export-only API entry), but with none at all the
+// bundling check above can't see anything, which means `sourcemap: true` was dropped from vite.config.ts.
+if (files.length && !sourceMapCount)
+  problems.add("no .map files were built, so bundled @umbraco code can't be detected; keep sourcemap: true in vite.config.ts");
+// The elements' @state()/@property()/@customElement() decorators always give some; none means none were recognised.
+if (files.length && !decoratedFieldCount)
+  problems.add("no decorated fields were found, so the class-field check checked nothing; are the decorators compiled (experimentalDecorators)?");
 
 if (problems.size) {
   console.error(`The built bundle in ${relative(process.cwd(), outDir)} has ${problems.size} problem(s):`);
@@ -55,6 +66,7 @@ function checkEntryExports(file, ast) {
 function checkSourceMap(file) {
   const map = join(outDir, `${file}.map`);
   if (!existsSync(map)) return;
+  sourceMapCount++;
   const bundled = JSON.parse(readFileSync(map, "utf8")).sources.filter((s) => /node_modules\/@umbraco/.test(s));
   if (bundled.length)
     problems.add(`${file} bundles ${bundled.length} module(s) from node_modules/@umbraco*, e.g. ${bundled[0].replace(/^.*node_modules\//, "")}`);
@@ -103,6 +115,9 @@ function checkDecoratedFields(file, ast) {
     else if (value.type === "ParenthesizedExpression") bind(name, value.expression);
   };
   walk(ast, (node) => {
+    // parseAst puts uncompiled `@decorator` syntax in a `decorators` array on classes, class members and parameters.
+    if (Array.isArray(node.decorators) && node.decorators.length)
+      problems.add(`${file}: ${describe(node)} still has a raw decorator, so it is never applied (is experimentalDecorators off?)`);
     if (node.type === "CallExpression") {
       const [decorators, target, key] = node.arguments;
       if (decorators?.type === "ArrayExpression" && isPrototypeOf(target) && key?.type === "Literal" && typeof key.value === "string")
@@ -144,6 +159,12 @@ function declaresInstanceField(cls, field) {
       });
   }
   return found;
+}
+
+function describe(node) {
+  if (node.key) return `${node.type === "MethodDefinition" ? "method" : "field"} "${nameOf(node.key)}"`;
+  if (node.type === "ClassExpression" || node.type === "ClassDeclaration") return node.id ? `class ${node.id.name}` : "a class";
+  return node.type;
 }
 
 function isPrototypeOf(node) {
