@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "watch": "tsc && vite build --watch",
-    "build": "tsc && vite build && tsc -p tsconfig.types.json",
+    "build": "tsc && vite build && tsc -p tsconfig.types.json && node scripts/check-bundle.mjs",
     "test": "node --test --experimental-strip-types --import ./test/resolve-ts.mjs \"src/**/*.test.ts\""
   },
   "dependencies": {
