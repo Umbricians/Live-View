@@ -310,8 +310,9 @@ internal sealed partial class RequestClassifier
             ? user.Identity.GetUserKey()?.ToString() ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value
             : null;
 
+    // The README lists these words under IgnoreBots; a test keeps the two the same.
     [GeneratedRegex(@"bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|pingdom|headless|lighthouse", RegexOptions.IgnoreCase)]
-    private static partial Regex BotUserAgent();
+    internal static partial Regex BotUserAgent();
 }
 
 /// <summary>A session a request counts in: the channel, and the session key it counts under.</summary>

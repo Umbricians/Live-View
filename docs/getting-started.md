@@ -178,7 +178,7 @@ endpoint, keyed on a client id header.
 |---|---|---|
 | `TrackingEnabled` | `true` | Turns request counting off entirely. Custom lines from code still show. |
 | `ActivityWindowSeconds` | `300` | How long a session counts as active after its last request. Each channel can override it. |
-| `IgnoreBots` | `true` | Ignores requests whose User-Agent looks like a crawler, including any `BotUserAgents`. |
+| `IgnoreBots` | `true` | Ignores requests whose User-Agent looks like a crawler, on every channel: search engine bots, link previews, uptime monitors, Lighthouse, headless browsers, and any `BotUserAgents`. |
 | `BotUserAgents` | none | Text matched anywhere in the User-Agent, ignoring case, to treat as a crawler on top of the built-in patterns. Surrounding spaces and blank entries are ignored. |
 | `MaxSessionsPerChannel` | `100000` | Upper bound on entries the in-memory store holds per line (sessions, or people online), to protect the server from floods. |
 | `MemberAvatarProperty` | none | The alias of a member image property (media picker, image cropper or upload) to show as each member's picture. For other sources, see [Member avatars](../README.md#5-member-avatars). |
@@ -329,6 +329,11 @@ whether one is registered.
 request must be a front-end page view by a logged-in member. MCP and API paths default to `/mcp`, `/umbraco/mcp`,
 `/api` and `/umbraco/delivery/api`. The **Request counting** and **Channel paths** health checks find counting turned
 off and a channel whose paths an earlier channel counts first.
+
+**Visits from an automated browser don't show.** Headless browsers, such as Playwright's or Puppeteer's in end-to-end
+tests, say `HeadlessChrome` (or similar) in their User-Agent, so `IgnoreBots` leaves them out like any crawler, even
+when they sign in as a member or backoffice user. Give the test browser a normal User-Agent, or turn `IgnoreBots` off
+on a test site.
 
 **A setting seems to be ignored.** A value that can't work, such as a window of `0` seconds or a time zone the server
 doesn't know, is replaced by its default rather than stopping the site. Look in the log for a warning naming the

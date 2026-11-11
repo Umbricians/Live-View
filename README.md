@@ -126,7 +126,8 @@ session key sources and keeps the session active for the length of the request a
 | `web` | everything else, except `/umbraco`, `/App_Plugins`, `/media` and static files | client IP + User-Agent | 300s |
 
 Because the session stays active for as long as a request is open, long-lived MCP streams (SSE) count while they
-are connected. Crawlers are ignored by default; add your own uptime monitors and the like with `BotUserAgents`.
+are connected. Crawlers are ignored by default, on every channel: search engine bots, link previews, uptime monitors,
+Lighthouse and headless browsers such as Playwright's or Puppeteer's. Add your own with `BotUserAgents`.
 
 A site with several domains can count each on its own line with `Hosts`, and sessions can be keyed on anything the
 site's code works out, such as a tenant or API client id: see [Extending](#1-a-channel-for-requests).
@@ -282,6 +283,11 @@ provider and are ignored.
 
 `BackofficeMessageLifetimeMinutes` (default 15) is how long a backoffice message waits for recipients whose realtime
 connection is down.
+
+`IgnoreBots` (default true) leaves out every request whose User-Agent contains `bot`, `crawl`, `spider`, `slurp`,
+`facebookexternalhit`, `preview`, `monitor`, `pingdom`, `headless` or `lighthouse`, ignoring case, whichever channel it
+would count in. A headless browser, such as one running end-to-end tests, therefore never shows on the dashboard, even
+signed in as a member or backoffice user; give it a normal browser User-Agent to see it there.
 
 `BotUserAgents` (default none) is text matched anywhere in the User-Agent, ignoring case, on top of the built-in
 crawler patterns, while `IgnoreBots` is on. Surrounding spaces and blank entries are ignored.

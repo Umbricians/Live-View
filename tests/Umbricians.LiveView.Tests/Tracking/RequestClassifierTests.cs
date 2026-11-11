@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Tracking;
@@ -81,8 +82,25 @@ public class RequestClassifierTests
         Assert.That(classifier.Classify(Get("/page").Request).Sessions.Select(s => s.Channel), Is.EqualTo(["web"]));
     }
 
+    // The README lists the built-in crawler patterns, so sites know a headless test browser won't show.
+    [Test]
+    public void The_readme_lists_exactly_the_built_in_crawler_patterns()
+    {
+        string readme = File.ReadAllText(RepositoryFile("README.md"));
+        Match paragraph = Regex.Match(readme, @"`IgnoreBots` \(default true\) leaves out every request whose User-Agent contains (?<list>.+?), ignoring case", RegexOptions.Singleline);
+        Assert.That(paragraph.Success, Is.True, "The README's IgnoreBots paragraph wasn't found.");
+
+        string[] documented = Regex.Matches(paragraph.Groups["list"].Value, "`([^`]+)`").Select(m => m.Groups[1].Value).Order().ToArray();
+        string[] builtIn = RequestClassifier.BotUserAgent().ToString().Split('|').Order().ToArray();
+
+        Assert.That(documented, Is.EqualTo(builtIn));
+    }
+
     [TestCase("Googlebot/2.1")]
     [TestCase("Mozilla/5.0 (compatible; UptimeMonitor)")]
+    // Playwright's and Puppeteer's headless Chromium, as end-to-end tests send it, and Lighthouse.
+    [TestCase("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/140.0.0.0 Safari/537.36")]
+    [TestCase("Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36 Chrome-Lighthouse")]
     public void Bots_are_not_counted(string userAgent)
     {
         Channel("web", prefixes: ["/"]);
@@ -428,6 +446,20 @@ public class RequestClassifierTests
 
     private IEnumerable<string> Channels(DefaultHttpContext context) =>
         _classifier.Classify(context.Request).Sessions.Select(s => s.Channel);
+
+    private static string RepositoryFile(string name)
+    {
+        for (DirectoryInfo? dir = new(TestContext.CurrentContext.TestDirectory); dir is not null; dir = dir.Parent)
+        {
+            string path = Path.Combine(dir.FullName, name);
+            if (File.Exists(path) && File.Exists(Path.Combine(dir.FullName, "Umbricians.LiveView.slnx")))
+            {
+                return path;
+            }
+        }
+
+        throw new FileNotFoundException($"{name} wasn't found above {TestContext.CurrentContext.TestDirectory}.");
+    }
 
     private static DefaultHttpContext WithUserAgent(string userAgent)
     {
