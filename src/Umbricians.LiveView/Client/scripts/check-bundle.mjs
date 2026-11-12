@@ -1,6 +1,7 @@
 // Checks the built bundle, which the client tests never see because they import the source.
 // Fails, naming each problem, unless:
 // - the bundle entry exports only `manifests`, because Umbraco registers every export of a bundle as an extension;
+// - the API entry the import map points `@umbricians/live-view` at is built and exports exactly src/index.ts's values;
 // - every import is relative or from `@umbraco-cms/`, and no source map lists a source from node_modules/@umbraco*, so the
 //   backoffice's own modules are left external (once one is bundled, its own imports are relative);
 // - no decorated field is also a class field, which would shadow the accessor Lit's decorators put on the prototype,
@@ -15,6 +16,7 @@ import { parseAst } from "vite";
 // Checks another folder of built files when given one, e.g. to try it on an older build.
 const outDir = process.argv[2] ?? fileURLToPath(new URL("../../wwwroot/App_Plugins/UmbriciansLiveView/", import.meta.url));
 const bundleEntry = "umbricians-live-view.js";
+const apiSpecifier = "@umbricians/live-view";
 
 const problems = new Set();
 let decoratedFieldCount = 0;
@@ -30,6 +32,8 @@ for (const file of files) {
   checkDecoratedFields(file, ast);
 }
 
+checkApiEntry();
+
 // Some chunks legitimately have no map (Oxc's decorate helper, the re-export-only API entry), but with none at all the
 // bundling check above can't see anything, which means `sourcemap: true` was dropped from vite.config.ts.
 if (files.length && !sourceMapCount)
@@ -44,23 +48,54 @@ if (problems.size) {
   process.exit(1);
 }
 console.log(
-  `Checked ${files.length} built files: the entry exports only manifests, every import is relative or @umbraco-cms/ and none is bundled, ` +
+  `Checked ${files.length} built files: the entry exports only manifests, ${apiSpecifier} exports what src/index.ts does, every import is relative or @umbraco-cms/ and none is bundled, ` +
     `and none of the ${decoratedFieldCount} decorated fields is a class field.`,
 );
 
 function checkEntryExports(file, ast) {
+  const names = exportedNames(ast);
+  if (names.length !== 1 || names[0] !== "manifests")
+    problems.add(`${file} exports ${names.join(", ") || "nothing"}; the bundle entry must export only manifests`);
+}
+
+// The API entry is what `@umbricians/live-view` resolves to, so it must be the file the import map names and export
+// exactly the values src/index.ts exports (its type-only exports leave nothing at runtime).
+function checkApiEntry() {
+  const packageJson = JSON.parse(readFileSync(fileURLToPath(new URL("../public/umbraco-package.json", import.meta.url)), "utf8"));
+  const mapped = packageJson.importmap?.imports?.[apiSpecifier];
+  if (!mapped) {
+    problems.add(`public/umbraco-package.json doesn't map ${apiSpecifier}`);
+    return;
+  }
+
+  const file = mapped.split("/").at(-1);
+  if (!existsSync(join(outDir, file))) {
+    problems.add(`${file}, which the import map points ${apiSpecifier} at, is missing from the build`);
+    return;
+  }
+
+  const source = parseAst(readFileSync(fileURLToPath(new URL("../src/index.ts", import.meta.url)), "utf8"), { lang: "ts" });
+  const expected = exportedNames(source).sort();
+  const built = exportedNames(parseAst(readFileSync(join(outDir, file), "utf8"))).sort();
+  if (!expected.length) problems.add(`src/index.ts exports no values, so ${apiSpecifier} would export nothing`);
+  if (built.join() !== expected.join())
+    problems.add(`${file} exports ${built.join(", ") || "nothing"}, but ${apiSpecifier} should export ${expected.join(", ")} (src/index.ts)`);
+}
+
+// Value exports only: `export type` and type-only specifiers have no runtime binding.
+function exportedNames(ast) {
   const names = [];
   for (const node of ast.body) {
     if (node.type === "ExportNamedDeclaration") {
-      for (const s of node.specifiers) names.push(nameOf(s.exported));
+      if (node.exportKind === "type") continue;
+      for (const s of node.specifiers) if (s.exportKind !== "type") names.push(nameOf(s.exported));
       const d = node.declaration;
       if (d?.type === "VariableDeclaration") for (const v of d.declarations) names.push(v.id.name ?? "(pattern)");
-      else if (d) names.push(d.id?.name ?? "(declaration)");
+      else if (d && !d.type.startsWith("TS")) names.push(d.id?.name ?? "(declaration)");
     } else if (node.type === "ExportDefaultDeclaration") names.push("default");
     else if (node.type === "ExportAllDeclaration") names.push(node.exported ? nameOf(node.exported) : `* from ${node.source.value}`);
   }
-  if (names.length !== 1 || names[0] !== "manifests")
-    problems.add(`${file} exports ${names.join(", ") || "nothing"}; the bundle entry must export only manifests`);
+  return names;
 }
 
 function checkSourceMap(file) {
