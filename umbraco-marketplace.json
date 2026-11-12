@@ -1,7 +1,7 @@
 {
   "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json",
   "Title": "Umbricians Live View",
-  "Description": "A real-time Live View dashboard for the Umbraco Settings section, charting active web, MCP and API sessions plus any custom metric you plug in.",
+  "Description": "A real-time Live View dashboard for the Umbraco Settings section that charts active web, member, backoffice, MCP and API sessions and custom metrics, lists who is online, and messages backoffice users and members.",
   "Category": "Analytics & Insights",
   "Tags": ["dashboard", "analytics", "realtime"],
   "PackageType": "Package",
