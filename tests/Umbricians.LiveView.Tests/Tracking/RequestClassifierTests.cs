@@ -96,6 +96,20 @@ public class RequestClassifierTests
         Assert.That(documented, Is.EqualTo(builtIn));
     }
 
+    // The README lists the default static file extensions word for word, so it has to move with the code.
+    [Test]
+    public void The_readme_lists_exactly_the_default_static_file_extensions()
+    {
+        string readme = File.ReadAllText(RepositoryFile("README.md"));
+        Match paragraph = Regex.Match(readme, @"`StaticFileExtensions` lists .+?\(default\s+(?<list>.+?)\)\.", RegexOptions.Singleline);
+        Assert.That(paragraph.Success, Is.True, "The README's StaticFileExtensions paragraph wasn't found.");
+
+        string[] documented = Regex.Matches(paragraph.Groups["list"].Value, "`([^`]+)`").Select(m => m.Groups[1].Value).Order().ToArray();
+        string[] defaults = new LiveViewOptions().StaticFileExtensions.Order().ToArray();
+
+        Assert.That(documented, Is.EqualTo(defaults));
+    }
+
     [TestCase("Googlebot/2.1")]
     [TestCase("Mozilla/5.0 (compatible; UptimeMonitor)")]
     // Playwright's and Puppeteer's headless Chromium, as end-to-end tests send it, and Lighthouse.

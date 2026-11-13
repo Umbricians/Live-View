@@ -269,7 +269,8 @@ names, ignoring port: `brand-a.com`, or `*.brand-a.com` for its subdomains. With
 channel counts every path on those hosts. When `Hosts` is empty, any host matches. Set
 `"Exclusive": false` on a channel whose requests should also count in later channels. The built-in `members`
 channel always counts the signed-in member, so `SessionKeys` doesn't apply to it; its other settings do. It isn't
-exclusive by default, so members also count as web visitors; setting `"Exclusive": true` on it stops that. The
+exclusive by default, so members also count as web visitors. Leave it that way: it watches every front-end path
+whether or not anyone is signed in, so `"Exclusive": true` on it would stop `web` counting anyone at all. The
 built-in `backoffice` channel always counts the signed-in backoffice user, so `SessionKeys` doesn't apply to it.
 
 The same settings restyle a line from a [custom metric provider](#3-a-custom-metric-provider), under the provider's

@@ -197,7 +197,8 @@ source your code registers),
 alias as `Name`, a colour from the dashboard palette, `SortOrder` 0 (so it is offered requests before every built-in
 channel), `SessionKeys` `Client`, the site-wide `ActivityWindowSeconds`, `IgnoreStaticFiles` false and `Exclusive`
 true, unless you set them. `SessionKeys` doesn't apply to `members`, which always counts the signed-in member. It isn't
-exclusive by default, so members also count as web visitors; setting `Exclusive` to `true` on it stops that.
+exclusive by default, so members also count as web visitors. Leave it that way: it watches every front-end path
+whether or not anyone is signed in, so making it exclusive would stop `web` counting anyone at all.
 `SessionKeys` doesn't apply to `backoffice`, which always counts the signed-in backoffice user. See
 [How sessions are counted](../README.md#how-sessions-are-counted) for the details. A line from a metric provider
 (step 5) takes `Enabled`, `Name`, `Color` and `SortOrder` from the settings under its alias too; the other settings
