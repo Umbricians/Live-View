@@ -6,6 +6,19 @@ using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Presence;
 
+/// <summary>A backoffice user who is online, as one row of the backoffice users table.</summary>
+/// <param name="Key">The user's key.</param>
+/// <param name="Name">The user's name, or their username when they have no name.</param>
+/// <param name="Email">The user's email address, or null when they have none.</param>
+/// <param name="AvatarUrls">The user's avatar in Umbraco's sizes, smallest first, or none when they have not set one.</param>
+/// <param name="LastSeen">When the user was last seen, in the backoffice or on MCP, whichever is later.</param>
+/// <param name="OpenTabs">
+/// How many backoffice tabs the user has open, counted from their realtime connections, or from the tabs' heartbeats
+/// when realtime is unavailable. Zero when they are only on MCP.
+/// </param>
+/// <param name="IsConnected">
+/// Whether the user has a realtime connection from an open backoffice tab, so a message reaches them straight away.
+/// </param>
 /// <param name="BackofficeLastSeen">When the user was last seen in the backoffice, or null when they are only on MCP.</param>
 /// <param name="McpLastSeen">When the user last used MCP, or null when they are not on it.</param>
 internal sealed record OnlineBackofficeUser(

@@ -7,6 +7,13 @@ using Umbricians.LiveView.Storage;
 
 namespace Umbricians.LiveView.Presence;
 
+/// <summary>A website member who is online, as one row of the members table.</summary>
+/// <param name="Key">The member's key.</param>
+/// <param name="Name">The member's name, or their username when they have no name.</param>
+/// <param name="Email">The member's email address, or null when they have none.</param>
+/// <param name="MemberType">The name of the member's type, or its alias when it has no name.</param>
+/// <param name="AvatarUrl">The member's picture from the site's <see cref="IMemberAvatarProvider"/>, or null for none.</param>
+/// <param name="LastSeen">When the member was last seen, on the website or on MCP, whichever is later.</param>
 /// <param name="WebsiteLastSeen">When the member was last seen on the website, or null when they are not on it.</param>
 /// <param name="McpLastSeen">When the member last used MCP, or null when they are not on it.</param>
 internal sealed record OnlineMember(
