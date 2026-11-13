@@ -61,8 +61,14 @@ public class LiveViewOptions
     public Dictionary<string, LiveViewChannelOptions> Channels { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
+/// <summary>
+/// Settings for one channel, under <c>Umbricians:LiveView:Channels:{alias}</c> or declared in code with
+/// <see cref="Extensions.LiveViewBuilderExtensions.AddLiveViewChannel"/>. Anything left empty falls back to the
+/// built-in channel's value, then to the package defaults.
+/// </summary>
 public class LiveViewChannelOptions
 {
+    /// <summary>Turns the channel off: its requests are not counted and it is not shown on the dashboard.</summary>
     public bool Enabled { get; set; } = true;
 
     /// <summary>Label shown on the dashboard.</summary>
@@ -108,8 +114,16 @@ public class LiveViewChannelOptions
     /// </summary>
     public string[]? SessionKeys { get; set; }
 
+    /// <summary>
+    /// How long a session counts as active after its last request, in seconds. When empty,
+    /// <see cref="LiveViewOptions.ActivityWindowSeconds"/>.
+    /// </summary>
     public int? ActivityWindowSeconds { get; set; }
 
+    /// <summary>
+    /// When true, requests for files with one of the <see cref="LiveViewOptions.StaticFileExtensions"/> are not
+    /// counted, so a page's images and scripts don't keep its visitor's session active on their own.
+    /// </summary>
     public bool? IgnoreStaticFiles { get; set; }
 
     /// <summary>
@@ -119,6 +133,9 @@ public class LiveViewChannelOptions
     public bool? Exclusive { get; set; }
 }
 
+/// <summary>
+/// Options for the Live View dashboard, under <c>Umbricians:LiveView:Dashboard</c>.
+/// </summary>
 public class LiveViewDashboardOptions
 {
     internal static readonly int[] DefaultRefreshIntervals = [2, 5, 10, 15, 30];

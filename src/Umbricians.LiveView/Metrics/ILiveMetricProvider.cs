@@ -27,5 +27,6 @@ public interface ILiveMetricProvider
     /// <summary>Lines are listed in ascending order.</summary>
     int SortOrder => 1000;
 
+    /// <summary>Works out the line's current value, plotted as the latest reading.</summary>
     Task<double> GetValueAsync(CancellationToken cancellationToken);
 }

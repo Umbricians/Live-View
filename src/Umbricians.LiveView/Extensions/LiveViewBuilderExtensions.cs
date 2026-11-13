@@ -7,6 +7,10 @@ using Umbricians.LiveView.Tracking;
 
 namespace Umbricians.LiveView.Extensions;
 
+/// <summary>
+/// Extends Live View from a site's composer or <c>Program.cs</c>: custom lines, member message senders, session key
+/// sources and channels.
+/// </summary>
 public static class LiveViewBuilderExtensions
 {
     /// <summary>Adds a custom line to the Live View dashboard.</summary>

@@ -17,7 +17,7 @@ This guide takes you from installing Umbricians Live View to a dashboard showing
 
 ## Requirements
 
-- Umbraco 17.8 or later (including Umbraco 18).
+- Umbraco 17, from 17.8.
 - .NET 10.
 
 ## 1. Install the package
@@ -176,10 +176,11 @@ endpoint, keyed on a client id header.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `TrackingEnabled` | `true` | Turns request counting off entirely. Custom lines from code still show. |
+| `TrackingEnabled` | `true` | Turns request counting off. Backoffice users still show, through their tabs' heartbeat, and channels fed from code and custom metric providers still count. |
 | `ActivityWindowSeconds` | `300` | How long a session counts as active after its last request. Each channel can override it. |
-| `IgnoreBots` | `true` | Ignores requests whose User-Agent looks like a crawler, including any `BotUserAgents`. |
+| `IgnoreBots` | `true` | Ignores requests whose User-Agent looks like a crawler, whichever channel they would count in: search engine bots, link previews, uptime monitors, Lighthouse, headless browsers, and any `BotUserAgents`. Backoffice users still show, through their tabs' heartbeat. |
 | `BotUserAgents` | none | Text matched anywhere in the User-Agent, ignoring case, to treat as a crawler on top of the built-in patterns. Surrounding spaces and blank entries are ignored. |
+| `StaticFileExtensions` | `.css`, `.js`, images, fonts, `.pdf` and so on | The file extensions a channel with `IgnoreStaticFiles` doesn't count. Extensions you list are added to the built-in ones; the [README](../README.md#configuration) lists them. |
 | `MaxSessionsPerChannel` | `100000` | Upper bound on entries the in-memory store holds per line (sessions, or people online), to protect the server from floods. |
 | `MemberAvatarProperty` | none | The alias of a member image property (media picker, image cropper or upload) to show as each member's picture. For other sources, see [Member avatars](../README.md#5-member-avatars). |
 | `MessageTimeZone` | the sender's own | The time zone "midnight tonight" means when messaging members, as an IANA id such as `America/Denver` (a Windows id works too). |
@@ -192,9 +193,13 @@ Each channel under `Channels` can set `Enabled`, `Name`, `Color`, `SortOrder`, `
 `ExcludePathPrefixes`, `Hosts`, `SessionKeys` (`Header:<name>`, `Cookie:<name>`, `Authorization`, `User`, `Client`, or a
 source your code registers),
 `ActivityWindowSeconds`, `IgnoreStaticFiles` and `Exclusive`. The built-in channels (`web`, `members`, `backoffice`,
-`mcp`, `api`) keep their defaults for anything you leave out. `SessionKeys` and `Exclusive` don't apply to
-`members`, which always counts the signed-in member and also counts them as a web visitor. `SessionKeys` doesn't
-apply to `backoffice`, which always counts the signed-in backoffice user. See
+`mcp`, `api`) keep their defaults for anything you leave out. A channel of your own, like `headless` above, gets its
+alias as `Name`, a colour from the dashboard palette, `SortOrder` 0 (so it is offered requests before every built-in
+channel), `SessionKeys` `Client`, the site-wide `ActivityWindowSeconds`, `IgnoreStaticFiles` false and `Exclusive`
+true, unless you set them. `SessionKeys` doesn't apply to `members`, which always counts the signed-in member. It isn't
+exclusive by default, so members also count as web visitors. Leave it that way: it watches every front-end path
+whether or not anyone is signed in, so making it exclusive would stop `web` counting anyone at all.
+`SessionKeys` doesn't apply to `backoffice`, which always counts the signed-in backoffice user. See
 [How sessions are counted](../README.md#how-sessions-are-counted) for the details. A line from a metric provider
 (step 5) takes `Enabled`, `Name`, `Color` and `SortOrder` from the settings under its alias too; the other settings
 don't apply to it.
@@ -229,7 +234,7 @@ public class PendingOrdersMetric(IOrderService orders) : ILiveMetricProvider
         await orders.CountPendingAsync(cancellationToken);
 }
 
-public class LiveViewComposer : IComposer
+public class MySiteLiveViewComposer : IComposer
 {
     public void Compose(IUmbracoBuilder builder) => builder.AddLiveViewMetric<PendingOrdersMetric>();
 }
@@ -265,16 +270,24 @@ yours in a composer with `builder.Services.AddSingleton<...>()`; it wins whichev
 - `IBackofficeMessageStore` holds sent backoffice messages until their recipients' backoffice fetches them.
 
 The stores only hold data. Live View decides the activity windows, the tab timeout, who counts as online and how long
-a message lives, and passes the cutoff times in. What a store must do:
+a message lives, and passes the cutoff times in. What the activity store must do:
 
 - Set names and keys are opaque strings; store them as given.
 - An entry is active while its open count is above 0 or its last-seen time is at or after the `since` that
   `GetActiveAsync` and `CountActiveAsync` are given.
-- `ClosedAsync` on an entry that is not there does nothing.
+- `ClosedAsync` and `RemoveAsync` on an entry that is not there do nothing.
 - `CountActiveAsync` takes many sets at once (the backoffice reads every online user's tabs in one call), so answer it in one round trip.
 - A store with a cap on a set returns false from `SeenAsync` or `OpenedAsync` when it drops a new entry because the set is full. A store without a cap always returns true.
 - Keep the calls quick: the activity store is called on every tracked request, and its methods are async and are awaited each time.
 - An open count left behind by a server that stops is never closed, so a shared store should expire entries.
+
+What the message store must do:
+
+- `AddAsync` keeps the message for its recipients, delivered to none of them yet, until `expiresAt`; it may discard
+  the message after that.
+- `ReceiveAsync` returns the message only to one of its recipients, and marks it delivered to them. For anyone else
+  it returns null.
+- `GetUndeliveredAsync` returns the keys of the unexpired messages not yet delivered to the user.
 
 Even with shared stores, these stay per server, and need no action:
 
@@ -329,6 +342,15 @@ whether one is registered.
 request must be a front-end page view by a logged-in member. MCP and API paths default to `/mcp`, `/umbraco/mcp`,
 `/api` and `/umbraco/delivery/api`. The **Request counting** and **Channel paths** health checks find counting turned
 off and a channel whose paths an earlier channel counts first.
+
+**Visits from an automated browser don't show.** Headless browsers, such as Playwright's or Puppeteer's in end-to-end
+tests, say `HeadlessChrome` (or similar) in their User-Agent, so `IgnoreBots` leaves them out like any crawler, even
+when they sign in as a member. Give the test browser a normal User-Agent, or turn `IgnoreBots` off on a test site. A
+headless browser signed into the backoffice does show, since backoffice tabs report in through their own heartbeat.
+
+**A setting seems to be ignored.** A value that can't work, such as a window of `0` seconds or a time zone the server
+doesn't know, is replaced by its default rather than stopping the site. Look in the log for a warning naming the
+setting; the [README](../README.md#configuration) lists them.
 
 **Web sessions look too low.** See forwarding the client IP in [Before you go live](#before-you-go-live); the
 **Visitor IP addresses behind a proxy** health check looks for it.

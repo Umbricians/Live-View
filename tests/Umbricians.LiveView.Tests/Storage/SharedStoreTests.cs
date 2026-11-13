@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -19,13 +20,23 @@ namespace Umbricians.LiveView.Tests.Storage;
 /// </summary>
 public class SharedStoreTests
 {
-    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
-    private readonly StaticOptionsMonitor<LiveViewOptions> _options = new(new LiveViewOptions());
-    private readonly SharedActivityStore _activity = new();
-    private readonly InMemoryBackofficeUserDirectory _users = new();
-    private readonly InMemoryMemberDirectory _members = new();
+    private FakeTimeProvider _clock;
+    private StaticOptionsMonitor<LiveViewOptions> _options;
+    private SharedActivityStore _activity;
+    private InMemoryBackofficeUserDirectory _users;
+    private InMemoryMemberDirectory _members;
 
-    [Fact]
+    [SetUp]
+    public void SetUp()
+    {
+        _clock = new FakeTimeProvider(new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero));
+        _options = new StaticOptionsMonitor<LiveViewOptions>(new LiveViewOptions());
+        _activity = new SharedActivityStore();
+        _users = new InMemoryBackofficeUserDirectory();
+        _members = new InMemoryMemberDirectory();
+    }
+
+    [Test]
     public async Task A_session_tracked_on_one_server_is_counted_on_another()
     {
         var a = new LiveActivityTracker(_activity, _options, _clock);
@@ -33,22 +44,22 @@ public class SharedStoreTests
 
         await a.TouchAsync("web", "session-1");
 
-        Assert.Equal(1, await b.CountActiveAsync("web"));
+        Assert.That(await b.CountActiveAsync("web"), Is.EqualTo(1));
 
         await a.EndAsync("web", "session-1");
-        Assert.Equal(0, await b.CountActiveAsync("web"));
+        Assert.That(await b.CountActiveAsync("web"), Is.Zero);
 
         IAsyncDisposable open = await a.BeginActivityAsync("web", "session-2");
         _clock.Advance(TimeSpan.FromMinutes(30));
-        Assert.Equal(1, await b.CountActiveAsync("web"));
+        Assert.That(await b.CountActiveAsync("web"), Is.EqualTo(1));
 
         await open.DisposeAsync();
-        Assert.Equal(1, await b.CountActiveAsync("web"));
+        Assert.That(await b.CountActiveAsync("web"), Is.EqualTo(1));
         _clock.Advance(TimeSpan.FromMinutes(30));
-        Assert.Equal(0, await b.CountActiveAsync("web"));
+        Assert.That(await b.CountActiveAsync("web"), Is.Zero);
     }
 
-    [Fact]
+    [Test]
     public async Task The_tabs_of_every_online_user_are_counted_in_one_store_call()
     {
         BackofficePresence presence = NewBackoffice();
@@ -60,13 +71,13 @@ public class SharedStoreTests
         _activity.GetActiveCalls.Clear();
         _activity.CountActiveCalls.Clear();
 
-        Assert.Equal(3, await presence.CountOnlineAsync());
+        Assert.That(await presence.CountOnlineAsync(), Is.EqualTo(3));
 
-        Assert.Equal(1, _activity.GetActiveCalls.Count(set => set == ActivitySets.BackofficeUsers));
-        Assert.Equal(3, _activity.CountActiveCalls.Single().Count);
+        Assert.That(_activity.GetActiveCalls.Count(set => set == ActivitySets.BackofficeUsers), Is.EqualTo(1));
+        Assert.That(_activity.CountActiveCalls.Single(), Has.Count.EqualTo(3));
     }
 
-    [Fact]
+    [Test]
     public async Task A_backoffice_user_seen_on_one_server_is_online_on_another()
     {
         BackofficePresence a = NewBackoffice();
@@ -75,20 +86,20 @@ public class SharedStoreTests
 
         await a.TabHeartbeatAsync(alice, "tab-1");
 
-        Assert.Equal(1, await b.CountOnlineAsync());
+        Assert.That(await b.CountOnlineAsync(), Is.EqualTo(1));
         (_, IReadOnlyList<OnlineBackofficeUser> page) = await b.PageAsync(0, 10);
-        Assert.Equal(1, page.Single().OpenTabs);
+        Assert.That(page.Single().OpenTabs, Is.EqualTo(1));
 
         await b.TabClosedAsync(alice, "tab-1");
         (_, page) = await a.PageAsync(0, 10);
-        Assert.Equal(0, page.Single().OpenTabs);
-        Assert.Equal([alice], await a.AllInBackofficeAsync());
+        Assert.That(page.Single().OpenTabs, Is.Zero);
+        Assert.That(await a.AllInBackofficeAsync(), Is.EqualTo([alice]));
 
         await a.ForgetAsync(alice);
-        Assert.Equal(0, await b.CountOnlineAsync());
+        Assert.That(await b.CountOnlineAsync(), Is.Zero);
     }
 
-    [Fact]
+    [Test]
     public async Task A_member_seen_on_one_server_is_online_on_another_and_signing_out_on_either_takes_them_off()
     {
         MemberPresence a = NewMembers();
@@ -97,18 +108,18 @@ public class SharedStoreTests
 
         await a.SeenAsync(SignedInWithKey(alice));
 
-        Assert.Equal([alice], await b.AllOnlineAsync());
+        Assert.That(await b.AllOnlineAsync(), Is.EqualTo([alice]));
 
         await b.SignedOutAsync(alice);
-        Assert.Equal(0, await a.CountOnlineAsync());
+        Assert.That(await a.CountOnlineAsync(), Is.Zero);
 
         _clock.Advance(MemberPresence.SignedOutMarkerLifetime + TimeSpan.FromSeconds(1));
         await a.SeenAsync(SignedInWithKey(alice));
         await a.SignedOutAsync(alice);
-        Assert.Equal(0, await b.CountOnlineAsync());
+        Assert.That(await b.CountOnlineAsync(), Is.Zero);
     }
 
-    [Fact]
+    [Test]
     public async Task An_mcp_caller_on_one_server_is_listed_on_another()
     {
         Guid alice = _users.Add("Alice");
@@ -117,16 +128,16 @@ public class SharedStoreTests
 
         await a.McpCallerSeenAsync(alice);
 
-        Assert.Equal(1, await backofficeB.CountOnlineAsync());
+        Assert.That(await backofficeB.CountOnlineAsync(), Is.EqualTo(1));
         (_, IReadOnlyList<OnlineBackofficeUser> page) = await backofficeB.PageAsync(0, 10);
         OnlineBackofficeUser row = page.Single();
-        Assert.Equal(alice, row.Key);
-        Assert.NotNull(row.McpLastSeen);
-        Assert.Null(row.BackofficeLastSeen);
-        Assert.True(await backofficeA.AnyOnMcpAsync());
+        Assert.That(row.Key, Is.EqualTo(alice));
+        Assert.That(row.McpLastSeen, Is.Not.Null);
+        Assert.That(row.BackofficeLastSeen, Is.Null);
+        Assert.That(await backofficeA.AnyOnMcpAsync(), Is.True);
     }
 
-    [Fact]
+    [Test]
     public async Task A_message_sent_on_one_server_is_picked_up_from_a_heartbeat_on_another()
     {
         var store = new SharedBackofficeMessageStore();
@@ -137,17 +148,19 @@ public class SharedStoreTests
         BackofficeMessenger b = new(new NoServerEvents(), NewBackoffice(), _users, store, new RecordingEventAggregator(), _options, _clock);
 
         var request = new BackofficeMessageRequest("Heads up", "Restarting soon", "info", [alice], null, AllOnline: false);
-        var result = Assert.IsType<BackofficeSendResult.Sent>(await a.SendAsync(request, new BackofficeSender(me, "Me")));
+        BackofficeSendResult sent = await a.SendAsync(request, new BackofficeSender(me, "Me"));
+        Assert.That(sent, Is.TypeOf<BackofficeSendResult.Sent>());
+        var result = (BackofficeSendResult.Sent)sent;
         Guid key = result.Message.Key;
 
-        Assert.Equal([key], await b.GetUndeliveredAsync(alice));
-        Assert.Null(await b.ReceiveAsync(key, bob));
-        Assert.Equal("Heads up", (await b.ReceiveAsync(key, alice))?.Headline);
-        Assert.Empty(await b.GetUndeliveredAsync(alice));
-        Assert.Empty(await a.GetUndeliveredAsync(alice));
+        Assert.That(await b.GetUndeliveredAsync(alice), Is.EqualTo([key]));
+        Assert.That(await b.ReceiveAsync(key, bob), Is.Null);
+        Assert.That((await b.ReceiveAsync(key, alice))?.Headline, Is.EqualTo("Heads up"));
+        Assert.That(await b.GetUndeliveredAsync(alice), Is.Empty);
+        Assert.That(await a.GetUndeliveredAsync(alice), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public async Task A_sites_store_is_used_whichever_order_it_is_registered_in()
     {
         var before = new ServiceCollection();
@@ -155,10 +168,10 @@ public class SharedStoreTests
         var siteMessages = new SharedBackofficeMessageStore();
         before.AddSingleton<ILiveViewActivityStore>(siteActivity);
         before.AddSingleton<IBackofficeMessageStore>(siteMessages);
-        LiveViewComposer.AddStores(before);
+        before.AddLiveView(new ConfigurationBuilder().Build());
 
         var after = new ServiceCollection();
-        LiveViewComposer.AddStores(after);
+        after.AddLiveView(new ConfigurationBuilder().Build());
         after.AddSingleton<ILiveViewActivityStore>(siteActivity);
         after.AddSingleton<IBackofficeMessageStore>(siteMessages);
 
@@ -168,12 +181,12 @@ public class SharedStoreTests
             services.AddSingleton<IOptionsMonitor<LiveViewOptions>>(_options);
             using ServiceProvider provider = services.BuildServiceProvider();
 
-            Assert.Same(siteActivity, provider.GetRequiredService<ILiveViewActivityStore>());
-            Assert.Same(siteMessages, provider.GetRequiredService<IBackofficeMessageStore>());
+            Assert.That(provider.GetRequiredService<ILiveViewActivityStore>(), Is.SameAs(siteActivity));
+            Assert.That(provider.GetRequiredService<IBackofficeMessageStore>(), Is.SameAs(siteMessages));
 
             // The tracker keeps its sessions in the site's store.
             await provider.GetRequiredService<ILiveActivityTracker>().TouchAsync("web", "session-1");
-            Assert.Equal(1, (await siteActivity.CountActiveAsync([ActivitySets.Channel("web")], DateTimeOffset.MinValue))[0]);
+            Assert.That((await siteActivity.CountActiveAsync([ActivitySets.Channel("web")], DateTimeOffset.MinValue))[0], Is.EqualTo(1));
         }
     }
 

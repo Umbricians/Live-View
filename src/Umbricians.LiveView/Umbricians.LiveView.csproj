@@ -4,13 +4,20 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
+    <!-- Public types are the package's API, so each needs XML docs, which ship in the package. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <PropertyGroup>
     <PackageId>Umbricians.LiveView</PackageId>
     <Product>Umbricians.LiveView</Product>
     <Title>Umbricians Live View</Title>
-    <Description>A real-time Live View dashboard for the Umbraco Settings section, charting active web, MCP and API sessions plus any custom metric you plug in.</Description>
+    <Description>A real-time Live View dashboard for the Umbraco Settings section that charts active web, member, backoffice, MCP and API sessions and custom metrics, lists who is online, and messages backoffice users and members.</Description>
     <Authors>Umbricians</Authors>
     <Version>0.1.0</Version>
     <PackageTags>umbraco;umbraco-marketplace;dashboard;analytics;realtime</PackageTags>
@@ -21,6 +28,12 @@
     <PackageProjectUrl>https://github.com/Umbricians/Live-View</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Umbricians/Live-View</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- A breaking change to the public API since the last release fails the pack. Differences a version allows
+         are suppressed in CompatibilitySuppressions.xml. -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>0.7.0</PackageValidationBaselineVersion>
     <!-- Runs before NuGet collects the package files, so the generated README below is included. -->
     <BeforePack>$(BeforePack);GenerateNuGetReadme</BeforePack>
   </PropertyGroup>
@@ -38,10 +51,10 @@
 
 
   <ItemGroup>
-    <!-- Don't include the client folder as part of packaging nuget build -->
+    <!-- The client's sources stay out of the package; Vite's output in wwwroot/ ships as static web assets. -->
     <Content Remove="Client\**" />
 
-    <!-- However make the Umbraco-package.json included for dotnet pack or nuget package and visible to the solution -->
+    <!-- Shown in the solution for editing. Vite copies it into wwwroot/, which is how it reaches the package. -->
     <None Include="Client\public\umbraco-package.json" Pack="false" />
   </ItemGroup>
 
@@ -57,14 +70,20 @@
   <Target Name="GenerateNuGetReadme">
     <PropertyGroup>
       <_NuGetReadme>$(IntermediateOutputPath)nuget\README.md</_NuGetReadme>
+      <!-- A release build links images to its tag, so the package page keeps showing that version's images. -->
+      <_NuGetReadmeRef>main</_NuGetReadmeRef>
+      <_NuGetReadmeRef Condition="'$(GITHUB_REF_TYPE)' == 'tag'">$(GITHUB_REF_NAME)</_NuGetReadmeRef>
     </PropertyGroup>
-    <Exec Command="node &quot;$(MSBuildThisFileDirectory)..\..\build\nuget-readme.mjs&quot; &quot;$(MSBuildThisFileDirectory)..\..\README.md&quot; &quot;$(_NuGetReadme)&quot; &quot;$(RepositoryUrl)&quot;" />
+    <Exec Command="node &quot;$(MSBuildThisFileDirectory)..\..\build\nuget-readme.mjs&quot; &quot;$(MSBuildThisFileDirectory)..\..\README.md&quot; &quot;$(_NuGetReadme)&quot; &quot;$(RepositoryUrl)&quot; &quot;$(_NuGetReadmeRef)&quot;" />
     <ItemGroup>
       <None Include="$(_NuGetReadme)" Pack="true" PackagePath="\README.md" />
     </ItemGroup>
   </Target>
 
-  <!-- The dashboard bundle is built by npm and git-ignored, so never pack a package without it. -->
+  <!--
+    The bundle is built by npm and git-ignored, so never pack a package without it. Pack with a build: a pack with
+    no-build after the bundle appeared ships without the static web assets.
+  -->
   <Target Name="EnsureClientBundleBuilt" BeforeTargets="GenerateNuspec">
     <Error Condition="!Exists('wwwroot\App_Plugins\UmbriciansLiveView\umbricians-live-view.js')"
            Text="The Live View dashboard bundle is missing. Run 'npm ci' and 'npm run build' in src/Umbricians.LiveView/Client before packing." />

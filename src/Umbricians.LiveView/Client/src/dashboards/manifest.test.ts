@@ -30,7 +30,8 @@ test("the dashboard is in the Settings section and needs the view permission", (
   const dashboard = manifests.find((m) => m.alias === LIVE_VIEW_DASHBOARD_ALIAS);
 
   assert.equal(LIVE_VIEW_DASHBOARD_ALIAS, "Umbricians.LiveView.Dashboard"); // sites exclude the dashboard by this string
-  assert.deepEqual(dashboard?.conditions, [
+  assert.ok(dashboard && "conditions" in dashboard);
+  assert.deepEqual(dashboard.conditions, [
     { alias: "Umb.Condition.SectionAlias", match: "Umb.Section.Settings" },
     { alias: LIVE_VIEW_PERMISSION_CONDITION_ALIAS, permission: LIVE_VIEW_PERMISSION_VIEW },
   ]);

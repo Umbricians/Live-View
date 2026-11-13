@@ -1,13 +1,10 @@
 using Asp.Versioning;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using Umbraco.Cms.Api.Common.Filters;
 using Umbraco.Cms.Core.Models.Membership;
 using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Core.Services;
-using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Web.Common.Routing;
 using Umbricians.LiveView.Configuration;
 using Umbricians.LiveView.Messaging;
@@ -20,21 +17,18 @@ namespace Umbricians.LiveView.Controllers;
 /// Sends messages to website members through the site's registered <see cref="IMemberMessageSender"/>s.
 /// Authorized by the Live View permissions, not by section access.
 /// </summary>
-[ApiController]
 [ApiVersion("1.0")]
 [ApiExplorerSettings(GroupName = "Live View")]
 [BackOfficeRoute("umbriciansliveview/api/v{version:apiVersion}")]
-[Authorize(Policy = AuthorizationPolicies.BackOfficeAccess)]
 [LiveViewPermission(Constants.Permissions.View)]
-[JsonOptionsName(Umbraco.Cms.Core.Constants.JsonOptionsNames.BackOffice)]
-internal class LiveViewMemberMessagesController : ControllerBase
+internal class MemberMessagesController : LiveViewControllerBase
 {
     private readonly MemberMessagingService _messaging;
     private readonly IMemberService _memberService;
     private readonly IBackOfficeSecurityAccessor _security;
     private readonly IOptionsMonitor<LiveViewOptions> _options;
 
-    public LiveViewMemberMessagesController(
+    public MemberMessagesController(
         MemberMessagingService messaging,
         IMemberService memberService,
         IBackOfficeSecurityAccessor security,

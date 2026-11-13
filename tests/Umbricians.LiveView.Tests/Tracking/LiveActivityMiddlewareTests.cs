@@ -12,12 +12,18 @@ namespace Umbricians.LiveView.Tests.Tracking;
 /// <summary>Requests through the tracking middleware, whether or not they are counted.</summary>
 public class LiveActivityMiddlewareTests
 {
-    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 31, 12, 0, 0, TimeSpan.Zero));
-    private readonly UnforwardedProxyDetector _detector = new();
+    private FakeTimeProvider _clock;
+    private UnforwardedProxyDetector _detector;
 
-    [Theory]
-    [InlineData(false, "GET")]
-    [InlineData(true, "HEAD")]
+    [SetUp]
+    public void SetUp()
+    {
+        _clock = new FakeTimeProvider(new DateTimeOffset(2026, 10, 31, 12, 0, 0, TimeSpan.Zero));
+        _detector = new UnforwardedProxyDetector();
+    }
+
+    [TestCase(false, "GET")]
+    [TestCase(true, "HEAD")]
     public async Task A_forwarded_request_from_a_proxy_is_noticed_even_when_it_is_not_counted(bool trackingEnabled, string method)
     {
         LiveActivityMiddleware middleware = BuildMiddleware(trackingEnabled);
@@ -34,8 +40,8 @@ public class LiveActivityMiddlewareTests
             return Task.CompletedTask;
         });
 
-        Assert.True(nextRan);
-        Assert.Equal(IPAddress.Parse("10.0.0.4"), _detector.ProxyAddress);
+        Assert.That(nextRan, Is.True);
+        Assert.That(_detector.ProxyAddress, Is.EqualTo(IPAddress.Parse("10.0.0.4")));
     }
 
     private LiveActivityMiddleware BuildMiddleware(bool trackingEnabled)

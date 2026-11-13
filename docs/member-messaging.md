@@ -35,7 +35,8 @@ Once at least one sender is registered:
    long it stays relevant.
 3. The package works out the recipients and calls each chosen sender with the message. Senders run side by side,
    each with 30 seconds to finish, and the dashboard shows what each one did, or that it failed.
-4. Each send is written to the Umbraco log: who sent it, to whom, and through which senders.
+4. Each send is written to the Umbraco log (who sent it, to whom, and through which senders) and to Umbraco's audit
+   log (see [Before and after a message is sent](../README.md#7-before-and-after-a-message-is-sent)).
 
 ![The Message members slide-out with Relevant for set to Midnight tonight and the time it stops being shown](images/live-view-message-members.png)
 
@@ -465,7 +466,7 @@ through `IServiceScopeFactory`.
 | `Type` | `Information`, `Warning`, `Urgent` or `GoodNews`, chosen on the dashboard. Map it to your own styling. |
 | `Audience` | Who the message is for; see below. |
 | `MemberKeys` | The recipients' member keys, for `Selected` and `AllOnline`. Empty for `AllMembers`. |
-| `SenderName` | The backoffice user who sent it. |
+| `SenderName` | The name of the backoffice user who sent it, or `null` when it has no known sender. |
 | `SentAt` | When it was sent. |
 | `ExpiresAt` | When it stops being relevant (up to 30 days away, chosen on the dashboard: a duration or midnight tonight). Don't show it after this. |
 
@@ -473,7 +474,7 @@ through `IServiceScopeFactory`.
 
 | Audience | Dashboard option | `MemberKeys` |
 |---|---|---|
-| `Selected` | **Selected members**: the members ticked in the table | those members |
+| `Selected` | **Selected members**: the members ticked in the table, up to 10,000 | those members |
 | `AllOnline` | **Everyone online**: everyone logged in at the moment of sending, on every page of the table | those members |
 | `AllMembers` | **Every member**: all members of the site, including those not logged in | empty: the audience may be very large, so reach them in whatever way suits the sender |
 
