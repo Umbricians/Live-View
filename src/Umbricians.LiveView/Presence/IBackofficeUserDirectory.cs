@@ -8,6 +8,10 @@ using Umbraco.Cms.Core.Services;
 
 namespace Umbricians.LiveView.Presence;
 
+/// <summary>A backoffice user as <see cref="IBackofficeUserDirectory"/> finds them.</summary>
+/// <param name="Key">The user's key.</param>
+/// <param name="Name">The user's name, or their username when they have no name.</param>
+/// <param name="Email">The user's email address, or null when they have none.</param>
 /// <param name="Connections">How many realtime (server events) connections the user has open, one per tab.</param>
 /// <param name="AvatarUrls">The user's avatar in Umbraco's sizes, smallest first, or none when they have not set one.</param>
 /// <param name="UserGroupKeys">The keys of the user groups the user is in.</param>
