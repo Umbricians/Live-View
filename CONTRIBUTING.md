@@ -36,9 +36,11 @@ dotnet pack src/Umbricians.LiveView -c Release -o artifacts -p:Version=$version
 ```
 
 `npm run build` ends by checking the built bundle with `scripts/check-bundle.mjs`, and fails naming each problem: the
-bundle entry exporting more than `manifests`, a backoffice module bundled instead of left external, a decorated field
-emitted as a class field, or a decorator left uncompiled. It also fails when it has nothing to check: no source maps,
-or no decorated fields.
+bundle entry exporting more than `manifests`, the API entry that `@umbricians/live-view` maps to missing or not
+exporting what `src/index.ts` does, a backoffice module bundled instead of left external, a decorated field emitted as
+a class field, or a decorator left uncompiled. It also fails when it has nothing to check: no source maps,
+or no decorated fields. `npm test` runs its own tests, `scripts/check-bundle.test.mjs`, against small folders of
+hand-written output.
 
 The solution includes the demo site, so `dotnet build` builds it too. Pack with a build, as above: the dashboard
 bundle must be built first, and packing stops with an error if it is missing. Package validation compares the package
