@@ -5,7 +5,7 @@
 [![NuGet](https://img.shields.io/nuget/v/Umbricians.LiveView?label=NuGet)](https://www.nuget.org/packages/Umbricians.LiveView)
 [![Build](https://github.com/Umbricians/Live-View/actions/workflows/build.yml/badge.svg)](https://github.com/Umbricians/Live-View/actions/workflows/build.yml)
 
-A real-time **Live View** dashboard for the Umbraco **Settings** section (Umbraco 17.8+). It charts how many
+A real-time **Live View** dashboard for the Umbraco **Settings** section (Umbraco 17, from 17.8). It charts how many
 sessions are active right now:
 
 - **Web sessions**: front-end visitors
@@ -75,7 +75,8 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
 - Messages are pushed over Umbraco's server events (SignalR), so they arrive instantly. If a user's realtime
   connection is down, their next heartbeat picks the message up instead ("Delivery" column).
 - Messages are held for 15 minutes (`BackofficeMessageLifetimeMinutes`) in the message store (in memory by default), then discarded.
-- Every message sent is recorded in [Umbraco's audit log](#7-before-and-after-a-message-is-sent): who sent it, to whom and its headline.
+- Every message sent is recorded in [Umbraco's audit log](#7-before-and-after-a-message-is-sent): who sent it, who it went
+  to (how many users or members, or every member) and its headline.
 
 ## Documentation
 
@@ -102,8 +103,8 @@ Live View adds three permissions to Umbraco's user groups, under **Users → Use
 | **Message backoffice users** | Select backoffice users, or pick user groups (which also needs access to the Users section), and send them a notification. |
 | **Message members** | Select website members and send them a message, once a developer has [set up a delivery method](docs/member-messaging.md). |
 
-The **Administrators** group gets all three automatically when the package is installed or upgraded; other groups
-get none until you switch them on. The dashboard is in the Settings section, so a group also needs access to Settings to open it there. The API checks
+The **Administrators** group gets all three automatically, once, when the package is first installed (or a site
+upgrades to a version with permissions); other groups get none until you switch them on. The dashboard is in the Settings section, so a group also needs access to Settings to open it there. The API checks
 only these permissions, so a site can
 [show the dashboard in another section](docs/getting-started.md#showing-the-dashboard-in-another-section) with a
 manifest alone. Every backoffice user can receive messages. See [Permissions](docs/getting-started.md#permissions) for details.
@@ -116,6 +117,7 @@ falls under one of the channel's path prefixes (when it has any) and none of its
 `Hosts` (when it lists any), and passes its request predicate (when it has one). For each channel, it works out a session key from the channel's
 session key sources and keeps the session active for the length of the request and for the channel's
 *activity window* after it. Session keys are hashed before they are held in memory, and no cookies are set.
+`OPTIONS` and `HEAD` requests are never counted.
 
 | Channel | Paths | Session key (first one present) | Window |
 |---|---|---|---|
@@ -123,7 +125,7 @@ session key sources and keeps the session active for the length of the request a
 | `api` | `/api`, `/umbraco/delivery/api` | `Api-Key` header → `Authorization` → client IP + User-Agent | 60s |
 | `backoffice` | `/umbraco` (static files excluded) | the signed-in backoffice user | 300s |
 | `members` | the same paths as `web`; not exclusive, so members are counted in `web` too | the logged-in member | 300s |
-| `web` | everything else, except `/umbraco`, `/App_Plugins`, `/media` and static files | client IP + User-Agent | 300s |
+| `web` | everything else, except `/umbraco`, `/App_Plugins`, `/media`, `/install`, `/.well-known`, `/_framework`, `/sb`, the `mcp` and `api` paths, and static files | client IP + User-Agent | 300s |
 
 Because the session stays active for as long as a request is open, long-lived MCP streams (SSE) count while they
 are connected. Requests from crawlers are ignored by default, whichever channel they would count in: search engine
@@ -257,15 +259,19 @@ Everything is optional. Override only what you need in `appsettings.json`:
 }
 ```
 
-Built-in channels keep their defaults for any property you leave out. Session key sources are `Header:<name>`,
+Built-in channels keep their defaults for any property you leave out. A channel of your own gets, for anything you
+leave out: its alias as `Name`, a colour from the dashboard palette, `SortOrder` 0 (so it is offered requests before
+every built-in channel), `SessionKeys` `Client`, the site-wide `ActivityWindowSeconds`, `IgnoreStaticFiles` false and
+`Exclusive` true. Session key sources are `Header:<name>`,
 `Cookie:<name>`, `Authorization`, `User` (the authenticated backoffice user or member) and `Client`, or the alias of a
 [session key source of your own](#your-own-session-key-sources). `Hosts` limits a channel to requests for those host
 names, ignoring port: `brand-a.com`, or `*.brand-a.com` for its subdomains. With `Hosts` and no `PathPrefixes`, a
 channel counts every path on those hosts. When `Hosts` is empty, any host matches. Set
 `"Exclusive": false` on a channel whose requests should also count in later channels. The built-in `members`
-channel always counts the signed-in member and always lets members count as web visitors too, so `SessionKeys` and
-`Exclusive` don't apply to it; its other settings do. The built-in `backoffice` channel always counts the signed-in
-backoffice user, so `SessionKeys` doesn't apply to it.
+channel always counts the signed-in member, so `SessionKeys` doesn't apply to it; its other settings do. It isn't
+exclusive by default, so members also count as web visitors. Leave it that way: it watches every front-end path
+whether or not anyone is signed in, so `"Exclusive": true` on it would stop `web` counting anyone at all. The
+built-in `backoffice` channel always counts the signed-in backoffice user, so `SessionKeys` doesn't apply to it.
 
 The same settings restyle a line from a [custom metric provider](#3-a-custom-metric-provider), under the provider's
 `Alias`: `Name`, `Color` and `SortOrder` replace the provider's own values, and `"Enabled": false` takes the line off the
@@ -276,6 +282,14 @@ provider and are ignored.
 ```json
 { "Umbricians": { "LiveView": { "Channels": { "mcp-server": { "Name": "Remote MCP", "SortOrder": 15 } } } } }
 ```
+
+`TrackingEnabled` (default true) turns request counting off when false. Backoffice users still show, through their
+tabs' heartbeat, and channels fed from code and custom metric providers still count.
+
+`StaticFileExtensions` lists the file extensions a channel with `"IgnoreStaticFiles": true` doesn't count (default
+`.css`, `.js`, `.mjs`, `.map`, `.json`, `.xml`, `.txt`, `.ico`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`,
+`.avif`, `.woff`, `.woff2`, `.ttf`, `.eot`, `.mp4`, `.webm` and `.pdf`). Extensions you list in `appsettings.json` are
+added to these.
 
 `MemberAvatarProperty` names the member property that holds each member's picture; see
 [member avatars](#5-member-avatars).
@@ -310,7 +324,9 @@ setting:
 
 ## Extending
 
-Ways to add your own data and panels to the dashboard, from least to most code.
+Ways to add your own data and panels to the dashboard, from least to most code. In code, the built-in channel aliases
+and session key sources are also available as `Umbricians.LiveView.Constants.Channels` and
+`Umbricians.LiveView.Constants.SessionKeySources`.
 
 ### 1. A channel for requests
 
@@ -377,7 +393,7 @@ When your code knows exactly when a session starts and ends (an in-process MCP s
 WebSocket), declare a channel and drive it through `ILiveActivityTracker`:
 
 ```csharp
-public class LiveViewComposer : IComposer
+public class MySiteLiveViewComposer : IComposer
 {
     public void Compose(IUmbracoBuilder builder) =>
         builder.AddLiveViewChannel("signalr", "SignalR clients", c => c.Color = "#0ea5e9");
@@ -399,7 +415,8 @@ public class ChatHub(ILiveActivityTracker tracker) : Hub
 }
 ```
 
-`BeginActivityAsync(channel, key)` returns an `IAsyncDisposable` that keeps the session active until it is disposed.
+`BeginActivityAsync(channel, key)`, once awaited, gives an `IAsyncDisposable` that keeps the session active until it is
+disposed: `await using IAsyncDisposable activity = await tracker.BeginActivityAsync("signalr", key);`.
 
 `AddLiveViewChannel` with a built-in alias, such as `members`, restyles that channel. For each property, a value in
 `appsettings.json` wins, then a value set with `AddLiveViewChannel`, then the built-in default, whatever order
@@ -433,6 +450,9 @@ builder.AddLiveViewMetric<McpServerSessionsMetric>();
 Providers are called on every poll and given 2 seconds to answer. A slow or failing provider shows as a gap in its
 line rather than breaking the dashboard. See
 [ThreadPoolQueueMetric.cs](demo/Umbricians.LiveView.Demo/LiveView/ThreadPoolQueueMetric.cs) for a working example.
+
+A provider can also override `SortOrder` (default 1000, after every built-in channel). Without a `Color`, its line
+takes one from the dashboard palette.
 
 Its line can be renamed, recoloured, reordered or switched off in `appsettings.json` under `Channels:mcp-server`, like
 any channel; see [Configuration](#configuration). A provider whose alias matches a channel, built-in or declared in
@@ -701,7 +721,8 @@ stays per server.
 
 ## API
 
-All under `/umbraco/umbriciansliveview/api/v1/`.
+All under `/umbraco/umbriciansliveview/api/v1/`, and listed in the backoffice's Swagger UI (`/umbraco/swagger`) in
+the **Umbricians Live View** document (`umbricians-live-view`).
 
 | Endpoint | Who can call it |
 |---|---|
@@ -739,7 +760,7 @@ tests/Umbricians.LiveView.Tests  NUnit tests, run with `dotnet test`
 Building the client needs Node 26.
 
 ```bash
-cd src/Umbricians.LiveView/Client && npm install && npm run build
+cd src/Umbricians.LiveView/Client && npm ci && npm run build
 ```
 
 ```bash

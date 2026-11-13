@@ -19,7 +19,8 @@ updates:
       - dependency-name: "Umbraco.Cms.Api.Management"
       - dependency-name: "Umbraco.Cms.Web.Common"
       # The demo's Umbraco.Cms keeps getting minor and patch updates. A new Umbraco major moves the package, the
-      # client and the demo together in a major release (CONVENTIONS.md, Versions), so it isn't proposed here.
+      # client and the demo together in a major release (the Umbricians package conventions, Versions), so it isn't
+      # proposed here.
       - dependency-name: "Umbraco.*"
         update-types: ["version-update:semver-major"]
 

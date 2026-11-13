@@ -17,7 +17,7 @@
     <PackageId>Umbricians.LiveView</PackageId>
     <Product>Umbricians.LiveView</Product>
     <Title>Umbricians Live View</Title>
-    <Description>A real-time Live View dashboard for the Umbraco Settings section, charting active web, MCP and API sessions plus any custom metric you plug in.</Description>
+    <Description>A real-time Live View dashboard for the Umbraco Settings section that charts active web, member, backoffice, MCP and API sessions and custom metrics, lists who is online, and messages backoffice users and members.</Description>
     <Authors>Umbricians</Authors>
     <Version>0.1.0</Version>
     <PackageTags>umbraco;umbraco-marketplace;dashboard;analytics;realtime</PackageTags>
