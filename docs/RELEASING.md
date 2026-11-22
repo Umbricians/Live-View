@@ -34,7 +34,19 @@ package is on NuGet, the workflow creates a matching GitHub release with generat
 5. In the run, open **Review deployments** and approve `production`.
 6. Check the publish log says the package was pushed, not skipped as a duplicate, and that the GitHub release has
    the `.nupkg` attached. nuget.org lists the package a few minutes later, after validation.
-7. Merge `main` back into `develop` through a pull request with the `release-flow` label.
+7. Merge `main` back into `develop` through a pull request with the `release-flow` label, from a branch cut
+   from `main`:
+
+   ```bash
+   git checkout main && git pull && git checkout -b back-merge/1.2.0
+   ```
+
+   On that branch, set `PackageValidationBaselineVersion` in
+   [`Umbricians.LiveView.csproj`](../src/Umbricians.LiveView/Umbricians.LiveView.csproj) to `1.2.0`, and delete
+   every `<Suppression>` from
+   [`CompatibilitySuppressions.xml`](../src/Umbricians.LiveView/CompatibilitySuppressions.xml). The suppressions
+   allow differences from the previous release, and the next release is checked against this one. Merge it with a
+   merge commit.
 
 ## A hotfix
 
