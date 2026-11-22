@@ -21,6 +21,7 @@ The client builds on Node 26, the version CI uses.
 Run the steps the `build` check runs before opening a pull request:
 
 ```bash
+node --test "build/*.test.mjs"
 cd src/Umbricians.LiveView/Client && npm ci && npm test && npm run build && cd -
 dotnet build Umbricians.LiveView.slnx -c Release
 dotnet test Umbricians.LiveView.slnx -c Release --no-build
@@ -47,13 +48,11 @@ bundle must be built first, and packing stops with an error if it is missing. Pa
 with the last release, so it is packed with the version CI uses, which comes after it (the script needs the release
 tags, which a clone fetches).
 
-Every pack also checks the README it generates for nuget.org, and fails naming each problem: a relative link, a link
-off the release's ref, or an HTML image or comment left in. When you change `build/nuget-readme.mjs`, run its
-tests too; the `build` check doesn't:
-
-```bash
-node --test "build/*.test.mjs"
-```
+Every pack checks the README it generates for nuget.org, and fails naming each problem: a relative link, a link
+off the release's ref, or an HTML image or comment left in. The `build` check runs the build scripts' tests,
+`node --test "build/*.test.mjs"`, before it works out the version: `build/nuget-readme.test.mjs` covers the README
+check and `build/package-version.test.mjs` covers the version a build packs, including the version each tag
+publishes. The version tests need git on the path.
 
 In Git Bash on Windows, the bundle path argument gets rewritten into a Windows path, so run the smoke test there as
 `MSYS_NO_PATHCONV=1 node build/smoke-test.mjs …`. PowerShell and CI are unaffected.
