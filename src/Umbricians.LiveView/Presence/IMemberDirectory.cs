@@ -5,6 +5,11 @@ using Umbraco.Cms.Core.Services;
 
 namespace Umbricians.LiveView.Presence;
 
+/// <summary>A member as <see cref="IMemberDirectory"/> finds them.</summary>
+/// <param name="Key">The member's key.</param>
+/// <param name="Name">The member's name, or their username when they have no name.</param>
+/// <param name="Email">The member's email address, or null when they have none.</param>
+/// <param name="MemberType">The name of the member's type, or its alias when it has no name.</param>
 /// <param name="AvatarUrl">The member's picture from the site's <see cref="IMemberAvatarProvider"/>, or null for none.</param>
 internal sealed record MemberDetails(Guid Key, string Name, string? Email, string? MemberType, string? AvatarUrl);
 
