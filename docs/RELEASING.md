@@ -45,8 +45,9 @@ package is on NuGet, the workflow creates a matching GitHub release with generat
    [`Umbricians.LiveView.csproj`](../src/Umbricians.LiveView/Umbricians.LiveView.csproj) to `1.2.0`, and delete
    every `<Suppression>` from
    [`CompatibilitySuppressions.xml`](../src/Umbricians.LiveView/CompatibilitySuppressions.xml). The suppressions
-   allow differences from the previous release, and the next release is checked against this one. Merge it with a
-   merge commit.
+   allow differences from the previous release, and the next release is checked against this one. If the merge
+   into `develop` conflicts on either file, take the new baseline and keep any suppressions `develop` added since
+   the release. Merge it with a merge commit.
 
 ## A hotfix
 
