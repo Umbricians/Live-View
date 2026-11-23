@@ -1,5 +1,5 @@
 # Builds the package on every push to main and develop and on every pull request, and publishes it to NuGet when a
-# version tag is pushed: v1.2.0 on main, or a pre-release such as v1.3.0-beta.1 on a release branch. Publishing uses
+# version tag is pushed: v17.2.0 on main, or a pre-release such as v17.3.0-beta.1 on a release branch. Publishing uses
 # NuGet Trusted Publishing: GitHub's OIDC token is exchanged for a short-lived API key, so no NuGet API key is stored
 # in the repository.
 #
@@ -51,7 +51,7 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      # Gitflow tags releases on main and pre-releases (v1.3.0-beta.1) on a release branch, so a tag anywhere else is
+      # Gitflow tags releases on main and pre-releases (v17.3.0-beta.1) on a release branch, so a tag anywhere else is
       # a mistake that must not publish.
       - name: Check the tag is on main or a release branch
         if: github.ref_type == 'tag'
@@ -159,7 +159,7 @@ jobs:
           name: nuget-package
           path: artifacts
 
-      # Tags with a pre-release suffix (v1.3.0-beta.1) become GitHub pre-releases. Notes start at the last stable
+      # Tags with a pre-release suffix (v17.3.0-beta.1) become GitHub pre-releases. Notes start at the last stable
       # release, so a release after betas lists everything since then. Re-running leaves an existing release alone.
       - name: Create GitHub release
         env:

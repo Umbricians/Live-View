@@ -5,30 +5,32 @@ release and hotfix pull requests. [`.github/workflows/build.yml`](../.github/wor
 every push to `main` and `develop` and every pull request. A version tag on `main` publishes to NuGet, and so does a
 pre-release tag on a `release/*` branch.
 
-The tag sets the package version (`v1.2.3` publishes `1.2.3`, and `v1.3.0-beta.1` a pre-release). Only the package
-in `src/Umbricians.LiveView` is packed; the demo site is built and smoke-tested but never published. Once the
-package is on NuGet, the workflow creates a matching GitHub release with generated notes and the `.nupkg` and
-`.snupkg` attached.
+The tag sets the package version (`v17.2.3` publishes `17.2.3`, and `v17.3.0-beta.1` a pre-release). The major is
+always the Umbraco major the package supports, the one in the project's `<Version>`; a tag of another major fails the
+build. New features take a minor version and fixes a patch, and a change that could break a site's code or
+configuration waits for the next Umbraco major. Only the package in `src/Umbricians.LiveView` is packed; the demo site
+is built and smoke-tested but never published. Once the package is on NuGet, the workflow creates a matching GitHub
+release with generated notes and the `.nupkg` and `.snupkg` attached.
 
 ## A release
 
 1. Cut the release branch from an up-to-date `develop`:
 
    ```bash
-   git checkout develop && git pull && git checkout -b release/1.2.0
+   git checkout develop && git pull && git checkout -b release/17.2.0
    ```
 
-2. Push it, then open a pull request from `release/1.2.0` into `main` with the `release-flow` label. Only release
+2. Push it, then open a pull request from `release/17.2.0` into `main` with the `release-flow` label. Only release
    fixes go on this branch.
 3. Merge it with a merge commit (not squash) once the `build` check passes.
 4. Tag the merge commit on `main` and push the tag:
 
    ```bash
-   git checkout main && git pull && git tag -a v1.2.0 -m "v1.2.0"
+   git checkout main && git pull && git tag -a v17.2.0 -m "v17.2.0"
    ```
 
    ```bash
-   git push origin v1.2.0
+   git push origin v17.2.0
    ```
 
 5. In the run, open **Review deployments** and approve `production`.
@@ -38,11 +40,11 @@ package is on NuGet, the workflow creates a matching GitHub release with generat
    from `main`:
 
    ```bash
-   git checkout main && git pull && git checkout -b back-merge/1.2.0
+   git checkout main && git pull && git checkout -b back-merge/17.2.0
    ```
 
    On that branch, set `PackageValidationBaselineVersion` in
-   [`Umbricians.LiveView.csproj`](../src/Umbricians.LiveView/Umbricians.LiveView.csproj) to `1.2.0`, and delete
+   [`Umbricians.LiveView.csproj`](../src/Umbricians.LiveView/Umbricians.LiveView.csproj) to `17.2.0`, and delete
    every `<Suppression>` from
    [`CompatibilitySuppressions.xml`](../src/Umbricians.LiveView/CompatibilitySuppressions.xml). The suppressions
    allow differences from the previous release, and the next release is checked against this one. If the merge
@@ -51,7 +53,7 @@ package is on NuGet, the workflow creates a matching GitHub release with generat
 
 ## A hotfix
 
-Cut `hotfix/1.2.1` from `main`, fix it there, and open a pull request into `main` with the `release-flow` label.
+Cut `hotfix/17.2.1` from `main`, fix it there, and open a pull request into `main` with the `release-flow` label.
 Then follow steps 3 to 7 above with the hotfix version.
 
 ## A pre-release
@@ -59,11 +61,11 @@ Then follow steps 3 to 7 above with the hotfix version.
 To publish a pre-release from a release branch before it merges, tag a commit on it with a suffix and push the tag:
 
 ```bash
-git checkout release/1.2.0 && git pull && git tag -a v1.2.0-beta.1 -m "v1.2.0-beta.1"
+git checkout release/17.2.0 && git pull && git tag -a v17.2.0-beta.1 -m "v17.2.0-beta.1"
 ```
 
 ```bash
-git push origin v1.2.0-beta.1
+git push origin v17.2.0-beta.1
 ```
 
 Then follow steps 5 and 6 above. It publishes a NuGet pre-release and a GitHub pre-release, and nothing merges back.

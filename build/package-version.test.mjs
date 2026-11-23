@@ -43,25 +43,27 @@ function repo(version) {
 
 const tagBuild = (name) => ({ GITHUB_REF_TYPE: "tag", GITHUB_REF_NAME: name, GITHUB_RUN_NUMBER: "42" });
 
+// A tag build of a project for Umbraco 17. It doesn't read git, so the folder needs no repo.
 function tagVersion(name) {
   const dir = mkdtempSync(join(tmpdir(), "package-version-"));
-  return run(dir, tagBuild(name), join(dir, "Missing.csproj"));
+  writeFileSync(join(dir, "Project.csproj"), "<Project><PropertyGroup><Version>17.0.0</Version></PropertyGroup></Project>");
+  return run(dir, tagBuild(name));
 }
 
-test("a tag builds its own version, without reading git or the project file", () => {
-  const { status, stdout, stderr } = tagVersion("v1.2.3");
+test("a tag builds its own version, without reading git", () => {
+  const { status, stdout, stderr } = tagVersion("v17.2.3");
   assert.equal(status, 0, stderr);
-  assert.equal(stdout, "1.2.3\n");
+  assert.equal(stdout, "17.2.3\n");
   assert.equal(stderr, "");
 });
 
 test("a pre-release tag builds its pre-release version", () => {
-  const { status, stdout, stderr } = tagVersion("v1.3.0-beta.1");
+  const { status, stdout, stderr } = tagVersion("v17.3.0-beta.1");
   assert.equal(status, 0, stderr);
-  assert.equal(stdout, "1.3.0-beta.1\n");
+  assert.equal(stdout, "17.3.0-beta.1\n");
 });
 
-for (const tag of ["v1.2", "v1.2.3.4", "v1.x.0"]) {
+for (const tag of ["v17.2", "v17.2.3.4", "v17.x.0"]) {
   test(`the tag ${tag} is rejected`, () => {
     const { status, stdout, stderr } = tagVersion(tag);
     const version = tag.slice(1);
@@ -71,13 +73,22 @@ for (const tag of ["v1.2", "v1.2.3.4", "v1.x.0"]) {
   });
 }
 
-test("a branch build is the patch after the highest stable tag, reachable or not", () => {
-  const dir = repo("0.1.0");
-  git(dir, "tag", "v0.8.0");
+for (const tag of ["v0.9.0", "v18.0.0", "v1.0.0-beta.1"]) {
+  test(`the tag ${tag} is rejected, since its major isn't the project's Umbraco major`, () => {
+    const { status, stdout, stderr } = tagVersion(tag);
+    assert.equal(status, 1);
+    assert.equal(stdout, "");
+    assert.match(stderr, /doesn't start with the Umbraco major 17 that the project's <Version> \(17\.0\.0\) supports/);
+  });
+}
+
+test("a branch build is the patch after the highest stable tag of the project's major, reachable or not", () => {
+  const dir = repo("17.0.0");
+  git(dir, "tag", "v17.8.0");
   git(dir, "switch", "--quiet", "-c", "main");
   git(dir, "commit", "--quiet", "--allow-empty", "-m", "Release");
-  git(dir, "tag", "v0.10.0");
-  git(dir, "tag", "v0.11.0-beta.1");
+  git(dir, "tag", "v17.10.0");
+  git(dir, "tag", "v17.11.0-beta.1");
   git(dir, "switch", "--quiet", "develop");
 
   const { status, stdout, stderr } = run(dir, {
@@ -86,25 +97,38 @@ test("a branch build is the patch after the highest stable tag, reachable or not
     GITHUB_RUN_NUMBER: "42",
   });
   assert.equal(status, 0, stderr);
-  assert.equal(stdout, "0.10.1-ci.42\n");
+  assert.equal(stdout, "17.10.1-ci.42\n");
 });
 
-test("before the first stable release, a build uses the project's <Version>", () => {
-  const dir = repo("0.1.0");
-  git(dir, "tag", "v1.0.0-beta.1");
+test("tags of other majors don't count", () => {
+  const dir = repo("17.0.0");
+  git(dir, "tag", "v0.8.0");
+  git(dir, "tag", "v16.4.0");
+  git(dir, "tag", "v17.1.0");
+  git(dir, "tag", "v18.0.0");
 
   const { status, stdout, stderr } = run(dir, { GITHUB_REF_TYPE: "branch", GITHUB_REF_NAME: "develop", GITHUB_RUN_NUMBER: "7" });
   assert.equal(status, 0, stderr);
-  assert.equal(stdout, "0.1.0-ci.7\n");
+  assert.equal(stdout, "17.1.1-ci.7\n");
+});
+
+test("before the major's first stable release, a build uses the project's <Version>", () => {
+  const dir = repo("17.0.0");
+  git(dir, "tag", "v0.8.0");
+  git(dir, "tag", "v17.0.0-beta.1");
+
+  const { status, stdout, stderr } = run(dir, { GITHUB_REF_TYPE: "branch", GITHUB_REF_NAME: "develop", GITHUB_RUN_NUMBER: "7" });
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout, "17.0.0-ci.7\n");
 });
 
 test("outside CI, the run number is 0", () => {
-  const dir = repo("0.1.0");
-  git(dir, "tag", "v0.8.0");
+  const dir = repo("17.0.0");
+  git(dir, "tag", "v17.8.0");
 
   const { status, stdout, stderr } = run(dir, {});
   assert.equal(status, 0, stderr);
-  assert.equal(stdout, "0.8.1-ci.0\n");
+  assert.equal(stdout, "17.8.1-ci.0\n");
 });
 
 test("with no stable tag and no <Version>, the build is rejected", () => {
