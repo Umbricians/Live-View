@@ -10,6 +10,9 @@ The repository uses Gitflow:
 - `develop` is the default branch and holds the next release.
 - Work happens on a `feature/…` branch cut from `develop`, and goes back to `develop` through a pull request.
 - `main` only changes through a `release/x.y.z` or `hotfix/x.y.z` pull request, and every version is tagged there.
+- After a release, a `back-merge/x.y.z` branch cut from `main` carries it back into `develop` through a pull
+  request, and moves the package validation baseline to that version
+  ([RELEASING.md](docs/RELEASING.md#a-release), step 7).
 
 Open your pull request against `develop`. Larger changes start as an issue saying what and why, with "Done when"
 criteria the pull request is checked against.

@@ -31,9 +31,10 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <!-- A breaking change to the public API since the last release fails the pack. Differences a version allows
-         are suppressed in CompatibilitySuppressions.xml. -->
+         are suppressed in CompatibilitySuppressions.xml. The baseline moves to each release as it merges back into
+         develop (docs/RELEASING.md). -->
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>0.7.0</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>0.8.0</PackageValidationBaselineVersion>
     <!-- Runs before NuGet collects the package files, so the generated README below is included. -->
     <BeforePack>$(BeforePack);GenerateNuGetReadme</BeforePack>
   </PropertyGroup>
