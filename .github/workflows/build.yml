@@ -66,6 +66,10 @@ jobs:
             exit 1
           fi
 
+      # The build scripts decide the published version and the README nuget.org shows, so their tests run before either is used.
+      - name: Test build scripts
+        run: node --test "build/*.test.mjs"
+
       - name: Work out version
         id: version
         run: |

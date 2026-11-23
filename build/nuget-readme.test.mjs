@@ -1,4 +1,4 @@
-// Tests for nuget-readme.mjs: run with `node --test "build/*.test.mjs"`.
+// Tests for nuget-readme.mjs, run by the build check with `node --test "build/*.test.mjs"`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
