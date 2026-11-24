@@ -21,73 +21,121 @@
 // Any other build is {next patch}-ci.{run number}, where the next patch follows the highest stable release or tag of
 // the project's major, or is the project's <Version> before the major has either. Needs the tags fetched.
 //
-// PACKAGE_VERSIONS, a comma-separated list, stands in for nuget.org's versions in the tests.
+// The functions are exported for build/package-version.test.mjs; running the file does the lookups and prints.
 import { execFileSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 const SEMANTIC_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/;
 const STABLE = /^\d+\.\d+\.\d+$/;
+const STABLE_TAG = /^v\d+\.\d+\.\d+$/;
 
-const [, , packageId = "", projectArgument = "", umbracoArgument = "", mode] = process.argv;
-const { GITHUB_REF_TYPE, GITHUB_REF_NAME = "", GITHUB_RUN_NUMBER = "0", PACKAGE_VERSIONS } = process.env;
-
-const project = projectArgument.trim();
-const umbracoVersion = umbracoArgument.trim();
-const umbracoMajor = project.split(".")[0];
-const tagBuild = GITHUB_REF_TYPE === "tag";
-const tagVersion = tagBuild ? GITHUB_REF_NAME.replace(/^v/, "") : undefined;
-
-if (!packageId || !umbracoVersion) {
-  fail("Usage: node build/package-version.mjs <package id> <project version> <Umbraco version> [--baseline]");
-}
-
-const releases = (await publishedVersions()).filter(ofThisMajor).sort(compare);
-const lastRelease = releases.at(-1);
-// Stable tags of the major, other than the one being built, whether or not they published.
-const tags = stableTags().filter(ofThisMajor);
-
-if (mode === "--baseline") {
-  console.log(lastRelease ?? "");
-  process.exit(0);
-}
-
-const version = tagBuild ? tagVersion : `${nextPatch() ?? project}-ci.${GITHUB_RUN_NUMBER}`;
-
-if (!SEMANTIC_VERSION.test(version)) {
-  fail(`'${version}' is not a valid package version`);
-}
-if (version.split(".")[0] !== umbracoMajor) {
-  fail(`'${version}' doesn't start with the Umbraco major ${umbracoMajor} that the project's <Version> (${project}) supports`);
-}
-if (tagBuild) {
-  if (STABLE.test(version) && !STABLE.test(umbracoVersion)) {
-    fail(`'${version}' is a stable version, but Umbraco ${umbracoMajor}'s lowest supported version is the pre-release ${umbracoVersion}: tag a pre-release such as v${version}-rc.1`);
-  }
-  const allowed = nextReleases();
-  if (!allowed.includes(version.split("-")[0])) {
-    const after = lastRelease ? `the last release of Umbraco major ${umbracoMajor}, ${lastRelease}` : `any release of Umbraco major ${umbracoMajor}`;
-    fail(`'${version}' doesn't follow ${after}: the next release is ${allowed.join(" or ")}`);
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  try {
+    console.log(await main(process.argv.slice(2), process.env));
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
   }
 }
-console.log(version);
 
-function fail(message) {
-  console.error(message);
-  process.exit(1);
-}
-
-function nextPatch() {
-  const highest = [...releases, ...tags].sort(compare).at(-1);
-  return highest ? following(highest)[0] : undefined;
-}
-
-// The releases a tag may build: the next patch or minor after the major's last release, or its first release, and
-// the same after any later tag that never published, whose number can't be used again.
-function nextReleases() {
-  const allowed = lastRelease ? following(lastRelease) : [`${umbracoMajor}.0.0`];
-  for (const tag of tags) {
-    if (!lastRelease || compare(tag, lastRelease) > 0) allowed.push(...following(tag));
+async function main([packageId, project, umbracoVersion, mode], env) {
+  if (!packageId || project === undefined || !umbracoVersion) {
+    throw new Error("Usage: node build/package-version.mjs <package id> <project version> <Umbraco version> [--baseline]");
   }
-  return [...new Set(allowed)].sort(compare);
+  const tags = repositoryTags();
+  const releases = await publishedVersions(packageId, { fetch, repositoryHasReleases: tags.some((tag) => STABLE_TAG.test(tag)) });
+  const ref = { type: env.GITHUB_REF_TYPE, name: env.GITHUB_REF_NAME ?? "", runNumber: env.GITHUB_RUN_NUMBER ?? "0" };
+  return packageVersion({ project, umbracoVersion, tags, releases, ref, baseline: mode === "--baseline" });
+}
+
+/**
+ * The version a build packs, or with baseline the major's last published release ("" before its first). tags are
+ * the repository's tag names, releases the versions nuget.org has, and ref GitHub's ref type, name and run number.
+ * Throws with the reason when the version isn't one the build may pack.
+ */
+export function packageVersion({ project, umbracoVersion, tags, releases, ref = {}, baseline = false }) {
+  project = project.trim();
+  const umbracoMajor = project.split(".")[0];
+  const tagBuild = ref.type === "tag";
+  const tagVersion = tagBuild ? ref.name.replace(/^v/, "") : undefined;
+  const ofThisMajor = (version) => version.split(".")[0] === umbracoMajor;
+
+  // The major's stable releases and stable tags, other than the version being built.
+  const majorReleases = releases.filter((version) => STABLE.test(version) && ofThisMajor(version) && version !== tagVersion).sort(compare);
+  const lastRelease = majorReleases.at(-1);
+  const majorTags = tags
+    .filter((tag) => STABLE_TAG.test(tag) && !(tagBuild && tag === ref.name))
+    .map((tag) => tag.slice(1))
+    .filter(ofThisMajor);
+
+  if (baseline) return lastRelease ?? "";
+
+  const highest = [...majorReleases, ...majorTags].sort(compare).at(-1);
+  const version = tagBuild ? tagVersion : `${highest ? following(highest)[0] : project}-ci.${ref.runNumber ?? "0"}`;
+
+  if (!SEMANTIC_VERSION.test(version)) {
+    throw new Error(`'${version}' is not a valid package version`);
+  }
+  if (version.split(".")[0] !== umbracoMajor) {
+    throw new Error(`'${version}' doesn't start with the Umbraco major ${umbracoMajor} that the project's <Version> (${project}) supports`);
+  }
+  if (tagBuild) {
+    if (STABLE.test(version) && !STABLE.test(umbracoVersion)) {
+      throw new Error(
+        `'${version}' is a stable version, but Umbraco ${umbracoMajor}'s lowest supported version is the pre-release ${umbracoVersion}: tag a pre-release such as v${version}-rc.1`,
+      );
+    }
+    // The next patch or minor after the last release, or the major's first release, and the same after any later
+    // tag that never published, whose number can't be used again.
+    const allowed = lastRelease ? following(lastRelease) : [`${umbracoMajor}.0.0`];
+    for (const tag of majorTags) {
+      if (!lastRelease || compare(tag, lastRelease) > 0) allowed.push(...following(tag));
+    }
+    const next = [...new Set(allowed)].sort(compare);
+    if (!next.includes(version.split("-")[0])) {
+      const after = lastRelease ? `the last release of Umbraco major ${umbracoMajor}, ${lastRelease}` : `any release of Umbraco major ${umbracoMajor}`;
+      throw new Error(`'${version}' doesn't follow ${after}: the next release is ${next.join(" or ")}`);
+    }
+  }
+  return version;
+}
+
+/**
+ * Every version of the package on nuget.org, listed or not, from its flat container: the versions a restore can
+ * download, which is what the baseline check downloads. A package nuget.org doesn't know (404) has no releases, but
+ * only before its first release: once the repository has a stable release tag, a 404 means the lookup is wrong (the
+ * package id, say), and carrying on would pack without the API check.
+ */
+export async function publishedVersions(packageId, { fetch, repositoryHasReleases }) {
+  const url = `https://api.nuget.org/v3-flatcontainer/${packageId.toLowerCase()}/index.json`;
+  let response;
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  } catch (error) {
+    throw new Error(`Couldn't read the published versions from ${url}: ${error.message}`);
+  }
+  if (response.status === 404) {
+    if (repositoryHasReleases) {
+      throw new Error(`${url} doesn't know ${packageId}, but the repository has release tags: check the package id`);
+    }
+    return [];
+  }
+  if (!response.ok) {
+    throw new Error(`Couldn't read the published versions from ${url}: ${response.status}`);
+  }
+  const { versions } = await response.json();
+  if (!Array.isArray(versions)) {
+    throw new Error(`${url} didn't list any versions`);
+  }
+  return versions;
+}
+
+/** Every tag in the repository, reachable or not: Gitflow tags releases on main before develop has them. */
+export function repositoryTags(cwd) {
+  return execFileSync("git", ["tag", "--list"], { cwd, encoding: "utf8" })
+    .split("\n")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
 }
 
 function following(version) {
@@ -95,47 +143,7 @@ function following(version) {
   return [`${major}.${minor}.${patch + 1}`, `${major}.${minor + 1}.0`];
 }
 
-function ofThisMajor(version) {
-  return version.split(".")[0] === umbracoMajor;
-}
-
 function compare(a, b) {
   const [x, y] = [a, b].map((version) => version.split(".").map(Number));
   return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
-}
-
-// Every tag in the repository, reachable or not: Gitflow tags releases on main before develop has them.
-function stableTags() {
-  const output = execFileSync("git", ["tag", "--list", "v*.*.*"], { encoding: "utf8" });
-  return output
-    .split("\n")
-    .map((tag) => tag.trim())
-    .filter((tag) => tag !== GITHUB_REF_NAME || !tagBuild)
-    .map((tag) => tag.slice(1))
-    .filter((version) => STABLE.test(version));
-}
-
-// The stable versions nuget.org has, other than the one being built. The flat container lists every version a
-// restore can download, listed or not, which is what the baseline check downloads.
-async function publishedVersions() {
-  let versions;
-  if (PACKAGE_VERSIONS !== undefined) {
-    versions = PACKAGE_VERSIONS.split(",").map((version) => version.trim()).filter(Boolean);
-  } else {
-    const url = `https://api.nuget.org/v3-flatcontainer/${packageId.toLowerCase()}/index.json`;
-    let response;
-    try {
-      response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-    } catch (error) {
-      fail(`Couldn't read the published versions from ${url}: ${error.message}`);
-    }
-    if (response.status === 404) {
-      versions = [];
-    } else if (!response.ok) {
-      fail(`Couldn't read the published versions from ${url}: ${response.status}`);
-    } else {
-      versions = (await response.json()).versions;
-    }
-  }
-  return versions.filter((version) => STABLE.test(version) && version !== tagVersion);
 }

@@ -7,11 +7,12 @@ import { fileURLToPath } from "node:url";
 
 const script = fileURLToPath(new URL("release-options.mjs", import.meta.url));
 
+function run(tag, input) {
+  return spawnSync(process.execPath, [script, tag], { input, encoding: "utf8" });
+}
+
 function options(tag, releases) {
-  const { status, stdout, stderr } = spawnSync(process.execPath, [script, tag], {
-    input: JSON.stringify(releases.map((tagName) => ({ tagName }))),
-    encoding: "utf8",
-  });
+  const { status, stdout, stderr } = run(tag, JSON.stringify(releases.map((tagName) => ({ tagName }))));
   assert.equal(status, 0, stderr);
   return stdout.split("\n").filter(Boolean);
 }
@@ -43,6 +44,15 @@ test("a pre-release is a GitHub pre-release and never Latest", () => {
 
 test("a re-run doesn't count its own release", () => {
   assert.deepEqual(options("v17.3.0", ["v17.3.0", "v17.2.0"]), ["--notes-start-tag=v17.2.0", "--latest"]);
+});
+
+test("no input fails, since it means listing the releases failed", () => {
+  for (const input of ["", "\n"]) {
+    const { status, stdout, stderr } = run("v17.9.1", input);
+    assert.equal(status, 1);
+    assert.equal(stdout, "");
+    assert.match(stderr, /No releases were given on standard input/);
+  }
 });
 
 test("with no releases at all, a release is Latest", () => {

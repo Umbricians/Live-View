@@ -16,7 +16,14 @@ if (!tag) {
   process.exit(1);
 }
 
-const stable = JSON.parse(readFileSync(0, "utf8") || "[]")
+// No input means `gh release list` failed, not that there are no releases ([] is what an empty list looks like), and
+// guessing would mark an older major's release as Latest.
+const input = readFileSync(0, "utf8").trim();
+if (!input) {
+  console.error("No releases were given on standard input: pass the output of `gh release list --json tagName`.");
+  process.exit(1);
+}
+const stable = JSON.parse(input)
   .map((release) => release.tagName)
   .filter((name) => /^v\d+\.\d+\.\d+$/.test(name) && name !== tag);
 const major = majorOf(tag);

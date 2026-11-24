@@ -236,8 +236,10 @@ jobs:
             echo "Release $TAG already exists"
             exit 0
           fi
-          # A command substitution, so a failing script stops the step (GitHub runs bash with -e and pipefail).
-          chosen=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-pre-releases --limit 100 --json tagName | node build/release-options.mjs "$TAG")
+          # Each command is an assignment of its own, so a failed `gh release list` or script stops the step: the
+          # default shell runs bash with -e but not pipefail, so a failure inside a pipeline wouldn't.
+          releases=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-pre-releases --limit 100 --json tagName)
+          chosen=$(node build/release-options.mjs "$TAG" <<< "$releases")
           mapfile -t options <<< "$chosen"
           echo "Options: ${options[*]}"
           gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes --verify-tag "${options[@]}"
