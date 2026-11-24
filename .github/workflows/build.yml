@@ -109,6 +109,7 @@ jobs:
           umbraco=$(jq -r .Properties.UmbracoVersion <<< "$properties")
           version=$(node build/package-version.mjs "$package" "$project" "$umbraco")
           baseline=$(node build/package-version.mjs "$package" "$project" "$umbraco" --baseline)
+          echo "package=$package" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "baseline=$baseline" >> "$GITHUB_OUTPUT"
           echo "framework=$(jq -r .Properties.TargetFramework <<< "$properties")" >> "$GITHUB_OUTPUT"
@@ -143,6 +144,11 @@ jobs:
       # Packs with a build, so the package always carries the static web assets of the bundle built above.
       - name: Pack
         run: dotnet pack "$PROJECT" -c Release -p:UmbracoMajor="$UMBRACO_MAJOR" -p:Version=${{ steps.version.outputs.version }} -p:LastReleaseVersion=${{ steps.version.outputs.baseline }} -o artifacts
+
+      # A published version can't be withdrawn, so check what was packed: its version, that its Umbraco dependencies
+      # stop before the next major, and that it carries its README, icon and dashboard bundle.
+      - name: Check the package
+        run: node build/check-package.mjs "artifacts/${{ steps.version.outputs.package }}.${{ steps.version.outputs.version }}.nupkg" "${{ steps.version.outputs.version }}" "${{ steps.version.outputs.umbraco }}" "$BUNDLE_PATH"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
