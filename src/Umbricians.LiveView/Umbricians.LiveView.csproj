@@ -1,12 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>$(UmbracoTargetFramework)</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
     <!-- Public types are the package's API, so each needs XML docs, which ship in the package. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
+    <!-- NU5104 warns about a stable package with a pre-release dependency, which the Umbraco range's upper bound
+         (N.0.0-a, src/Directory.Packages.props) always looks like. build/package-version.mjs refuses a stable version
+         while the major's Umbraco version is a pre-release instead. -->
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
@@ -19,8 +23,8 @@
     <Title>Umbricians Live View</Title>
     <Description>A real-time Live View dashboard for the Umbraco Settings section that charts active web, member, backoffice, MCP and API sessions and custom metrics, lists who is online, and messages backoffice users and members.</Description>
     <Authors>Umbricians</Authors>
-    <Version>0.1.0</Version>
-    <PackageTags>umbraco;umbraco-marketplace;dashboard;analytics;realtime</PackageTags>
+    <Version>$(UmbracoMajor).0.0</Version>
+    <PackageTags>umbraco;umbraco-marketplace;umbraco-v$(UmbracoMajor);dashboard;analytics;realtime</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -30,10 +34,18 @@
     <RepositoryType>git</RepositoryType>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <!-- A breaking change to the public API since the last release fails the pack. Differences a version allows
-         are suppressed in CompatibilitySuppressions.xml. -->
+    <!-- A breaking change to the public API since the last release of the same Umbraco major fails the pack. CI passes
+         that release as LastReleaseVersion, the major's last version on nuget.org (build/package-version.mjs with its
+         baseline option); before the major's first release there is none, and the pack checks against the baseline
+         in Directory.Build.props. Differences a version allows are suppressed in CompatibilitySuppressions.<major>.xml,
+         which is emptied as each release of that major merges back into develop (docs/RELEASING.md). Once a release
+         is published, its suppressions are no longer needed, but main and develop keep them until the back-merge, so
+         unnecessary suppressions don't fail the pack. -->
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>0.7.0</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>$(LastReleaseVersion)</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion Condition="'$(LastReleaseVersion)' == ''">$(UmbracoPackageValidationBaselineVersion)</PackageValidationBaselineVersion>
+    <CompatibilitySuppressionFilePath>CompatibilitySuppressions.$(UmbracoMajor).xml</CompatibilitySuppressionFilePath>
+    <ApiCompatPermitUnnecessarySuppressions>true</ApiCompatPermitUnnecessarySuppressions>
     <!-- Runs before NuGet collects the package files, so the generated README below is included. -->
     <BeforePack>$(BeforePack);GenerateNuGetReadme</BeforePack>
   </PropertyGroup>

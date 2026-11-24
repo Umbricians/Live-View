@@ -9,7 +9,7 @@ public static class Constants
     public const string ConfigurationSection = "Umbricians:LiveView";
 
     /// <summary>
-    /// The name of the package's Management API document in the backoffice's Swagger UI.
+    /// The name of the package's Management API document in the backoffice's API docs.
     /// </summary>
     public const string ApiName = "umbricians-live-view";
 

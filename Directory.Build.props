@@ -1,0 +1,65 @@
+<Project>
+  <!--
+    Live View is built once for each Umbraco major it supports, and each build is its own package: its major is the
+    Umbraco major (Live View 17.x for Umbraco 17, 18.x for 18, 19.x for 19). Pick the major with UmbracoMajor:
+
+      dotnet build -p:UmbracoMajor=18
+
+    CI builds every major. Code that differs between majors sits behind UMBRACO_17, UMBRACO_18 or UMBRACO_19, or
+    UMBRACO_18_OR_GREATER and UMBRACO_19_OR_GREATER.
+  -->
+  <PropertyGroup>
+    <UmbracoMajor Condition="'$(UmbracoMajor)' == ''">17</UmbracoMajor>
+  </PropertyGroup>
+
+  <!--
+    Per major: the .NET version Umbraco targets, the lowest Umbraco version the package supports (src/
+    Directory.Packages.props sets the package's references to it, up to the next major's pre-releases), the demo's
+    Umbraco version, and the release the pack checks the public API against until the major has a release of its own
+    (0.8.0 for 17, the last release before the versions followed the Umbraco major; empty for a new major). Once it has
+    one, CI checks against the major's last version on nuget.org instead (Umbricians.LiveView.csproj). The client
+    checks its types against the lowest version too (build.yml).
+
+    The lowest version is the major's latest stable Umbraco security release, or its release candidate until the
+    major is out, so installing Live View brings a site up to it. Dependabot can't update these properties: when
+    Umbraco publishes a security release, move UmbracoVersion and UmbracoDemoVersion to it here.
+  -->
+  <Choose>
+    <When Condition="'$(UmbracoMajor)' == '17'">
+      <PropertyGroup>
+        <UmbracoTargetFramework>net10.0</UmbracoTargetFramework>
+        <UmbracoVersion>17.8.2</UmbracoVersion>
+        <UmbracoDemoVersion>17.8.2</UmbracoDemoVersion>
+        <UmbracoPackageValidationBaselineVersion>0.8.0</UmbracoPackageValidationBaselineVersion>
+      </PropertyGroup>
+    </When>
+    <When Condition="'$(UmbracoMajor)' == '18'">
+      <PropertyGroup>
+        <UmbracoTargetFramework>net10.0</UmbracoTargetFramework>
+        <UmbracoVersion>18.3.2</UmbracoVersion>
+        <UmbracoDemoVersion>18.3.2</UmbracoDemoVersion>
+        <UmbracoPackageValidationBaselineVersion></UmbracoPackageValidationBaselineVersion>
+      </PropertyGroup>
+    </When>
+    <!-- Umbraco 19 is a release candidate, so Live View 19 publishes pre-releases only until Umbraco 19 is out. -->
+    <When Condition="'$(UmbracoMajor)' == '19'">
+      <PropertyGroup>
+        <UmbracoTargetFramework>net11.0</UmbracoTargetFramework>
+        <UmbracoVersion>19.0.0-rc2</UmbracoVersion>
+        <UmbracoDemoVersion>19.0.0-rc2</UmbracoDemoVersion>
+        <UmbracoPackageValidationBaselineVersion></UmbracoPackageValidationBaselineVersion>
+      </PropertyGroup>
+    </When>
+  </Choose>
+
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);UMBRACO_$(UmbracoMajor)</DefineConstants>
+    <DefineConstants Condition="$(UmbracoMajor) &gt;= 18">$(DefineConstants);UMBRACO_18_OR_GREATER</DefineConstants>
+    <DefineConstants Condition="$(UmbracoMajor) &gt;= 19">$(DefineConstants);UMBRACO_19_OR_GREATER</DefineConstants>
+  </PropertyGroup>
+
+  <Target Name="CheckUmbracoMajor" BeforeTargets="_CheckForInvalidConfigurationAndPlatform;Restore">
+    <Error Condition="'$(UmbracoVersion)' == ''"
+           Text="Live View doesn't build for Umbraco $(UmbracoMajor). Set UmbracoMajor to 17, 18 or 19 (Directory.Build.props)." />
+  </Target>
+</Project>

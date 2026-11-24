@@ -1,3 +1,4 @@
+#if UMBRACO_17
 using Umbraco.Cms.Api.Management.OpenApi;
 
 namespace Umbricians.LiveView.OpenApi;
@@ -9,3 +10,4 @@ internal sealed class LiveViewSecurityRequirementsOperationFilter : BackOfficeSe
 {
     protected override string ApiName => Constants.ApiName;
 }
+#endif

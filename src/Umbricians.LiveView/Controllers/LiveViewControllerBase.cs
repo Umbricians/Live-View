@@ -8,7 +8,7 @@ namespace Umbricians.LiveView.Controllers;
 
 /// <summary>
 /// The base of every Live View Management API controller: signed-in backoffice users only, the backoffice's JSON
-/// settings, and the package's own Swagger document.
+/// settings, and the package's own API document.
 /// </summary>
 [ApiController]
 [Authorize(Policy = AuthorizationPolicies.BackOfficeAccess)]

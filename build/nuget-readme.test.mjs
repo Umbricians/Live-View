@@ -1,8 +1,8 @@
-// Tests for nuget-readme.mjs: run with `node --test "build/*.test.mjs"`.
+// Tests for nuget-readme.mjs, run by the build check with `node --test "build/*.test.mjs"`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,13 +34,18 @@ See [getting started](docs/getting-started.md), [the licence](./LICENSE), [below
 [Contributing](CONTRIBUTING.md) is left out of the package.
 `;
 
+// Runs the script on readme in a temp folder, which it removes once it has read the output.
 function run(readme, ref) {
   const dir = mkdtempSync(join(tmpdir(), "nuget-readme-"));
-  const input = join(dir, "README.md");
-  const output = join(dir, "out", "README.md");
-  writeFileSync(input, readme);
-  const result = spawnSync(process.execPath, [script, input, output, repo, ...(ref ? [ref] : [])], { encoding: "utf8" });
-  return { ...result, readme: result.status === 0 ? readFileSync(output, "utf8") : undefined };
+  try {
+    const input = join(dir, "README.md");
+    const output = join(dir, "out", "README.md");
+    writeFileSync(input, readme);
+    const result = spawnSync(process.execPath, [script, input, output, repo, ...(ref ? [ref] : [])], { encoding: "utf8" });
+    return { ...result, readme: result.status === 0 ? readFileSync(output, "utf8") : undefined };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 for (const ref of ["main", "v1.2.3"]) {

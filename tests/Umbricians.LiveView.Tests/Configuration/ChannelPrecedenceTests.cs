@@ -142,21 +142,29 @@ public class ChannelPrecedenceTests
         return provider.GetRequiredService<IOptions<LiveViewOptions>>().Value;
     }
 
-    /// <summary>An <see cref="IUmbracoBuilder"/> that only exposes <see cref="IUmbracoBuilder.Services"/>.</summary>
+    /// <summary>
+    /// An <see cref="IUmbracoBuilder"/> that only exposes <see cref="IUmbracoBuilder.Services"/> and
+    /// <see cref="IUmbracoBuilder.Config"/>, which is empty unless one is given.
+    /// </summary>
     public class ServicesOnlyBuilder : DispatchProxy
     {
         private IServiceCollection _services = null!;
+        private IConfiguration _config = null!;
 
-        public static IUmbracoBuilder Create(IServiceCollection services)
+        public static IUmbracoBuilder Create(IServiceCollection services, IConfiguration? config = null)
         {
             IUmbracoBuilder builder = Create<IUmbracoBuilder, ServicesOnlyBuilder>();
-            ((ServicesOnlyBuilder)(object)builder)._services = services;
+            var proxy = (ServicesOnlyBuilder)(object)builder;
+            proxy._services = services;
+            proxy._config = config ?? new ConfigurationBuilder().Build();
             return builder;
         }
 
-        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
-            targetMethod?.Name == $"get_{nameof(IUmbracoBuilder.Services)}"
-                ? _services
-                : throw new NotSupportedException(targetMethod?.Name);
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => targetMethod?.Name switch
+        {
+            $"get_{nameof(IUmbracoBuilder.Services)}" => _services,
+            $"get_{nameof(IUmbracoBuilder.Config)}" => _config,
+            _ => throw new NotSupportedException(targetMethod?.Name),
+        };
     }
 }
