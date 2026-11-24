@@ -17,20 +17,24 @@
     Directory.Packages.props pins the package's references to it, so sites on newer versions resolve their own), the
     demo's Umbraco version, and the release the pack checks the public API against (empty until the major's first
     release). The client checks its types against the lowest version too (build.yml).
+
+    The lowest version is the major's latest Umbraco security release, so installing Live View brings a site up to
+    it. Dependabot can't update these properties: when Umbraco publishes a security release, move UmbracoVersion
+    and UmbracoDemoVersion to it here.
   -->
   <Choose>
     <When Condition="'$(UmbracoMajor)' == '17'">
       <PropertyGroup>
         <UmbracoTargetFramework>net10.0</UmbracoTargetFramework>
-        <UmbracoVersion>17.8.0</UmbracoVersion>
-        <UmbracoDemoVersion>17.8.1</UmbracoDemoVersion>
+        <UmbracoVersion>17.8.2</UmbracoVersion>
+        <UmbracoDemoVersion>17.8.2</UmbracoDemoVersion>
         <UmbracoPackageValidationBaselineVersion>0.8.0</UmbracoPackageValidationBaselineVersion>
       </PropertyGroup>
     </When>
     <When Condition="'$(UmbracoMajor)' == '18'">
       <PropertyGroup>
         <UmbracoTargetFramework>net10.0</UmbracoTargetFramework>
-        <UmbracoVersion>18.3.0</UmbracoVersion>
+        <UmbracoVersion>18.3.2</UmbracoVersion>
         <UmbracoDemoVersion>18.3.2</UmbracoDemoVersion>
         <UmbracoPackageValidationBaselineVersion></UmbracoPackageValidationBaselineVersion>
       </PropertyGroup>
@@ -39,8 +43,8 @@
     <When Condition="'$(UmbracoMajor)' == '19'">
       <PropertyGroup>
         <UmbracoTargetFramework>net11.0</UmbracoTargetFramework>
-        <UmbracoVersion>19.0.0-rc1</UmbracoVersion>
-        <UmbracoDemoVersion>19.0.0-rc1</UmbracoDemoVersion>
+        <UmbracoVersion>19.0.0-rc2</UmbracoVersion>
+        <UmbracoDemoVersion>19.0.0-rc2</UmbracoDemoVersion>
         <UmbracoPackageValidationBaselineVersion></UmbracoPackageValidationBaselineVersion>
       </PropertyGroup>
     </When>

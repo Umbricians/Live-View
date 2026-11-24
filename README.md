@@ -5,7 +5,7 @@
 [![NuGet](https://img.shields.io/nuget/v/Umbricians.LiveView?label=NuGet)](https://www.nuget.org/packages/Umbricians.LiveView)
 [![Build](https://github.com/Umbricians/Live-View/actions/workflows/build.yml/badge.svg)](https://github.com/Umbricians/Live-View/actions/workflows/build.yml)
 
-A real-time **Live View** dashboard for the Umbraco **Settings** section (Umbraco 17 from 17.8, Umbraco 18 from 18.3,
+A real-time **Live View** dashboard for the Umbraco **Settings** section (Umbraco 17 from 17.8.2, Umbraco 18 from 18.3.2,
 and Umbraco 19 in pre-release). It charts how many sessions are active right now:
 
 - **Web sessions**: front-end visitors
@@ -91,8 +91,8 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
 dotnet add package Umbricians.LiveView
 ```
 
-Each Live View major is for the Umbraco major with the same number: Live View 17.x for Umbraco 17 (from 17.8), 18.x
-for Umbraco 18 (from 18.3), and 19.x for Umbraco 19, published as pre-releases until Umbraco 19 is released. Without
+Each Live View major is for the Umbraco major with the same number: Live View 17.x for Umbraco 17 (from 17.8.2), 18.x
+for Umbraco 18 (from 18.3.2), and 19.x for Umbraco 19, published as pre-releases until Umbraco 19 is released. Without
 `--version`, NuGet installs the newest stable Live View, which is for the newest Umbraco major, so on an older major
 pass the version that matches it, such as `--version 17.0.0`.
 

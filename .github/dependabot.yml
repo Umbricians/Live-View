@@ -14,12 +14,11 @@ updates:
       umbraco:
         patterns: ["Umbraco.*"]
     ignore:
-      # The package's references stay at the lowest Umbraco version each major supports (UmbracoVersion in
-      # Directory.Build.props).
+      # The package's and the demo's Umbraco versions are properties in Directory.Build.props (UmbracoVersion and
+      # UmbracoDemoVersion), which Dependabot can't update; they move by hand to each Umbraco security release.
       - dependency-name: "Umbraco.Cms.Api.Common"
       - dependency-name: "Umbraco.Cms.Api.Management"
       - dependency-name: "Umbraco.Cms.Web.Common"
-      # The demo's Umbraco.Cms (UmbracoDemoVersion in Directory.Build.props) keeps getting minor and patch updates.
       # Supporting a new Umbraco major means adding it to Directory.Build.props and build.yml, so it isn't proposed
       # here.
       - dependency-name: "Umbraco.*"
