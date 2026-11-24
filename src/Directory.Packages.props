@@ -2,10 +2,11 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <!-- The Umbraco versions the package supports: from the lowest version of the major being built (UmbracoVersion
-         in Directory.Build.props) up to, but not including, the next major or any of its pre-releases (N.0.0-0 sorts
-         below every N.0.0 pre-release). Sites on newer versions of the same major resolve their own, and NuGet won't
-         install the package on another major or its release candidates. -->
-    <UmbracoVersionRange>[$(UmbracoVersion), $([MSBuild]::Add($(UmbracoMajor), 1)).0.0-0)</UmbracoVersionRange>
+         in Directory.Build.props) up to, but not including, the next major or any of its pre-releases. N.0.0-a sorts
+         below every N.0.0 pre-release nuget.org can hold (it compares labels ignoring case, and refuses labels that
+         don't start with a letter, such as N.0.0-0). Sites on newer versions of the same major resolve their own, and
+         NuGet won't install the package on another major or its pre-releases. -->
+    <UmbracoVersionRange>[$(UmbracoVersion), $([MSBuild]::Add($(UmbracoMajor), 1)).0.0-a)</UmbracoVersionRange>
   </PropertyGroup>
 
   <ItemGroup>

@@ -49,7 +49,7 @@ function zip(files, deflated = []) {
   return Buffer.concat([...locals, directory, end]);
 }
 
-function nuspec({ version = "17.2.0", range = "[17.8.2, 18.0.0-0)", dependencies } = {}) {
+function nuspec({ version = "17.2.0", range = "[17.8.2, 18.0.0-a)", dependencies } = {}) {
   dependencies ??= ["Umbraco.Cms.Api.Common", "Umbraco.Cms.Web.Common"].map(
     (id) => `<dependency id="${id}" version="${range}" exclude="Build,Analyzers" />`,
   );
@@ -81,8 +81,8 @@ function packageFiles(overrides = {}) {
 }
 
 test("the Umbraco range runs from the lowest version to before the next major's pre-releases", () => {
-  assert.equal(umbracoRange("17.8.2"), "[17.8.2, 18.0.0-0)");
-  assert.equal(umbracoRange("19.0.0-rc2"), "[19.0.0-rc2, 20.0.0-0)");
+  assert.equal(umbracoRange("17.8.2"), "[17.8.2, 18.0.0-a)");
+  assert.equal(umbracoRange("19.0.0-rc2"), "[19.0.0-rc2, 20.0.0-a)");
 });
 
 test("a zip's stored and deflated files are read back", () => {
@@ -106,24 +106,25 @@ test("a package of another version fails", () => {
   ]);
 });
 
-for (const range of ["17.8.2", "[17.8.2, 18.0.0)", "[17.8.2, 19.0.0-0)", "[17.8.0, 18.0.0-0)", "[18.3.2, 19.0.0-0)"]) {
+// 18.0.0-0 keeps out the 18 pre-releases too, but nuget.org refuses a package with it: a label must start with a letter.
+for (const range of ["17.8.2", "[17.8.2, 18.0.0)", "[17.8.2, 18.0.0-0)", "[17.8.2, 19.0.0-a)", "[17.8.0, 18.0.0-a)", "[18.3.2, 19.0.0-a)"]) {
   test(`an Umbraco range of ${range} fails`, () => {
     const problems = checkPackage(packageFiles({ "Umbricians.Example.nuspec": nuspec({ range }) }), expected);
     assert.deepEqual(problems, [
-      `Umbraco.Cms.Api.Common is ${range}, not [17.8.2, 18.0.0-0)`,
-      `Umbraco.Cms.Web.Common is ${range}, not [17.8.2, 18.0.0-0)`,
+      `Umbraco.Cms.Api.Common is ${range}, not [17.8.2, 18.0.0-a)`,
+      `Umbraco.Cms.Web.Common is ${range}, not [17.8.2, 18.0.0-a)`,
     ]);
   });
 }
 
 test("one Umbraco dependency with the wrong range fails, whatever the others have", () => {
   const dependencies = [
-    `<dependency id="Umbraco.Cms.Api.Common" version="[17.8.2, 18.0.0-0)" />`,
+    `<dependency id="Umbraco.Cms.Api.Common" version="[17.8.2, 18.0.0-a)" />`,
     `<dependency id="Umbraco.Cms.Web.Common" version="17.8.2" />`,
     `<dependency id="Some.Other.Package" version="1.0.0" />`,
   ];
   assert.deepEqual(checkPackage(packageFiles({ "Umbricians.Example.nuspec": nuspec({ dependencies }) }), expected), [
-    "Umbraco.Cms.Web.Common is 17.8.2, not [17.8.2, 18.0.0-0)",
+    "Umbraco.Cms.Web.Common is 17.8.2, not [17.8.2, 18.0.0-a)",
   ]);
 });
 
@@ -133,7 +134,7 @@ test("a package with no Umbraco dependency fails", () => {
 });
 
 test("a package of a release candidate major checks the release candidate's range", () => {
-  const files = packageFiles({ "Umbricians.Example.nuspec": nuspec({ version: "19.0.0-rc.1", range: "[19.0.0-rc2, 20.0.0-0)" }) });
+  const files = packageFiles({ "Umbricians.Example.nuspec": nuspec({ version: "19.0.0-rc.1", range: "[19.0.0-rc2, 20.0.0-a)" }) });
   assert.deepEqual(checkPackage(files, { version: "19.0.0-rc.1", umbracoVersion: "19.0.0-rc2", bundlePath: BUNDLE }), []);
 });
 

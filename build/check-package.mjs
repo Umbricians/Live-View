@@ -3,7 +3,7 @@
 //   node build/check-package.mjs <.nupkg> <version> <Umbraco version> <bundle URL path>
 //
 // - the .nuspec's version is the version the build packed;
-// - every Umbraco dependency's range is [<Umbraco version>, <next major>.0.0-0), so the package installs on its own
+// - every Umbraco dependency's range is [<Umbraco version>, <next major>.0.0-a), so the package installs on its own
 //   Umbraco major only, and there is at least one;
 // - the package carries its README, its icon and the dashboard bundle (static web assets under staticwebassets/).
 //
@@ -30,7 +30,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 /** The Umbraco range a package for umbracoVersion's major must depend on. */
 export function umbracoRange(umbracoVersion) {
   const major = Number(umbracoVersion.split(".")[0]);
-  return `[${umbracoVersion}, ${major + 1}.0.0-0)`;
+  return `[${umbracoVersion}, ${major + 1}.0.0-a)`;
 }
 
 /** The problems with a package, given its files as a Map of path to contents. */
