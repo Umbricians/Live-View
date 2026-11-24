@@ -21,7 +21,8 @@
 // Any other build is {next patch}-ci.{run number}, where the next patch follows the highest stable release or tag of
 // the project's major, or is the project's <Version> before the major has either. Needs the tags fetched.
 //
-// The functions are exported for build/package-version.test.mjs; running the file does the lookups and prints.
+// The functions are exported for build/package-version.test.mjs; running the file calls main with the real fetch and
+// the repository's tags, and prints what it returns.
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -31,20 +32,24 @@ const STABLE_TAG = /^v\d+\.\d+\.\d+$/;
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   try {
-    console.log(await main(process.argv.slice(2), process.env));
+    console.log(await main(process.argv.slice(2), process.env, { fetch, tags: repositoryTags() }));
   } catch (error) {
     console.error(error.message);
     process.exit(1);
   }
 }
 
-async function main([packageId, project, umbracoVersion, mode], env) {
+/**
+ * What the script prints for its command-line arguments and GitHub's ref variables in env, looking the package up
+ * with fetch and reading the repository's tags from tags.
+ */
+export async function main([packageId, project, umbracoVersion, mode], env, { fetch, tags }) {
   if (!packageId || project === undefined || !umbracoVersion) {
     throw new Error("Usage: node build/package-version.mjs <package id> <project version> <Umbraco version> [--baseline]");
   }
-  const tags = repositoryTags();
-  const releases = await publishedVersions(packageId, { fetch, repositoryHasReleases: tags.some((tag) => STABLE_TAG.test(tag)) });
   const ref = { type: env.GITHUB_REF_TYPE, name: env.GITHUB_REF_NAME ?? "", runNumber: env.GITHUB_RUN_NUMBER ?? "0" };
+  const building = ref.type === "tag" ? ref.name : undefined;
+  const releases = await publishedVersions(packageId, { fetch, tags, building });
   return packageVersion({ project, umbracoVersion, tags, releases, ref, baseline: mode === "--baseline" });
 }
 
@@ -103,10 +108,11 @@ export function packageVersion({ project, umbracoVersion, tags, releases, ref = 
 /**
  * Every version of the package on nuget.org, listed or not, from its flat container: the versions a restore can
  * download, which is what the baseline check downloads. A package nuget.org doesn't know (404) has no releases, but
- * only before its first release: once the repository has a stable release tag, a 404 means the lookup is wrong (the
- * package id, say), and carrying on would pack without the API check.
+ * only before its first release: once the repository has a stable tag other than the one being built (building), a
+ * 404 means the lookup is wrong (the package id, say), and carrying on would pack without the API check.
  */
-export async function publishedVersions(packageId, { fetch, repositoryHasReleases }) {
+export async function publishedVersions(packageId, { fetch, tags, building }) {
+  const repositoryHasReleases = tags.some((tag) => STABLE_TAG.test(tag) && tag !== building);
   const url = `https://api.nuget.org/v3-flatcontainer/${packageId.toLowerCase()}/index.json`;
   let response;
   try {

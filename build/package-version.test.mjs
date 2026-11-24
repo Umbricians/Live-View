@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { packageVersion, publishedVersions, repositoryTags } from "./package-version.mjs";
+import { main, packageVersion, publishedVersions, repositoryTags } from "./package-version.mjs";
 
 const tagBuild = (name) => ({ type: "tag", name, runNumber: "42" });
 const branchBuild = (runNumber = "7") => ({ type: "branch", name: "develop", runNumber });
@@ -155,40 +155,74 @@ function fakeFetch({ status = 200, body, error } = {}) {
 
 test("the lookup asks nuget.org's flat container for the lowercased package id", async () => {
   const fetch = fakeFetch({ body: { versions: ["17.0.0"] } });
-  await publishedVersions("Umbricians.LiveView", { fetch, repositoryHasReleases: true });
+  await publishedVersions("Umbricians.LiveView", { fetch, tags: ["v0.8.0"] });
   assert.equal(fetch.url, "https://api.nuget.org/v3-flatcontainer/umbricians.liveview/index.json");
 });
 
 test("the lookup returns every version, stable and pre-release, and the version rules pick the stable ones", async () => {
   const releases = await publishedVersions("Umbricians.LiveView", {
     fetch: fakeFetch({ body: { versions: ["0.8.0", "17.0.0", "17.1.0-beta.1", "17.0.1"] } }),
-    repositoryHasReleases: true,
+    tags: ["v0.8.0"],
   });
   assert.deepEqual(releases, ["0.8.0", "17.0.0", "17.1.0-beta.1", "17.0.1"]);
   assert.equal(version(branchBuild(), { releases, baseline: true }), "17.0.1");
 });
 
 test("a package nuget.org doesn't know has no releases before the repository's first release tag", async () => {
-  const releases = await publishedVersions("Umbricians.New", { fetch: fakeFetch({ status: 404 }), repositoryHasReleases: false });
-  assert.deepEqual(releases, []);
+  const fetch = fakeFetch({ status: 404 });
+  assert.deepEqual(await publishedVersions("Umbricians.New", { fetch, tags: [] }), []);
+  // Pre-release tags aren't releases, and neither is the first release's own tag while it builds.
+  assert.deepEqual(await publishedVersions("Umbricians.New", { fetch, tags: ["v17.0.0-rc.1"] }), []);
+  assert.deepEqual(await publishedVersions("Umbricians.New", { fetch, tags: ["v17.0.0-rc.1", "v17.0.0"], building: "v17.0.0" }), []);
 });
 
 test("a package nuget.org doesn't know fails once the repository has release tags, since the lookup must be wrong", async () => {
-  await assert.rejects(publishedVersions("Umbricians.Typo", { fetch: fakeFetch({ status: 404 }), repositoryHasReleases: true }), {
+  await assert.rejects(publishedVersions("Umbricians.Typo", { fetch: fakeFetch({ status: 404 }), tags: ["v0.8.0"] }), {
     message: /doesn't know Umbricians\.Typo, but the repository has release tags: check the package id/,
   });
 });
 
 test("a failed lookup fails the build", async () => {
-  await assert.rejects(publishedVersions("Umbricians.LiveView", { fetch: fakeFetch({ status: 500 }), repositoryHasReleases: true }), {
+  await assert.rejects(publishedVersions("Umbricians.LiveView", { fetch: fakeFetch({ status: 500 }), tags: ["v0.8.0"] }), {
     message: /Couldn't read the published versions from .*: 500/,
   });
-  await assert.rejects(publishedVersions("Umbricians.LiveView", { fetch: fakeFetch({ error: new Error("timed out") }), repositoryHasReleases: false }), {
+  await assert.rejects(publishedVersions("Umbricians.LiveView", { fetch: fakeFetch({ error: new Error("timed out") }), tags: [] }), {
     message: /Couldn't read the published versions from .*: timed out/,
   });
-  await assert.rejects(publishedVersions("Umbricians.LiveView", { fetch: fakeFetch({ body: {} }), repositoryHasReleases: true }), {
+  await assert.rejects(publishedVersions("Umbricians.LiveView", { fetch: fakeFetch({ body: {} }), tags: ["v0.8.0"] }), {
     message: /didn't list any versions/,
   });
+});
+
+// main is what the build runs: the command-line arguments and GitHub's variables, the lookup and the tags together.
+const cli = (env, { tags = ["v0.8.0", "v17.2.0"], fetch = fakeFetch({ body: { versions: ["0.8.0", "17.2.0"] } }), args = [] } = {}) =>
+  main(["Umbricians.LiveView", "17.0.0", "17.8.2", ...args], env, { fetch, tags });
+
+test("a tag build through main packs the tag's version, not a -ci one", async () => {
+  const env = { GITHUB_REF_TYPE: "tag", GITHUB_REF_NAME: "v17.3.0", GITHUB_RUN_NUMBER: "42" };
+  assert.equal(await cli(env, { tags: ["v0.8.0", "v17.2.0", "v17.3.0"] }), "17.3.0");
+  await assert.rejects(cli({ ...env, GITHUB_REF_NAME: "v17.5.0" }, { tags: ["v17.2.0", "v17.5.0"] }), { message: /the next release is 17\.2\.1 or 17\.3\.0/ });
+});
+
+test("a branch build through main packs the next patch with its run number", async () => {
+  assert.equal(await cli({ GITHUB_REF_TYPE: "branch", GITHUB_REF_NAME: "develop", GITHUB_RUN_NUMBER: "42" }), "17.2.1-ci.42");
+  assert.equal(await cli({}), "17.2.1-ci.0");
+});
+
+test("the baseline through main is the major's last published release", async () => {
+  assert.equal(await cli({ GITHUB_REF_TYPE: "branch" }, { args: ["--baseline"] }), "17.2.0");
+});
+
+test("main fails on a 404 once the repository has a stable tag other than the one being built", async () => {
+  const fetch = fakeFetch({ status: 404 });
+  await assert.rejects(cli({ GITHUB_REF_TYPE: "branch" }, { fetch }), { message: /check the package id/ });
+  await assert.rejects(cli({ GITHUB_REF_TYPE: "tag", GITHUB_REF_NAME: "v17.0.0" }, { fetch, tags: ["v0.8.0", "v17.0.0"] }), { message: /check the package id/ });
+  // A new package's first release: its own tag is the only stable one, so nuget.org not knowing it is expected.
+  assert.equal(await cli({ GITHUB_REF_TYPE: "tag", GITHUB_REF_NAME: "v17.0.0" }, { fetch, tags: ["v17.0.0"] }), "17.0.0");
+});
+
+test("main without its arguments fails with the usage", async () => {
+  await assert.rejects(main(["Umbricians.LiveView"], {}, { fetch: fakeFetch(), tags: [] }), { message: /^Usage: node build\/package-version\.mjs/ });
 });
 
 test("every tag in the repository is read, reachable from the branch or not", () => {
