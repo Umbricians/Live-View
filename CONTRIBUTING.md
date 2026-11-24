@@ -39,17 +39,17 @@ cd src/Umbricians.LiveView/Client && npm ci && npm install --no-save @umbraco-cm
 dotnet build Umbricians.LiveView.slnx -c Release -p:UmbracoMajor=$major
 dotnet test Umbricians.LiveView.slnx -c Release --no-build -p:UmbracoMajor=$major
 node build/smoke-test.mjs demo/Umbricians.LiveView.Demo net10.0 /App_Plugins/UmbriciansLiveView/umbricians-live-view.js /umbraco/openapi/umbricians-live-view.json "Umbricians Live View"
-project=$(dotnet msbuild src/Umbricians.LiveView -getProperty:Version -p:UmbracoMajor=$major)
-dotnet pack src/Umbricians.LiveView -c Release -o artifacts -p:UmbracoMajor=$major -p:Version=$(node build/package-version.mjs $project) -p:LastReleaseVersion=$(node build/package-version.mjs $project --baseline)
+versions="Umbricians.LiveView $(dotnet msbuild src/Umbricians.LiveView -getProperty:Version -p:UmbracoMajor=$major) $(dotnet msbuild src/Umbricians.LiveView -getProperty:UmbracoVersion -p:UmbracoMajor=$major)"
+dotnet pack src/Umbricians.LiveView -c Release -o artifacts -p:UmbracoMajor=$major -p:Version=$(node build/package-version.mjs $versions) -p:LastReleaseVersion=$(node build/package-version.mjs $versions --baseline)
 ```
 
 In PowerShell, pack with:
 
 ```powershell
 $major = 18
-$project = dotnet msbuild src/Umbricians.LiveView -getProperty:Version -p:UmbracoMajor=$major
-$version = node build/package-version.mjs $project
-$baseline = node build/package-version.mjs $project --baseline
+$versions = "Umbricians.LiveView", (dotnet msbuild src/Umbricians.LiveView -getProperty:Version -p:UmbracoMajor=$major), (dotnet msbuild src/Umbricians.LiveView -getProperty:UmbracoVersion -p:UmbracoMajor=$major)
+$version = node build/package-version.mjs @versions
+$baseline = node build/package-version.mjs @versions --baseline
 dotnet pack src/Umbricians.LiveView -c Release -o artifacts -p:UmbracoMajor=$major -p:Version=$version -p:LastReleaseVersion=$baseline
 ```
 
@@ -69,14 +69,16 @@ hand-written output.
 The solution includes the demo site, so `dotnet build` builds it too. Pack with a build, as above: the dashboard
 bundle must be built first, and packing stops with an error if it is missing. Package validation compares the package
 with the last release of the same Umbraco major, so it is packed with the version CI uses, which comes after it, and
-with that release as `LastReleaseVersion` (the script needs the release tags, which a clone fetches). Differences a
+with that release as `LastReleaseVersion` (the script needs the release tags, which a clone fetches, and reads the
+published versions from nuget.org). Differences a
 change is allowed to make go in that major's `CompatibilitySuppressions.<major>.xml`.
 
 Every pack checks the README it generates for nuget.org, and fails naming each problem: a relative link, a link
 off the release's ref, or an HTML image or comment left in. The `build` check runs the build scripts' tests,
 `node --test "build/*.test.mjs"`, before it works out the version: `build/nuget-readme.test.mjs` covers the README
-check and `build/package-version.test.mjs` covers the version a build packs, including the version each tag
-publishes. The version tests need git on the path.
+check, `build/package-version.test.mjs` covers the version a build packs, including the version each tag
+publishes, and `build/release-options.test.mjs` covers the options each tag's GitHub release gets. The version tests
+need git on the path.
 
 In Git Bash on Windows, the URL path arguments get rewritten into Windows paths, so run the smoke test there as
 `MSYS_NO_PATHCONV=1 node build/smoke-test.mjs …`. PowerShell and CI are unaffected.

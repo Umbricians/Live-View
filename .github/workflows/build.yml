@@ -99,18 +99,20 @@ jobs:
 
       # Directory.Build.props maps the major to the project's <Version>, its target framework and the lowest Umbraco
       # version it supports. A tag must be the next release of its major, and the pack checks the public API against
-      # the major's last release.
+      # the major's last version on nuget.org.
       - name: Work out version
         id: version
         run: |
-          properties=$(dotnet msbuild "$PROJECT" -getProperty:Version -getProperty:TargetFramework -getProperty:UmbracoVersion -p:UmbracoMajor="$UMBRACO_MAJOR")
+          properties=$(dotnet msbuild "$PROJECT" -getProperty:PackageId -getProperty:Version -getProperty:TargetFramework -getProperty:UmbracoVersion -p:UmbracoMajor="$UMBRACO_MAJOR")
+          package=$(jq -r .Properties.PackageId <<< "$properties")
           project=$(jq -r .Properties.Version <<< "$properties")
-          version=$(node build/package-version.mjs "$project")
-          baseline=$(node build/package-version.mjs "$project" --baseline)
+          umbraco=$(jq -r .Properties.UmbracoVersion <<< "$properties")
+          version=$(node build/package-version.mjs "$package" "$project" "$umbraco")
+          baseline=$(node build/package-version.mjs "$package" "$project" "$umbraco" --baseline)
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "baseline=$baseline" >> "$GITHUB_OUTPUT"
           echo "framework=$(jq -r .Properties.TargetFramework <<< "$properties")" >> "$GITHUB_OUTPUT"
-          echo "umbraco=$(jq -r .Properties.UmbracoVersion <<< "$properties")" >> "$GITHUB_OUTPUT"
+          echo "umbraco=$umbraco" >> "$GITHUB_OUTPUT"
           echo "Version: $version, checked against ${baseline:-the baseline in Directory.Build.props}"
 
       - name: Stamp version into umbraco-package.json
@@ -209,16 +211,22 @@ jobs:
     permissions:
       contents: write # create the release
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: build
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: nuget-package-*
           merge-multiple: true
           path: artifacts
 
-      # Tags with a pre-release suffix (v17.3.0-beta.1) become GitHub pre-releases. Notes start at the last stable
-      # release of the same Umbraco major, so a release after betas lists everything since then, and one tagged beside
-      # another major's release isn't empty. Only a release of the newest Umbraco major becomes the repository's
-      # Latest, so a 17.x hotfix after 18.x doesn't take it. Re-running leaves an existing release alone.
+      # build/release-options.mjs picks the options: a pre-release for a suffixed tag, notes from the last release of
+      # the same Umbraco major, and Latest only for the newest major. Re-running leaves an existing release alone.
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -228,14 +236,8 @@ jobs:
             echo "Release $TAG already exists"
             exit 0
           fi
-          options=(--repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes --verify-tag)
-          [[ "$TAG" == *-* ]] && options+=(--prerelease)
-          major="${TAG#v}"; major="${major%%.*}"
-          stable=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-pre-releases --limit 100 --json tagName)
-          previous=$(jq -r --arg prefix "v$major." '[.[] | select(.tagName | startswith($prefix))][0].tagName // empty' <<< "$stable")
-          [[ -n "$previous" ]] && options+=(--notes-start-tag "$previous")
-          newest=$(jq '[.[].tagName | ltrimstr("v") | split(".")[0] | tonumber] | max // 0' <<< "$stable")
-          if [[ "$TAG" != *-* ]]; then
-            if (( major >= newest )); then options+=(--latest); else options+=(--latest=false); fi
-          fi
-          gh release create "$TAG" artifacts/* "${options[@]}"
+          # A command substitution, so a failing script stops the step (GitHub runs bash with -e and pipefail).
+          chosen=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-pre-releases --limit 100 --json tagName | node build/release-options.mjs "$TAG")
+          mapfile -t options <<< "$chosen"
+          echo "Options: ${options[*]}"
+          gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes --verify-tag "${options[@]}"

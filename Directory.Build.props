@@ -14,11 +14,11 @@
 
   <!--
     Per major: the .NET version Umbraco targets, the lowest Umbraco version the package supports (src/
-    Directory.Packages.props sets the package's references to it, up to the next major), the demo's Umbraco version,
-    and the release the pack checks the public API against until the major has a release of its own (0.8.0 for 17,
-    the last release before the versions followed the Umbraco major; empty for a new major). Once it has one, CI checks
-    against the major's last release tag instead (Umbricians.LiveView.csproj). The client checks its types against the
-    lowest version too (build.yml).
+    Directory.Packages.props sets the package's references to it, up to the next major's pre-releases), the demo's
+    Umbraco version, and the release the pack checks the public API against until the major has a release of its own
+    (0.8.0 for 17, the last release before the versions followed the Umbraco major; empty for a new major). Once it has
+    one, CI checks against the major's last version on nuget.org instead (Umbricians.LiveView.csproj). The client
+    checks its types against the lowest version too (build.yml).
 
     The lowest version is the major's latest stable Umbraco security release, or its release candidate until the
     major is out, so installing Live View brings a site up to it. Dependabot can't update these properties: when
