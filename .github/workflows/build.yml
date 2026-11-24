@@ -27,6 +27,7 @@ env:
   DEMO_DIR: demo/Umbricians.LiveView.Demo
   BUNDLE_PATH: /App_Plugins/UmbriciansLiveView/umbricians-live-view.js
   API_NAME: umbricians-live-view
+  API_TITLE: Umbricians Live View
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
@@ -97,16 +98,20 @@ jobs:
         run: node --test "build/*.test.mjs"
 
       # Directory.Build.props maps the major to the project's <Version>, its target framework and the lowest Umbraco
-      # version it supports.
+      # version it supports. A tag must be the next release of its major, and the pack checks the public API against
+      # the major's last release.
       - name: Work out version
         id: version
         run: |
           properties=$(dotnet msbuild "$PROJECT" -getProperty:Version -getProperty:TargetFramework -getProperty:UmbracoVersion -p:UmbracoMajor="$UMBRACO_MAJOR")
-          version=$(node build/package-version.mjs "$(jq -r .Properties.Version <<< "$properties")")
+          project=$(jq -r .Properties.Version <<< "$properties")
+          version=$(node build/package-version.mjs "$project")
+          baseline=$(node build/package-version.mjs "$project" --baseline)
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "baseline=$baseline" >> "$GITHUB_OUTPUT"
           echo "framework=$(jq -r .Properties.TargetFramework <<< "$properties")" >> "$GITHUB_OUTPUT"
           echo "umbraco=$(jq -r .Properties.UmbracoVersion <<< "$properties")" >> "$GITHUB_OUTPUT"
-          echo "Version: $version"
+          echo "Version: $version, checked against ${baseline:-the baseline in Directory.Build.props}"
 
       - name: Stamp version into umbraco-package.json
         run: node build/stamp-version.mjs "$CLIENT_DIR/public/umbraco-package.json" "${{ steps.version.outputs.version }}"
@@ -131,11 +136,11 @@ jobs:
       - name: Smoke-test the demo
         run: |
           if [[ "$UMBRACO_MAJOR" == 17 ]]; then document="/umbraco/swagger/$API_NAME/swagger.json"; else document="/umbraco/openapi/$API_NAME.json"; fi
-          node build/smoke-test.mjs "$DEMO_DIR" "${{ steps.version.outputs.framework }}" "$BUNDLE_PATH" "$document"
+          node build/smoke-test.mjs "$DEMO_DIR" "${{ steps.version.outputs.framework }}" "$BUNDLE_PATH" "$document" "$API_TITLE"
 
       # Packs with a build, so the package always carries the static web assets of the bundle built above.
       - name: Pack
-        run: dotnet pack "$PROJECT" -c Release -p:UmbracoMajor="$UMBRACO_MAJOR" -p:Version=${{ steps.version.outputs.version }} -o artifacts
+        run: dotnet pack "$PROJECT" -c Release -p:UmbracoMajor="$UMBRACO_MAJOR" -p:Version=${{ steps.version.outputs.version }} -p:LastReleaseVersion=${{ steps.version.outputs.baseline }} -o artifacts
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -212,7 +217,8 @@ jobs:
 
       # Tags with a pre-release suffix (v17.3.0-beta.1) become GitHub pre-releases. Notes start at the last stable
       # release of the same Umbraco major, so a release after betas lists everything since then, and one tagged beside
-      # another major's release isn't empty. Re-running leaves an existing release alone.
+      # another major's release isn't empty. Only a release of the newest Umbraco major becomes the repository's
+      # Latest, so a 17.x hotfix after 18.x doesn't take it. Re-running leaves an existing release alone.
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -225,6 +231,11 @@ jobs:
           options=(--repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes --verify-tag)
           [[ "$TAG" == *-* ]] && options+=(--prerelease)
           major="${TAG#v}"; major="${major%%.*}"
-          previous=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-pre-releases --limit 100 --json tagName --jq "[.[] | select(.tagName | startswith(\"v$major.\"))][0].tagName // empty")
+          stable=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-pre-releases --limit 100 --json tagName)
+          previous=$(jq -r --arg prefix "v$major." '[.[] | select(.tagName | startswith($prefix))][0].tagName // empty' <<< "$stable")
           [[ -n "$previous" ]] && options+=(--notes-start-tag "$previous")
+          newest=$(jq '[.[].tagName | ltrimstr("v") | split(".")[0] | tonumber] | max // 0' <<< "$stable")
+          if [[ "$TAG" != *-* ]]; then
+            if (( major >= newest )); then options+=(--latest); else options+=(--latest=false); fi
+          fi
           gh release create "$TAG" artifacts/* "${options[@]}"

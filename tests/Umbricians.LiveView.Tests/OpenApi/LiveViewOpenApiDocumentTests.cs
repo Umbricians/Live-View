@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
+using Umbricians.LiveView.Composers;
 using Umbricians.LiveView.Controllers;
 using Umbricians.LiveView.OpenApi;
 using Umbricians.LiveView.Tests.Configuration;
@@ -11,6 +12,7 @@ using Umbricians.LiveView.Tests.Configuration;
 using Swashbuckle.AspNetCore.SwaggerGen;
 #else
 using Microsoft.AspNetCore.OpenApi;
+using Umbraco.Cms.Api.Management.Controllers;
 #endif
 
 namespace Umbricians.LiveView.Tests.OpenApi;
@@ -50,20 +52,33 @@ public class LiveViewOpenApiDocumentTests
     }
 
     [Test]
-    public void The_package_document_lists_the_package_controllers_only()
+    public void The_package_document_lists_the_package_controllers()
     {
         OpenApiOptions options = Services().GetRequiredService<IOptionsMonitor<OpenApiOptions>>().Get(Constants.ApiName);
         var method = typeof(DashboardController).GetMethod(nameof(DashboardController.Snapshot))!;
 
         Assert.That(options.ShouldInclude(Description(method)), Is.True);
-        Assert.That(options.ShouldInclude(Description(typeof(object).GetMethod(nameof(ToString))!)), Is.False);
+    }
+
+    [Test]
+    public void The_package_document_leaves_out_Umbracos_own_Management_API()
+    {
+        OpenApiOptions options = Services().GetRequiredService<IOptionsMonitor<OpenApiOptions>>().Get(Constants.ApiName);
+        MethodInfo[] actions = typeof(ManagementApiControllerBase).Assembly.GetTypes()
+            .Where(type => type is { IsAbstract: false } && type.IsSubclassOf(typeof(ManagementApiControllerBase)))
+            .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            .ToArray();
+
+        Assert.That(actions, Is.Not.Empty);
+        Assert.That(actions.Where(action => options.ShouldInclude(Description(action))), Is.Empty);
     }
 #endif
 
+    // Registers the package the way Umbraco does, through its composer.
     private static ServiceProvider Services()
     {
         var services = new ServiceCollection();
-        ChannelPrecedenceTests.ServicesOnlyBuilder.Create(services).AddLiveViewOpenApiDocument();
+        new LiveViewComposer().Compose(ChannelPrecedenceTests.ServicesOnlyBuilder.Create(services));
         return services.BuildServiceProvider();
     }
 

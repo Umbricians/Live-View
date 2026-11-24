@@ -9,9 +9,13 @@ The tag sets the package version (`v17.2.3` publishes `17.2.3`, and `v17.3.0-bet
 is the Umbraco major the package is built for: a tag builds and publishes that major only, so `v18.2.3` publishes
 Live View 18.2.3 for Umbraco 18. A tag of a major [`Directory.Build.props`](../Directory.Build.props) doesn't know
 fails the build. Each major numbers its own minors and patches, so releasing the same change for several majors takes
-one tag each, such as `v17.3.0` and `v18.1.0` on the same commit. Umbraco 19 is a release candidate, so Live View 19
-gets pre-release tags only (`v19.0.0-rc.1`) until Umbraco 19 is out. New features take a minor version and fixes a
-patch, and a change that could break a site's code or configuration waits for the next Umbraco major. Only the package in `src/Umbricians.LiveView` is packed; the demo site
+one tag each, such as `v17.3.0` and `v18.1.0` on the same commit. A tag must be the next release of its major: the
+next patch or minor after the major's last release (`v17.2.1` or `v17.3.0` after `v17.2.0`), or `vN.0.0` for a
+major's first, and a pre-release must lead up to one. Any other tag, such as a mistyped major or a skipped number,
+fails the build. Umbraco 19 is a release candidate, so Live View 19 gets pre-release tags only (`v19.0.0-rc.1`) until
+Umbraco 19 is out: a stable package can't depend on a pre-release Umbraco, so its pack fails. New features take a
+minor version and fixes a patch, and a change that could break a site's code or configuration waits for the next
+Umbraco major. Only the package in `src/Umbricians.LiveView` is packed; the demo site
 is built and smoke-tested but never published. Once the package is on NuGet, the workflow creates a matching GitHub
 release with generated notes and the `.nupkg` and `.snupkg` attached.
 
@@ -26,7 +30,9 @@ release with generated notes and the `.nupkg` and `.snupkg` attached.
 2. Push it, then open a pull request from `release/17.2.0` into `main` with the `release-flow` label. Only release
    fixes go on this branch.
 3. Merge it with a merge commit (not squash) once the `build` check passes.
-4. Tag the merge commit on `main` and push the tag, one tag for each Umbraco major the release is for:
+4. Tag the merge commit on `main` and push the tag, one tag for each Umbraco major the release is for. A major
+   that is still on Umbraco release candidates (19 for now) gets no tag here: tag it on the release branch before
+   step 3, as [a pre-release](#a-pre-release).
 
    ```bash
    git checkout main && git pull && git tag -a v17.2.0 -m "v17.2.0"
@@ -46,13 +52,12 @@ release with generated notes and the `.nupkg` and `.snupkg` attached.
    git checkout main && git pull && git checkout -b back-merge/17.2.0
    ```
 
-   On that branch, set `UmbracoPackageValidationBaselineVersion` for each released major in
-   [`Directory.Build.props`](../Directory.Build.props) to its new version (`17.2.0` in the Umbraco 17 block), and delete
-   every `<Suppression>` from
-   [`CompatibilitySuppressions.xml`](../src/Umbricians.LiveView/CompatibilitySuppressions.xml). The suppressions
-   allow differences from the previous release, and the next release is checked against this one. If the merge
-   into `develop` conflicts on either file, take the new baseline and keep any suppressions `develop` added since
-   the release. Merge it with a merge commit.
+   On that branch, delete every `<Suppression>` from the suppressions file of each major you tagged
+   (`src/Umbricians.LiveView/CompatibilitySuppressions.17.xml` for a `v17` tag), and leave the other majors' files
+   alone: their suppressions still allow differences from their own last release. The pack checks each major
+   against its last release tag, so the next release of a tagged major is checked against this one. If the merge
+   into `develop` conflicts on a suppressions file, keep any suppressions `develop` added since the release. Merge
+   it with a merge commit.
 
 ## A hotfix
 

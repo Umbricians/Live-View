@@ -4,9 +4,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
-    <!-- Public types are the package's API, so each needs XML docs, which ship in the package. -->
+    <!-- Public types are the package's API, so each needs XML docs, which ship in the package. A stable package can't
+         depend on a pre-release Umbraco (NU5104), so Live View for an Umbraco release candidate packs as a
+         pre-release only. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1591;NU5104</WarningsAsErrors>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
@@ -30,12 +32,15 @@
     <RepositoryType>git</RepositoryType>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <!-- A breaking change to the public API since the last release fails the pack. Differences a version allows
-         are suppressed in CompatibilitySuppressions.xml. Each Umbraco major has its own baseline, the last release of
-         that major (Directory.Build.props), which moves to each release as it merges back into develop
-         (docs/RELEASING.md). -->
+    <!-- A breaking change to the public API since the last release of the same Umbraco major fails the pack. CI passes
+         that release as LastReleaseVersion, from the major's last stable tag (build/package-version.mjs with its
+         baseline option); before the major's first release there is none, and the pack checks against the baseline
+         in Directory.Build.props. Differences a version allows are suppressed in CompatibilitySuppressions.<major>.xml,
+         which is emptied as each release of that major merges back into develop (docs/RELEASING.md). -->
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>$(UmbracoPackageValidationBaselineVersion)</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>$(LastReleaseVersion)</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion Condition="'$(LastReleaseVersion)' == ''">$(UmbracoPackageValidationBaselineVersion)</PackageValidationBaselineVersion>
+    <CompatibilitySuppressionFilePath>CompatibilitySuppressions.$(UmbracoMajor).xml</CompatibilitySuppressionFilePath>
     <!-- Runs before NuGet collects the package files, so the generated README below is included. -->
     <BeforePack>$(BeforePack);GenerateNuGetReadme</BeforePack>
   </PropertyGroup>
