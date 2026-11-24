@@ -15,9 +15,9 @@ its major: the next patch or minor after the major's last release (`v17.2.1` or 
 a later tag that never published, or `vN.0.0` for a major's first, and a pre-release must lead up to one. Any other
 tag fails the build, so a skipped number does, and so does a mistyped major unless the version it names happens to be
 that major's next release. A tag the rule refused stays (tags are never moved) but doesn't open the way to the
-numbers after it. A tag also fails for a version nuget.org already has, unless it's a re-run of the run that
-published it, and a stable tag fails on a commit that already carries a release of its major, such as the previous
-release's merge commit when step 3 was skipped. Umbraco 19 is a release candidate, so Live View 19 gets pre-release tags only
+numbers after it. A tag also fails for a version nuget.org already has, unless the run is a re-run, and a stable tag
+fails on a commit that already carries a published release of its major, such as the previous release's merge commit
+when step 3 was skipped. A tag that never published doesn't count, so the next number can go on the same commit. Umbraco 19 is a release candidate, so Live View 19 gets pre-release tags only
 (`v19.0.0-rc.1`) until Umbraco 19 is out: a stable package can't depend on a pre-release Umbraco, so a stable tag of a
 major whose Umbraco version is a pre-release fails the build. New features take a
 minor version and fixes a patch, and a change that could break a site's code or configuration waits for the next

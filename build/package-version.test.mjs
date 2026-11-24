@@ -116,6 +116,16 @@ test("a stable tag on a commit that already carries a release of its major is re
   rejects(tagBuild("v17.3.0"), history, "The commit tagged v17.3.0 is already released as v17.2.0: merge the release pull request and tag its merge commit");
 });
 
+test("a tag that never published doesn't block the next number on the same commit", () => {
+  // v17.4.0 went on the release merge commit by mistake and was refused; the right tag goes on the same commit.
+  const refused = { ...released("17.2.0"), tags: ["v17.2.0", "v17.4.0"], commitTags: ["v17.4.0", "v17.3.0"] };
+  assert.equal(version(tagBuild("v17.3.0"), refused), "17.3.0");
+
+  // v17.3.0's build failed or its deployment was rejected, so the next number goes on its commit.
+  const failed = { ...released("17.2.0"), tags: ["v17.2.0", "v17.3.0"], commitTags: ["v17.3.0", "v17.3.1"] };
+  assert.equal(version(tagBuild("v17.3.1"), failed), "17.3.1");
+});
+
 test("one commit can carry a release of each major", () => {
   const history = { ...released("17.2.0", "18.0.0"), commitTags: ["v17.3.0", "v18.1.0"] };
   assert.equal(version(tagBuild("v17.3.0"), history), "17.3.0");

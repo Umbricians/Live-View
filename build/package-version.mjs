@@ -17,9 +17,10 @@
 // itself a next release but never published. A tag the rule refused doesn't count, so it can't open the way to a
 // skipped number. A pre-release (v17.3.0-beta.1) must lead up to such a release. So a skipped number fails, and so
 // does a mistyped major, unless the version it names happens to be that major's next release. A tag build also fails:
-// - for a version nuget.org already has, unless it's a re-run of the run that published it (GITHUB_RUN_ATTEMPT);
-// - for a stable tag on a commit that already carries another stable tag of the same major, such as the previous
-//   release's merge commit when the release pull request wasn't merged first;
+// - for a version nuget.org already has, unless the run is a re-run (GITHUB_RUN_ATTEMPT above 1);
+// - for a stable tag on a commit that already carries a release of the same major (a tag nuget.org has), such as
+//   the previous release's merge commit when the release pull request wasn't merged first. A tag that never
+//   published doesn't count, so the next number can still go on its commit;
 // - for a stable tag while the major's Umbraco version is a pre-release, since a stable package can't depend on an
 //   Umbraco release candidate.
 //
@@ -99,7 +100,10 @@ export function packageVersion({ project, umbracoVersion, tags, commitTags = [],
     if (releases.includes(version) && Number(ref.runAttempt ?? "1") <= 1) {
       throw new Error(`'${version}' is already on nuget.org, and a version is never reused: tag the next release instead`);
     }
-    const released = commitTags.filter((tag) => STABLE_TAG.test(tag) && tag !== ref.name && ofThisMajor(tag.slice(1)));
+    // Only tags nuget.org has: a refused or failed tag left on the commit mustn't block the next number going there.
+    const released = commitTags.filter(
+      (tag) => STABLE_TAG.test(tag) && tag !== ref.name && ofThisMajor(tag.slice(1)) && releases.includes(tag.slice(1)),
+    );
     if (STABLE.test(version) && released.length > 0) {
       throw new Error(
         `The commit tagged ${ref.name} is already released as ${released.join(" and ")}: merge the release pull request and tag its merge commit`,
