@@ -77,7 +77,9 @@ Every pack checks the README it generates for nuget.org, and fails naming each p
 off the release's ref, or an HTML image or comment left in. The `build` check runs the build scripts' tests,
 `node --test "build/*.test.mjs"`, before it works out the version: `build/nuget-readme.test.mjs` covers the README
 check, `build/package-version.test.mjs` covers the version a build packs, including the version each tag
-publishes, and `build/release-options.test.mjs` covers the options each tag's GitHub release gets. The version tests
+publishes, `build/release-options.test.mjs` covers the options each tag's GitHub release gets, and
+`build/check-package.test.mjs` covers the check CI runs on each packed `.nupkg` (`build/check-package.mjs`: its
+version, its Umbraco range, and its README, icon and bundle). The version tests
 need git on the path.
 
 In Git Bash on Windows, the URL path arguments get rewritten into Windows paths, so run the smoke test there as

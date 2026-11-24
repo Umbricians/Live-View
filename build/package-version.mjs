@@ -13,10 +13,16 @@
 // isn't one, so nothing is checked against it, but its number stays used: versions are never reused.
 //
 // A tag v17.2.3 builds 17.2.3. It fails unless it is the next release of its major: the next patch or minor after the
-// major's last release or after a later tag that never published, or <major>.0.0 before the major's first release. A
-// pre-release (v17.3.0-beta.1) must lead up to such a release. So a skipped number fails, and so does a mistyped
-// major, unless the version it names happens to be that major's next release. A stable tag also fails while the
-// major's Umbraco version is a pre-release, since a stable package can't depend on an Umbraco release candidate.
+// major's last release, or <major>.0.0 before the major's first release, or the same after a later tag that was
+// itself a next release but never published. A tag the rule refused doesn't count, so it can't open the way to a
+// skipped number. A pre-release (v17.3.0-beta.1) must lead up to such a release. So a skipped number fails, and so
+// does a mistyped major, unless the version it names happens to be that major's next release. A tag build also fails:
+// - for a version nuget.org already has, unless the run is a re-run (GITHUB_RUN_ATTEMPT above 1);
+// - for a stable tag on a commit that already carries a release of the same major (a tag nuget.org has), such as
+//   the previous release's merge commit when the release pull request wasn't merged first. A tag that never
+//   published doesn't count, so the next number can still go on its commit;
+// - for a stable tag while the major's Umbraco version is a pre-release, since a stable package can't depend on an
+//   Umbraco release candidate.
 //
 // Any other build is {next patch}-ci.{run number}, where the next patch follows the highest stable release or tag of
 // the project's major, or is the project's <Version> before the major has either. Needs the tags fetched.
@@ -32,7 +38,7 @@ const STABLE_TAG = /^v\d+\.\d+\.\d+$/;
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   try {
-    console.log(await main(process.argv.slice(2), process.env, { fetch, tags: repositoryTags() }));
+    console.log(await main(process.argv.slice(2), process.env, { fetch, tags: repositoryTags(), commitTags: repositoryTags(undefined, "HEAD") }));
   } catch (error) {
     console.error(error.message);
     process.exit(1);
@@ -41,24 +47,30 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 
 /**
  * What the script prints for its command-line arguments and GitHub's ref variables in env, looking the package up
- * with fetch and reading the repository's tags from tags.
+ * with fetch. tags are the repository's tags, and commitTags the tags on the commit being built.
  */
-export async function main([packageId, project, umbracoVersion, mode], env, { fetch, tags }) {
+export async function main([packageId, project, umbracoVersion, mode], env, { fetch, tags, commitTags = [] }) {
   if (!packageId || project === undefined || !umbracoVersion) {
     throw new Error("Usage: node build/package-version.mjs <package id> <project version> <Umbraco version> [--baseline]");
   }
-  const ref = { type: env.GITHUB_REF_TYPE, name: env.GITHUB_REF_NAME ?? "", runNumber: env.GITHUB_RUN_NUMBER ?? "0" };
+  const ref = {
+    type: env.GITHUB_REF_TYPE,
+    name: env.GITHUB_REF_NAME ?? "",
+    runNumber: env.GITHUB_RUN_NUMBER ?? "0",
+    runAttempt: env.GITHUB_RUN_ATTEMPT ?? "1",
+  };
   const building = ref.type === "tag" ? ref.name : undefined;
   const releases = await publishedVersions(packageId, { fetch, tags, building });
-  return packageVersion({ project, umbracoVersion, tags, releases, ref, baseline: mode === "--baseline" });
+  return packageVersion({ project, umbracoVersion, tags, commitTags, releases, ref, baseline: mode === "--baseline" });
 }
 
 /**
  * The version a build packs, or with baseline the major's last published release ("" before its first). tags are
- * the repository's tag names, releases the versions nuget.org has, and ref GitHub's ref type, name and run number.
- * Throws with the reason when the version isn't one the build may pack.
+ * the repository's tag names, commitTags the tags on the commit being built, releases the versions nuget.org has,
+ * and ref GitHub's ref type, name, run number and run attempt. Throws with the reason when the version isn't one the
+ * build may pack.
  */
-export function packageVersion({ project, umbracoVersion, tags, releases, ref = {}, baseline = false }) {
+export function packageVersion({ project, umbracoVersion, tags, commitTags = [], releases, ref = {}, baseline = false }) {
   project = project.trim();
   const umbracoMajor = project.split(".")[0];
   const tagBuild = ref.type === "tag";
@@ -85,18 +97,24 @@ export function packageVersion({ project, umbracoVersion, tags, releases, ref = 
     throw new Error(`'${version}' doesn't start with the Umbraco major ${umbracoMajor} that the project's <Version> (${project}) supports`);
   }
   if (tagBuild) {
+    if (releases.includes(version) && Number(ref.runAttempt ?? "1") <= 1) {
+      throw new Error(`'${version}' is already on nuget.org, and a version is never reused: tag the next release instead`);
+    }
+    // Only tags nuget.org has: a refused or failed tag left on the commit mustn't block the next number going there.
+    const released = commitTags.filter(
+      (tag) => STABLE_TAG.test(tag) && tag !== ref.name && ofThisMajor(tag.slice(1)) && releases.includes(tag.slice(1)),
+    );
+    if (STABLE.test(version) && released.length > 0) {
+      throw new Error(
+        `The commit tagged ${ref.name} is already released as ${released.join(" and ")}: merge the release pull request and tag its merge commit`,
+      );
+    }
     if (STABLE.test(version) && !STABLE.test(umbracoVersion)) {
       throw new Error(
         `'${version}' is a stable version, but Umbraco ${umbracoMajor}'s lowest supported version is the pre-release ${umbracoVersion}: tag a pre-release such as v${version}-rc.1`,
       );
     }
-    // The next patch or minor after the last release, or the major's first release, and the same after any later
-    // tag that never published, whose number can't be used again.
-    const allowed = lastRelease ? following(lastRelease) : [`${umbracoMajor}.0.0`];
-    for (const tag of majorTags) {
-      if (!lastRelease || compare(tag, lastRelease) > 0) allowed.push(...following(tag));
-    }
-    const next = [...new Set(allowed)].sort(compare);
+    const next = nextReleases(lastRelease, majorTags, umbracoMajor);
     if (!next.includes(version.split("-")[0])) {
       const after = lastRelease ? `the last release of Umbraco major ${umbracoMajor}, ${lastRelease}` : `any release of Umbraco major ${umbracoMajor}`;
       throw new Error(`'${version}' doesn't follow ${after}: the next release is ${next.join(" or ")}`);
@@ -136,12 +154,28 @@ export async function publishedVersions(packageId, { fetch, tags, building }) {
   return versions;
 }
 
-/** Every tag in the repository, reachable or not: Gitflow tags releases on main before develop has them. */
-export function repositoryTags(cwd) {
-  return execFileSync("git", ["tag", "--list"], { cwd, encoding: "utf8" })
+/**
+ * Every tag in the repository, reachable or not (Gitflow tags releases on main before develop has them), or with
+ * commit only the tags on that commit.
+ */
+export function repositoryTags(cwd, commit) {
+  return execFileSync("git", ["tag", "--list", ...(commit ? ["--points-at", commit] : [])], { cwd, encoding: "utf8" })
     .split("\n")
     .map((tag) => tag.trim())
     .filter(Boolean);
+}
+
+// The next patch or minor after the last release, or the major's first release. A later tag that was itself one of
+// those but never published uses its number up, so the next patch or minor after it is allowed too, working up from
+// the last release. A tag the rule refused doesn't count.
+function nextReleases(lastRelease, tags, major) {
+  const allowed = new Set(lastRelease ? following(lastRelease) : [`${major}.0.0`]);
+  for (const tag of [...tags].sort(compare)) {
+    if (allowed.has(tag) && (!lastRelease || compare(tag, lastRelease) > 0)) {
+      for (const version of following(tag)) allowed.add(version);
+    }
+  }
+  return [...allowed].sort(compare);
 }
 
 function following(version) {
