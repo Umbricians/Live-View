@@ -8,7 +8,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
     <!-- NU5104 warns about a stable package with a pre-release dependency, which the Umbraco range's upper bound
-         (N.0.0-0, src/Directory.Packages.props) always looks like. build/package-version.mjs refuses a stable version
+         (N.0.0-a, src/Directory.Packages.props) always looks like. build/package-version.mjs refuses a stable version
          while the major's Umbraco version is a pre-release instead. -->
     <NoWarn>$(NoWarn);NU5104</NoWarn>
   </PropertyGroup>
