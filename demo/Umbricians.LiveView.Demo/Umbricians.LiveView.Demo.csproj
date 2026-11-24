@@ -8,8 +8,8 @@
 
 
   <ItemGroup>
-    <PackageReference Include="Umbraco.Cms" Version="17.8.1" />
-    <PackageReference Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="17.8.1" />
+    <PackageReference Include="Umbraco.Cms" Version="17.8.2" />
+    <PackageReference Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="17.8.2" />
   </ItemGroup>
 
   <PropertyGroup>
