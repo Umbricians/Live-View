@@ -1,13 +1,17 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- The Umbraco versions the package supports: from the lowest version of the major being built (UmbracoVersion
+         in Directory.Build.props) up to, but not including, the next major or any of its pre-releases (N.0.0-0 sorts
+         below every N.0.0 pre-release). Sites on newer versions of the same major resolve their own, and NuGet won't
+         install the package on another major or its release candidates. -->
+    <UmbracoVersionRange>[$(UmbracoVersion), $([MSBuild]::Add($(UmbracoMajor), 1)).0.0-0)</UmbracoVersionRange>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The lowest Umbraco 17 version the package supports; sites on newer versions resolve their own.
-         .github/dependabot.yml ignores each of these, so a new one goes in its list too. -->
-    <PackageVersion Include="Umbraco.Cms.Api.Common" Version="17.8.0" />
-    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="17.8.0" />
-    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="17.8.0" />
+    <!-- .github/dependabot.yml ignores each of these, so a new one goes in its list too. -->
+    <PackageVersion Include="Umbraco.Cms.Api.Common" Version="$(UmbracoVersionRange)" />
+    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="$(UmbracoVersionRange)" />
+    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="$(UmbracoVersionRange)" />
   </ItemGroup>
 </Project>

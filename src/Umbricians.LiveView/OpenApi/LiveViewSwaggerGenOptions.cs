@@ -1,3 +1,4 @@
+#if UMBRACO_17
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
@@ -12,7 +13,8 @@ internal sealed class LiveViewSwaggerGenOptions : IConfigureOptions<SwaggerGenOp
 {
     public void Configure(SwaggerGenOptions options)
     {
-        options.SwaggerDoc(Constants.ApiName, new OpenApiInfo { Title = "Umbricians Live View", Version = "1.0" });
+        options.SwaggerDoc(Constants.ApiName, new OpenApiInfo { Title = LiveViewOpenApi.Title, Version = "1.0" });
         options.OperationFilter<LiveViewSecurityRequirementsOperationFilter>();
     }
 }
+#endif
