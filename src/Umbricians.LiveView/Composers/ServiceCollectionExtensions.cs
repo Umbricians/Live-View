@@ -10,7 +10,6 @@ using Umbricians.LiveView.Controllers;
 using Umbricians.LiveView.Messaging;
 using Umbricians.LiveView.Messaging.Members;
 using Umbricians.LiveView.Metrics;
-using Umbricians.LiveView.OpenApi;
 using Umbricians.LiveView.Presence;
 using Umbricians.LiveView.Storage;
 using Umbricians.LiveView.Tracking;
@@ -20,7 +19,8 @@ namespace Umbricians.LiveView.Composers;
 internal static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers everything Live View needs except its notification handlers, which need the Umbraco builder.
+    /// Registers everything Live View needs except its notification handlers and API document, which need the Umbraco
+    /// builder.
     /// </summary>
     public static IServiceCollection AddLiveView(this IServiceCollection services, IConfiguration configuration)
     {
@@ -31,7 +31,6 @@ internal static class ServiceCollectionExtensions
 
         services.AddMvcCore().ConfigureApplicationPartManager(parts =>
             parts.FeatureProviders.Add(new LiveViewControllerFeatureProvider()));
-        services.ConfigureOptions<LiveViewSwaggerGenOptions>();
 
         services.TryAddSingleton(TimeProvider.System);
 

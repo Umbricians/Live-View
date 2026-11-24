@@ -117,6 +117,10 @@ public class MessageAuditHandlerTests
             return Task.FromResult(Attempt.Succeed(AuditLogOperationStatus.Success));
         }
 
+#if UMBRACO_19_OR_GREATER
+        public Task CleanLogsAsync(int maximumAgeOfLogsInMinutes) => throw new NotSupportedException();
+#else
+        // Umbraco 19 removed these obsolete synchronous members.
         public void Add(AuditType type, int userId, int objectId, string? entityType, string comment, string? parameters = null) =>
             throw new NotSupportedException();
 
@@ -140,5 +144,6 @@ public class MessageAuditHandlerTests
         public IAuditEntry Write(
             int performingUserId, string perfomingDetails, string performingIp, DateTime eventDateUtc, int affectedUserId,
             string? affectedDetails, string eventType, string eventDetails) => throw new NotSupportedException();
+#endif
     }
 }

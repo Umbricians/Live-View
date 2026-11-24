@@ -17,14 +17,19 @@ This guide takes you from installing Umbricians Live View to a dashboard showing
 
 ## Requirements
 
-- Umbraco 17, from 17.8.
-- .NET 10.
+- Umbraco 17 from 17.8, or Umbraco 18 from 18.3, on .NET 10.
+- Or Umbraco 19 on .NET 11, with a Live View 19 pre-release until Umbraco 19 is released.
 
 ## 1. Install the package
 
 ```bash
 dotnet add package Umbricians.LiveView
 ```
+
+Each Live View major is for the Umbraco major with the same number: Live View 17.x for Umbraco 17 (from 17.8), 18.x
+for Umbraco 18 (from 18.3), and 19.x for Umbraco 19, published as pre-releases until Umbraco 19 is released. Without
+`--version`, NuGet installs the newest stable Live View, which is for the newest Umbraco major, so on an older major
+pass the version that matches it, such as `--version 17.0.0`.
 
 That is all the setup there is: no composer to add, no database tables, no configuration needed. The package registers
 itself when the site starts.

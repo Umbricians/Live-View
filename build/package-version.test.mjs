@@ -3,17 +3,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const script = fileURLToPath(new URL("package-version.mjs", import.meta.url));
 
-// Runs the script in dir. CI's own GITHUB_* variables are dropped so they can't leak in (a tag build sets them).
-function run(dir, github, projectFile = join(dir, "Project.csproj")) {
+// Runs the script in dir for a project whose <Version> is projectVersion. CI's own GITHUB_* variables are dropped so
+// they can't leak in (a tag build sets them).
+function run(dir, github, projectVersion = "17.0.0") {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^GITHUB_/i.test(key)));
-  const { status, stdout, stderr } = spawnSync(process.execPath, [script, projectFile], {
+  const { status, stdout, stderr } = spawnSync(process.execPath, [script, ...(projectVersion ? [projectVersion] : [])], {
     cwd: dir,
     env: { ...env, ...github },
     encoding: "utf8",
@@ -29,13 +30,9 @@ function git(dir, ...args) {
   );
 }
 
-// A git repo on develop with one empty commit and a project file with the given <Version> (none when omitted).
-function repo(version) {
+// A git repo on develop with one empty commit.
+function repo() {
   const dir = mkdtempSync(join(tmpdir(), "package-version-"));
-  const project = version === undefined
-    ? "<Project />"
-    : `<Project><PropertyGroup><Version>${version}</Version></PropertyGroup></Project>`;
-  writeFileSync(join(dir, "Project.csproj"), project);
   git(dir, "init", "--quiet", "--initial-branch=develop");
   git(dir, "commit", "--quiet", "--allow-empty", "-m", "Start");
   return dir;
@@ -45,9 +42,7 @@ const tagBuild = (name) => ({ GITHUB_REF_TYPE: "tag", GITHUB_REF_NAME: name, GIT
 
 // A tag build of a project for Umbraco 17. It doesn't read git, so the folder needs no repo.
 function tagVersion(name) {
-  const dir = mkdtempSync(join(tmpdir(), "package-version-"));
-  writeFileSync(join(dir, "Project.csproj"), "<Project><PropertyGroup><Version>17.0.0</Version></PropertyGroup></Project>");
-  return run(dir, tagBuild(name));
+  return run(mkdtempSync(join(tmpdir(), "package-version-")), tagBuild(name));
 }
 
 test("a tag builds its own version, without reading git", () => {
@@ -83,7 +78,7 @@ for (const tag of ["v0.9.0", "v18.0.0", "v1.0.0-beta.1"]) {
 }
 
 test("a branch build is the patch after the highest stable tag of the project's major, reachable or not", () => {
-  const dir = repo("17.0.0");
+  const dir = repo();
   git(dir, "tag", "v17.8.0");
   git(dir, "switch", "--quiet", "-c", "main");
   git(dir, "commit", "--quiet", "--allow-empty", "-m", "Release");
@@ -101,7 +96,7 @@ test("a branch build is the patch after the highest stable tag of the project's 
 });
 
 test("tags of other majors don't count", () => {
-  const dir = repo("17.0.0");
+  const dir = repo();
   git(dir, "tag", "v0.8.0");
   git(dir, "tag", "v16.4.0");
   git(dir, "tag", "v17.1.0");
@@ -112,8 +107,19 @@ test("tags of other majors don't count", () => {
   assert.equal(stdout, "17.1.1-ci.7\n");
 });
 
+test("each Umbraco major builds from its own tags", () => {
+  const dir = repo();
+  git(dir, "tag", "v17.3.0");
+  git(dir, "tag", "v18.1.0");
+  const branchBuild = { GITHUB_REF_TYPE: "branch", GITHUB_REF_NAME: "develop", GITHUB_RUN_NUMBER: "7" };
+
+  assert.equal(run(dir, branchBuild, "17.0.0").stdout, "17.3.1-ci.7\n");
+  assert.equal(run(dir, branchBuild, "18.0.0").stdout, "18.1.1-ci.7\n");
+  assert.equal(run(dir, branchBuild, "19.0.0").stdout, "19.0.0-ci.7\n");
+});
+
 test("before the major's first stable release, a build uses the project's <Version>", () => {
-  const dir = repo("17.0.0");
+  const dir = repo();
   git(dir, "tag", "v0.8.0");
   git(dir, "tag", "v17.0.0-beta.1");
 
@@ -123,7 +129,7 @@ test("before the major's first stable release, a build uses the project's <Versi
 });
 
 test("outside CI, the run number is 0", () => {
-  const dir = repo("17.0.0");
+  const dir = repo();
   git(dir, "tag", "v17.8.0");
 
   const { status, stdout, stderr } = run(dir, {});
@@ -131,10 +137,10 @@ test("outside CI, the run number is 0", () => {
   assert.equal(stdout, "17.8.1-ci.0\n");
 });
 
-test("with no stable tag and no <Version>, the build is rejected", () => {
+test("with no stable tag and no project version, the build is rejected", () => {
   const dir = repo();
 
-  const { status, stderr } = run(dir, { GITHUB_RUN_NUMBER: "7" });
+  const { status, stderr } = run(dir, { GITHUB_RUN_NUMBER: "7" }, "");
   assert.equal(status, 1);
   assert.match(stderr, /'-ci\.7' is not a valid package version/);
 });

@@ -4,10 +4,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The lowest Umbraco 17 version the package supports; sites on newer versions resolve their own.
-         .github/dependabot.yml ignores each of these, so a new one goes in its list too. -->
-    <PackageVersion Include="Umbraco.Cms.Api.Common" Version="17.8.0" />
-    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="17.8.0" />
-    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="17.8.0" />
+    <!-- The lowest version of the Umbraco major being built that the package supports (UmbracoVersion in
+         Directory.Build.props); sites on newer versions resolve their own. .github/dependabot.yml ignores each of
+         these, so a new one goes in its list too. -->
+    <PackageVersion Include="Umbraco.Cms.Api.Common" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="$(UmbracoVersion)" />
   </ItemGroup>
 </Project>

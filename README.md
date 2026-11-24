@@ -5,8 +5,8 @@
 [![NuGet](https://img.shields.io/nuget/v/Umbricians.LiveView?label=NuGet)](https://www.nuget.org/packages/Umbricians.LiveView)
 [![Build](https://github.com/Umbricians/Live-View/actions/workflows/build.yml/badge.svg)](https://github.com/Umbricians/Live-View/actions/workflows/build.yml)
 
-A real-time **Live View** dashboard for the Umbraco **Settings** section (Umbraco 17, from 17.8). It charts how many
-sessions are active right now:
+A real-time **Live View** dashboard for the Umbraco **Settings** section (Umbraco 17 from 17.8, Umbraco 18 from 18.3,
+and Umbraco 19 in pre-release). It charts how many sessions are active right now:
 
 - **Web sessions**: front-end visitors
 - **Backoffice users**: editors with the backoffice open
@@ -90,6 +90,11 @@ The message arrives instantly in the recipient's backoffice, wherever they are:
 ```bash
 dotnet add package Umbricians.LiveView
 ```
+
+Each Live View major is for the Umbraco major with the same number: Live View 17.x for Umbraco 17 (from 17.8), 18.x
+for Umbraco 18 (from 18.3), and 19.x for Umbraco 19, published as pre-releases until Umbraco 19 is released. Without
+`--version`, NuGet installs the newest stable Live View, which is for the newest Umbraco major, so on an older major
+pass the version that matches it, such as `--version 17.0.0`.
 
 Restart the site and open **Settings → Live View**. No configuration is needed to get started.
 
@@ -721,8 +726,8 @@ stays per server.
 
 ## API
 
-All under `/umbraco/umbriciansliveview/api/v1/`, and listed in the backoffice's Swagger UI (`/umbraco/swagger`) in
-the **Umbricians Live View** document (`umbricians-live-view`).
+All under `/umbraco/umbriciansliveview/api/v1/`, and listed in the backoffice's API docs (`/umbraco/swagger` on
+Umbraco 17, `/umbraco/openapi` from Umbraco 18) in the **Umbricians Live View** document (`umbricians-live-view`).
 
 | Endpoint | Who can call it |
 |---|---|
@@ -753,11 +758,22 @@ Every endpoint needs a signed-in backoffice user. Apart from choosing user group
 
 ```
 src/Umbricians.LiveView          the package (Razor class library + Client/ TypeScript)
-demo/Umbricians.LiveView.Demo    Umbraco 17.8 site on SQLite that references the package
+demo/Umbricians.LiveView.Demo    Umbraco site on SQLite that references the package
 tests/Umbricians.LiveView.Tests  NUnit tests, run with `dotnet test`
 ```
 
-Building the client needs Node 26.
+Building the client needs Node 26, and the solution the .NET 11 SDK (`global.json`) with the .NET 10 runtime for
+Umbraco 17 and 18.
+
+Every project builds for one Umbraco major at a time, Umbraco 17 unless you pass another as `UmbracoMajor`
+([`Directory.Build.props`](Directory.Build.props) has what each major uses):
+
+```bash
+dotnet build Umbricians.LiveView.slnx -p:UmbracoMajor=18
+```
+
+The demo's SQLite database is upgraded to the Umbraco major it last ran on, so move `umbraco/Data` aside before
+running it on an older one.
 
 ```bash
 cd src/Umbricians.LiveView/Client && npm ci && npm run build
@@ -788,11 +804,11 @@ The demo also has a stand-in MCP endpoint (not a real MCP server) for trying the
 To package, build the client first, then:
 
 ```bash
-dotnet pack src/Umbricians.LiveView -c Release -p:Version=$(node build/package-version.mjs src/Umbricians.LiveView/Umbricians.LiveView.csproj)
+dotnet pack src/Umbricians.LiveView -c Release -p:UmbracoMajor=17 -p:Version=$(node build/package-version.mjs $(dotnet msbuild src/Umbricians.LiveView -getProperty:Version -p:UmbracoMajor=17))
 ```
 
 Packing stops with an error if the dashboard bundle has not been built. Package validation compares the package with
-the last release, so it is packed with the version CI uses, which comes after it.
+the last release of the same Umbraco major, so it is packed with the version CI uses, which comes after it.
 
 Branches follow Gitflow; see [CONTRIBUTING.md](CONTRIBUTING.md) for the branch flow and the build steps. Release
 steps for maintainers are in [docs/RELEASING.md](docs/RELEASING.md).

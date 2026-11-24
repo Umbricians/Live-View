@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>$(UmbracoTargetFramework)</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
@@ -19,8 +19,8 @@
     <Title>Umbricians Live View</Title>
     <Description>A real-time Live View dashboard for the Umbraco Settings section that charts active web, member, backoffice, MCP and API sessions and custom metrics, lists who is online, and messages backoffice users and members.</Description>
     <Authors>Umbricians</Authors>
-    <Version>17.0.0</Version>
-    <PackageTags>umbraco;umbraco-marketplace;umbraco-v17;dashboard;analytics;realtime</PackageTags>
+    <Version>$(UmbracoMajor).0.0</Version>
+    <PackageTags>umbraco;umbraco-marketplace;umbraco-v$(UmbracoMajor);dashboard;analytics;realtime</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -31,10 +31,11 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <!-- A breaking change to the public API since the last release fails the pack. Differences a version allows
-         are suppressed in CompatibilitySuppressions.xml. The baseline moves to each release as it merges back into
-         develop (docs/RELEASING.md). -->
+         are suppressed in CompatibilitySuppressions.xml. Each Umbraco major has its own baseline, the last release of
+         that major (Directory.Build.props), which moves to each release as it merges back into develop
+         (docs/RELEASING.md). -->
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>0.8.0</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>$(UmbracoPackageValidationBaselineVersion)</PackageValidationBaselineVersion>
     <!-- Runs before NuGet collects the package files, so the generated README below is included. -->
     <BeforePack>$(BeforePack);GenerateNuGetReadme</BeforePack>
   </PropertyGroup>

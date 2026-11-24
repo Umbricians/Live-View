@@ -2,13 +2,16 @@
 
 For maintainers. The repository uses Gitflow: `develop` holds the next release, and `main` only changes through
 release and hotfix pull requests. [`.github/workflows/build.yml`](../.github/workflows/build.yml) builds and packs
-every push to `main` and `develop` and every pull request. A version tag on `main` publishes to NuGet, and so does a
-pre-release tag on a `release/*` branch.
+every push to `main` and `develop` and every pull request, once for each Umbraco major. A version tag on `main`
+publishes to NuGet, and so does a pre-release tag on a `release/*` branch.
 
-The tag sets the package version (`v17.2.3` publishes `17.2.3`, and `v17.3.0-beta.1` a pre-release). The major is
-always the Umbraco major the package supports, the one in the project's `<Version>`; a tag of another major fails the
-build. New features take a minor version and fixes a patch, and a change that could break a site's code or
-configuration waits for the next Umbraco major. Only the package in `src/Umbricians.LiveView` is packed; the demo site
+The tag sets the package version (`v17.2.3` publishes `17.2.3`, and `v17.3.0-beta.1` a pre-release), and its major
+is the Umbraco major the package is built for: a tag builds and publishes that major only, so `v18.2.3` publishes
+Live View 18.2.3 for Umbraco 18. A tag of a major [`Directory.Build.props`](../Directory.Build.props) doesn't know
+fails the build. Each major numbers its own minors and patches, so releasing the same change for several majors takes
+one tag each, such as `v17.3.0` and `v18.1.0` on the same commit. Umbraco 19 is a release candidate, so Live View 19
+gets pre-release tags only (`v19.0.0-rc.1`) until Umbraco 19 is out. New features take a minor version and fixes a
+patch, and a change that could break a site's code or configuration waits for the next Umbraco major. Only the package in `src/Umbricians.LiveView` is packed; the demo site
 is built and smoke-tested but never published. Once the package is on NuGet, the workflow creates a matching GitHub
 release with generated notes and the `.nupkg` and `.snupkg` attached.
 
@@ -23,7 +26,7 @@ release with generated notes and the `.nupkg` and `.snupkg` attached.
 2. Push it, then open a pull request from `release/17.2.0` into `main` with the `release-flow` label. Only release
    fixes go on this branch.
 3. Merge it with a merge commit (not squash) once the `build` check passes.
-4. Tag the merge commit on `main` and push the tag:
+4. Tag the merge commit on `main` and push the tag, one tag for each Umbraco major the release is for:
 
    ```bash
    git checkout main && git pull && git tag -a v17.2.0 -m "v17.2.0"
@@ -33,8 +36,8 @@ release with generated notes and the `.nupkg` and `.snupkg` attached.
    git push origin v17.2.0
    ```
 
-5. In the run, open **Review deployments** and approve `production`.
-6. Check the publish log says the package was pushed, not skipped as a duplicate, and that the GitHub release has
+5. In each tag's run, open **Review deployments** and approve `production`.
+6. Check each publish log says the package was pushed, not skipped as a duplicate, and that the GitHub release has
    the `.nupkg` attached. nuget.org lists the package a few minutes later, after validation.
 7. Merge `main` back into `develop` through a pull request with the `release-flow` label, from a branch cut
    from `main`:
@@ -43,8 +46,8 @@ release with generated notes and the `.nupkg` and `.snupkg` attached.
    git checkout main && git pull && git checkout -b back-merge/17.2.0
    ```
 
-   On that branch, set `PackageValidationBaselineVersion` in
-   [`Umbricians.LiveView.csproj`](../src/Umbricians.LiveView/Umbricians.LiveView.csproj) to `17.2.0`, and delete
+   On that branch, set `UmbracoPackageValidationBaselineVersion` for each released major in
+   [`Directory.Build.props`](../Directory.Build.props) to its new version (`17.2.0` in the Umbraco 17 block), and delete
    every `<Suppression>` from
    [`CompatibilitySuppressions.xml`](../src/Umbricians.LiveView/CompatibilitySuppressions.xml). The suppressions
    allow differences from the previous release, and the next release is checked against this one. If the merge

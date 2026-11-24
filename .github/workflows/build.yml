@@ -1,7 +1,7 @@
-# Builds the package on every push to main and develop and on every pull request, and publishes it to NuGet when a
-# version tag is pushed: v17.2.0 on main, or a pre-release such as v17.3.0-beta.1 on a release branch. Publishing uses
-# NuGet Trusted Publishing: GitHub's OIDC token is exchanged for a short-lived API key, so no NuGet API key is stored
-# in the repository.
+# Builds the package for each Umbraco major on every push to main and develop and on every pull request, and publishes
+# the major a version tag names to NuGet when the tag is pushed: v17.2.0 on main, or a pre-release such as
+# v17.3.0-beta.1 on a release branch. Publishing uses NuGet Trusted Publishing: GitHub's OIDC token is exchanged for a
+# short-lived API key, so no NuGet API key is stored in the repository.
 #
 # The NuGet trusted publishing policy must name this file (build.yml) and the "production" environment, and that
 # environment must only allow v* tags to deploy. Actions are pinned to commit SHAs; Dependabot keeps them current.
@@ -31,10 +31,33 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
-  build:
+  # Live View is built once per Umbraco major, each its own package (17.x for Umbraco 17, 18.x for 18, 19.x for 19).
+  # A tag builds the one major it names; everything else builds them all. The majors are the ones
+  # Directory.Build.props knows, so a new major goes in both places.
+  plan:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      majors: ${{ steps.majors.outputs.majors }}
+    steps:
+      - id: majors
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            major="${GITHUB_REF_NAME#v}"
+            echo "majors=[\"${major%%.*}\"]" >> "$GITHUB_OUTPUT"
+          else
+            echo 'majors=["17", "18", "19"]' >> "$GITHUB_OUTPUT"
+          fi
+
+  build-umbraco:
+    name: build (Umbraco ${{ matrix.umbraco }})
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        umbraco: ${{ fromJSON(needs.plan.outputs.majors) }}
+    env:
+      UMBRACO_MAJOR: ${{ matrix.umbraco }}
     steps:
       # Full history, so the version step can find the last release tag and tag builds can check they're on main.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,9 +70,12 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ env.CLIENT_DIR }}/package-lock.json
 
+      # The SDK in global.json builds every major; Umbraco 17 and 18 run on .NET 10, so the tests need its runtime.
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       # Gitflow tags releases on main and pre-releases (v17.3.0-beta.1) on a release branch, so a tag anywhere else is
       # a mistake that must not publish.
@@ -70,44 +96,67 @@ jobs:
       - name: Test build scripts
         run: node --test "build/*.test.mjs"
 
+      # Directory.Build.props maps the major to the project's <Version>, its target framework and the lowest Umbraco
+      # version it supports.
       - name: Work out version
         id: version
         run: |
-          version=$(node build/package-version.mjs "$PROJECT")
+          properties=$(dotnet msbuild "$PROJECT" -getProperty:Version -getProperty:TargetFramework -getProperty:UmbracoVersion -p:UmbracoMajor="$UMBRACO_MAJOR")
+          version=$(node build/package-version.mjs "$(jq -r .Properties.Version <<< "$properties")")
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "framework=$(jq -r .Properties.TargetFramework <<< "$properties")" >> "$GITHUB_OUTPUT"
+          echo "umbraco=$(jq -r .Properties.UmbracoVersion <<< "$properties")" >> "$GITHUB_OUTPUT"
           echo "Version: $version"
 
       - name: Stamp version into umbraco-package.json
         run: node build/stamp-version.mjs "$CLIENT_DIR/public/umbraco-package.json" "${{ steps.version.outputs.version }}"
 
+      # The client checks its types against the backoffice of the lowest Umbraco version of this major.
       - name: Build client
         working-directory: ${{ env.CLIENT_DIR }}
         run: |
           npm ci
+          npm install --no-save "@umbraco-cms/backoffice@${{ steps.version.outputs.umbraco }}"
           npm test
           npm run build
 
       # Builds the demo site too, so changes that break integration fail here.
       - name: Build solution
-        run: dotnet build Umbricians.LiveView.slnx -c Release -p:Version=${{ steps.version.outputs.version }}
+        run: dotnet build Umbricians.LiveView.slnx -c Release -p:UmbracoMajor="$UMBRACO_MAJOR" -p:Version=${{ steps.version.outputs.version }}
 
       - name: Test
-        run: dotnet test Umbricians.LiveView.slnx -c Release --no-build
+        run: dotnet test Umbricians.LiveView.slnx -c Release --no-build -p:UmbracoMajor="$UMBRACO_MAJOR"
 
+      # Umbraco 17 serves API documents through Swashbuckle; Umbraco 18 moved them to ASP.NET Core's OpenAPI.
       - name: Smoke-test the demo
-        run: node build/smoke-test.mjs "$DEMO_DIR" "$BUNDLE_PATH" "$API_NAME"
+        run: |
+          if [[ "$UMBRACO_MAJOR" == 17 ]]; then document="/umbraco/swagger/$API_NAME/swagger.json"; else document="/umbraco/openapi/$API_NAME.json"; fi
+          node build/smoke-test.mjs "$DEMO_DIR" "${{ steps.version.outputs.framework }}" "$BUNDLE_PATH" "$document"
 
       # Packs with a build, so the package always carries the static web assets of the bundle built above.
       - name: Pack
-        run: dotnet pack "$PROJECT" -c Release -p:Version=${{ steps.version.outputs.version }} -o artifacts
+        run: dotnet pack "$PROJECT" -c Release -p:UmbracoMajor="$UMBRACO_MAJOR" -p:Version=${{ steps.version.outputs.version }} -o artifacts
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: nuget-package
+          name: nuget-package-${{ matrix.umbraco }}
           path: |
             artifacts/*.nupkg
             artifacts/*.snupkg
           if-no-files-found: error
+
+  # The branch rulesets require a "build" check, so this one passes only when every major built.
+  build:
+    if: always()
+    needs: build-umbraco
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check every Umbraco major built
+        run: |
+          if [[ "${{ needs.build-umbraco.result }}" != success ]]; then
+            echo "::error::An Umbraco major failed to build (${{ needs.build-umbraco.result }})."
+            exit 1
+          fi
 
   publish:
     # Only a pushed version tag publishes; branches, pull requests and manual runs stop after the build.
@@ -123,7 +172,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: nuget-package
+          pattern: nuget-package-*
+          merge-multiple: true
           path: artifacts
 
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -156,11 +206,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: nuget-package
+          pattern: nuget-package-*
+          merge-multiple: true
           path: artifacts
 
       # Tags with a pre-release suffix (v17.3.0-beta.1) become GitHub pre-releases. Notes start at the last stable
-      # release, so a release after betas lists everything since then. Re-running leaves an existing release alone.
+      # release of the same Umbraco major, so a release after betas lists everything since then, and one tagged beside
+      # another major's release isn't empty. Re-running leaves an existing release alone.
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -172,6 +224,7 @@ jobs:
           fi
           options=(--repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes --verify-tag)
           [[ "$TAG" == *-* ]] && options+=(--prerelease)
-          previous=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // empty')
+          major="${TAG#v}"; major="${major%%.*}"
+          previous=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-pre-releases --limit 100 --json tagName --jq "[.[] | select(.tagName | startswith(\"v$major.\"))][0].tagName // empty")
           [[ -n "$previous" ]] && options+=(--notes-start-tag "$previous")
           gh release create "$TAG" artifacts/* "${options[@]}"
